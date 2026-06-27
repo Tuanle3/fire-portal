@@ -111,6 +111,7 @@ function getMonthRange(offsetMonths = 0): { from: string; to: string; label: str
 
 // ── Stats block ───────────────────────────────────────────────────────────────
 interface DeptData { dept: string; total: number; done: number; late: number; inProgress: number; urgent: number; avgProg: number; rate: number; tasks: Task[] }
+interface DeptAccum { total: number; done: number; late: number; inProgress: number; urgent: number; avgProg: number; tasks: Task[] }
 
 function buildStatsRows(tasks: Task[]): (Paragraph | Table)[] {
   const totalTasks = tasks.length
@@ -141,22 +142,28 @@ function buildStatsRows(tasks: Task[]): (Paragraph | Table)[] {
 }
 
 function buildDeptRows(tasks: Task[]): DeptData[] {
-  const deptMap = new Map<string, DeptData>()
+  const deptMap = new Map<string, DeptAccum>()
   for (const t of tasks) {
-    const dept = t.department || 'Chưa phân loại'
-    const d = deptMap.get(dept) ?? { total: 0, done: 0, late: 0, inProgress: 0, urgent: 0, avgProg: 0, rate: 0, tasks: [] }
+    const key = t.department || 'Chưa phân loại'
+    const d = deptMap.get(key) ?? { total: 0, done: 0, late: 0, inProgress: 0, urgent: 0, avgProg: 0, tasks: [] }
     d.total++; d.tasks.push(t)
     if (t.status === 'hoan_thanh') d.done++
     if (t.status === 'tre')        d.late++
     if (t.status === 'dang_lam')   d.inProgress++
     if (t.priority === 'khẩn')     d.urgent++
     d.avgProg += t.progress
-    deptMap.set(dept, d)
+    deptMap.set(key, d)
   }
-  return [...deptMap.entries()].map(([dept, d]) => ({
-    dept, ...d,
-    avgProg: d.total ? Math.round(d.avgProg / d.total) : 0,
-    rate:    d.total ? Math.round((d.done / d.total) * 100) : 0,
+  return [...deptMap.entries()].map(([dept, d]): DeptData => ({
+    dept,
+    total:      d.total,
+    done:       d.done,
+    late:       d.late,
+    inProgress: d.inProgress,
+    urgent:     d.urgent,
+    tasks:      d.tasks,
+    avgProg:    d.total ? Math.round(d.avgProg / d.total) : 0,
+    rate:       d.total ? Math.round((d.done / d.total) * 100) : 0,
   })).sort((a, b) => b.late - a.late || b.urgent - a.urgent || b.total - a.total)
 }
 
