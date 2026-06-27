@@ -159,7 +159,7 @@ function buildDeptSheet(tasks: Task[]): XLSX.WorkSheet {
     })
   }
 
-  const ws = XLSX.utils.json_to_sheet(rows, { origin: 'A1' })
+  const ws = XLSX.utils.json_to_sheet(rows)
   ws['!cols'] = [{ wch: 22 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 16 }]
   const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1')
   applyHeaderStyle(ws, range)
