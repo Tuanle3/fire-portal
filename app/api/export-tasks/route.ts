@@ -110,7 +110,7 @@ function getMonthRange(offsetMonths = 0): { from: string; to: string; label: str
 }
 
 // ── Stats block ───────────────────────────────────────────────────────────────
-interface DeptData { total: number; done: number; late: number; inProgress: number; urgent: number; avgProg: number; rate: number; tasks: Task[] }
+interface DeptData { dept: string; total: number; done: number; late: number; inProgress: number; urgent: number; avgProg: number; rate: number; tasks: Task[] }
 
 function buildStatsRows(tasks: Task[]): (Paragraph | Table)[] {
   const totalTasks = tasks.length
