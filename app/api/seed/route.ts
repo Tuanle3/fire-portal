@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/firebase'
+import { getDb } from '@/lib/firebase'
 import { ref, get, set } from 'firebase/database'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const password = req.nextUrl.searchParams.get('password') ?? 'Admin@123'
 
   // Kiểm tra user hiện có — chỉ block nếu không có ?force=true
-  const snap = await get(ref(db, 'portal_users'))
+  const snap = await get(ref(getDb(), 'portal_users'))
   if (snap.exists() && !force) {
     return NextResponse.json({
       error: 'Đã có user. Dùng ?force=true để reset.',
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const hash = await sha256(password)
   const id   = Date.now().toString()
 
-  await set(ref(db, 'portal_users'), {
+  await set(ref(getDb(), 'portal_users'), {
     [id]: {
       username:   'admin',
       hash,

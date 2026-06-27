@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { db } from '@/lib/firebase'
+import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 
 type TSRow = Record<string, unknown>
@@ -70,7 +70,7 @@ export default function AssetsPage() {
   const [page,      setPage]      = useState(1)
 
   useEffect(() => {
-    get(ref(db, 'data_ts'))
+    get(ref(getDb(), 'data_ts'))
       .then(snap => setData(toArr(snap)))
       .catch(e => setError(e instanceof Error ? e.message : 'Lỗi Firebase'))
       .finally(() => setLoading(false))

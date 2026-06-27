@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { db } from '@/lib/firebase'
+import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 
 type Row = Record<string, unknown>
@@ -64,7 +64,7 @@ export default function DataPage() {
   useEffect(() => {
     async function load() {
       try {
-        const sQ = await get(ref(db, 'data_quy'))
+        const sQ = await get(ref(getDb(), 'data_quy'))
         setDataQuy(sortDesc(toArr(sQ)))
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Lỗi Firebase')

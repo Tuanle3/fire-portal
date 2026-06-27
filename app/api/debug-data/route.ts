@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/firebase'
+import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const snap = await get(ref(db, 'data_quy'))
+  const snap = await get(ref(getDb(), 'data_quy'))
   if (!snap.exists()) return NextResponse.json({ error: 'no data' })
 
   const val = snap.val()

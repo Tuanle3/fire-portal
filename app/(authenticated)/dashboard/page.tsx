@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { db } from '@/lib/firebase'
+import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,7 +32,7 @@ export default function DashboardPage() {
   const [unit,     setUnit]     = useState<'đ'|'tr'|'tỷ'>('đ')
 
   useEffect(() => {
-    get(ref(db, 'data_quy'))
+    get(ref(getDb(), 'data_quy'))
       .then(snap =>
         setData(toArr(snap).sort((a, b) =>
           String(a['Ngày'] ?? '').localeCompare(String(b['Ngày'] ?? ''))

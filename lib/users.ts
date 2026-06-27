@@ -1,4 +1,4 @@
-import { db } from './firebase'
+import { getDb } from './firebase'
 import { ref, get, set, update, remove } from 'firebase/database'
 
 export type UserRole = 'ceo' | 'admin' | 'finance' | 'pm' | 'viewer'
@@ -18,7 +18,7 @@ export interface PortalUser {
 }
 
 export async function getUsers(): Promise<PortalUser[]> {
-  const snap = await get(ref(db, 'portal_users'))
+  const snap = await get(ref(getDb(), 'portal_users'))
   if (!snap.exists()) return []
   const users: PortalUser[] = []
   snap.forEach(child => { users.push({ id: child.key!, ...child.val() }) })
@@ -31,6 +31,7 @@ export async function getUserByCredentials(username: string, hash: string): Prom
 }
 
 export async function createUser(data: Omit<PortalUser, 'id' | 'created_at'>): Promise<PortalUser> {
+  const db = getDb()
   const users = await getUsers()
   if (users.find(u => u.username === data.username)) throw new Error('Username already exists')
   const id = Date.now().toString()
@@ -40,6 +41,7 @@ export async function createUser(data: Omit<PortalUser, 'id' | 'created_at'>): P
 }
 
 export async function updateUser(id: string, data: Partial<Omit<PortalUser, 'id' | 'created_at'>>): Promise<PortalUser | null> {
+  const db = getDb()
   if (data.username) {
     const users = await getUsers()
     if (users.find(u => u.username === data.username && u.id !== id)) throw new Error('Username already exists')
@@ -51,6 +53,6 @@ export async function updateUser(id: string, data: Partial<Omit<PortalUser, 'id'
 }
 
 export async function deleteUser(id: string): Promise<boolean> {
-  await remove(ref(db, `portal_users/${id}`))
+  await remove(ref(getDb(), `portal_users/${id}`))
   return true
 }
