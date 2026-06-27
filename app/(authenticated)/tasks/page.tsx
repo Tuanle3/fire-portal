@@ -1316,7 +1316,9 @@ function ExportModal({ tasks, filters, onClose }: {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function TasksPage() {
+import { Suspense } from 'react'
+
+function TasksPageInner() {
   const searchParams = useSearchParams()
   const router       = useRouter()
   const { setInfo }  = useTopbarInfo()
@@ -1669,5 +1671,13 @@ export default function TasksPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={null}>
+      <TasksPageInner />
+    </Suspense>
   )
 }

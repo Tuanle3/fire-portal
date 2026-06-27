@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import DashTabsBar from './DashTabsBar'
@@ -23,7 +23,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </button>
       <div className="app-main">
         <Topbar onMenuToggle={() => setSidebarOpen(o => !o)} />
-        <DashTabsBar />
+        <Suspense fallback={null}>
+          <DashTabsBar />
+        </Suspense>
         <div className="app-content">{children}</div>
       </div>
     </div>
