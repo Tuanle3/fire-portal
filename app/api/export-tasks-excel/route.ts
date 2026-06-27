@@ -102,7 +102,7 @@ function applyBodyStyle(ws: XLSX.WorkSheet, range: XLSX.Range) {
 
 function buildSheet(tasks: Task[], sheetName: string): XLSX.WorkSheet {
   const rows = tasksToRows(tasks)
-  const ws   = XLSX.utils.json_to_sheet(rows, { origin: 'A1' })
+  const ws   = XLSX.utils.json_to_sheet(rows)
   const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1')
 
   // Column widths
