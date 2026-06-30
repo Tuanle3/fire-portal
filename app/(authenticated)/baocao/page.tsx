@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 import { useDashUnit } from '@/contexts/dash-unit'
@@ -28,6 +28,30 @@ function sortGroups<T extends { nhom: string; total: number }>(arr: T[]): T[] {
     if (ac !== bc) return ac - bc
     return b.total - a.total
   })
+}
+
+// Auto-scale a table to fit its container width using CSS zoom
+function AutoFit({ children, deps }: { children: React.ReactNode; deps: unknown[] }) {
+  const outerRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const outer = outerRef.current
+    const inner = innerRef.current
+    if (!outer || !inner) return
+    inner.style.zoom = '1'
+    requestAnimationFrame(() => {
+      if (!outer || !inner) return
+      const containerW = outer.clientWidth
+      const tableW     = inner.scrollWidth
+      inner.style.zoom = tableW > containerW ? String(containerW / tableW) : '1'
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+  return (
+    <div ref={outerRef} style={{ width: '100%', overflow: 'hidden' }}>
+      <div ref={innerRef}>{children}</div>
+    </div>
+  )
 }
 
 export default function BaocaoPage() {
@@ -567,7 +591,7 @@ export default function BaocaoPage() {
                   <div className="bc-stitle">
                     <span className="bc-stitle-lbl">I. TỔNG HỢP DÒNG TIỀN THEO THÁNG</span>
                   </div>
-                  <div style={{ overflowX: 'auto' }}>
+                  <AutoFit deps={[annualData, unit]}>
                     <table className="bc-ann">
                       <thead>
                         <tr>
@@ -624,7 +648,7 @@ export default function BaocaoPage() {
                         </tr>
                       </tbody>
                     </table>
-                  </div>
+                  </AutoFit>
                 </div>
 
                 {/* II. Chi by nhom */}
@@ -634,7 +658,7 @@ export default function BaocaoPage() {
                       <span className="bc-stitle-lbl">II. CƠ CẤU CHI THEO NHÓM</span>
                       <span className="bc-stitle-val" style={{ color: '#dc2626' }}>{fmtN(totalChi)} {unitLbl}</span>
                     </div>
-                    <div style={{ overflowX: 'auto' }}>
+                    <AutoFit deps={[annualData, unit]}>
                       <table className="bc-ann">
                         <thead>
                           <tr>
@@ -671,7 +695,7 @@ export default function BaocaoPage() {
                           </tr>
                         </tbody>
                       </table>
-                    </div>
+                    </AutoFit>
                   </div>
                 )}
 
@@ -682,7 +706,7 @@ export default function BaocaoPage() {
                       <span className="bc-stitle-lbl">{thuSectionNum ?? 'II'}. CƠ CẤU THU THEO NHÓM</span>
                       <span className="bc-stitle-val" style={{ color: '#15803d' }}>{fmtN(totalThu)} {unitLbl}</span>
                     </div>
-                    <div style={{ overflowX: 'auto' }}>
+                    <AutoFit deps={[annualData, unit]}>
                       <table className="bc-ann">
                         <thead>
                           <tr>
@@ -719,7 +743,7 @@ export default function BaocaoPage() {
                           </tr>
                         </tbody>
                       </table>
-                    </div>
+                    </AutoFit>
                   </div>
                 )}
 
@@ -729,7 +753,7 @@ export default function BaocaoPage() {
                     <div className="bc-stitle">
                       <span className="bc-stitle-lbl">{growthNum}. CHỈ SỐ BIẾN ĐỘNG THEO THÁNG (so tháng trước)</span>
                     </div>
-                    <div style={{ overflowX: 'auto' }}>
+                    <AutoFit deps={[annualData, unit]}>
                       <table className="bc-gtbl">
                         <thead>
                           <tr>
@@ -790,7 +814,7 @@ export default function BaocaoPage() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </AutoFit>
                   </div>
                 )}
 
