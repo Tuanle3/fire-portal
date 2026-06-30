@@ -36,7 +36,7 @@ export default function DashTabsBar() {
     )
   }
 
-  const DASH_PATHS = ['/dashboard', '/cocau', '/assets', '/data']
+  const DASH_PATHS = ['/dashboard', '/cocau', '/suckhoe', '/assets', '/data']
   if (DASH_PATHS.includes(p)) {
     return (
       <div className="dtbar" style={{ display:'flex', alignItems:'center' }}>
@@ -46,7 +46,9 @@ export default function DashTabsBar() {
         {can('m:dashboard') && (
           <Link href="/cocau" className={`dt${p === '/cocau' ? ' dt-on' : ''}`}>Cơ cấu thu-chi</Link>
         )}
-        <span className="dt dt-dis">Sức khỏe &amp; Rủi ro</span>
+        {can('m:dashboard') && (
+          <Link href="/suckhoe" className={`dt${p === '/suckhoe' ? ' dt-on' : ''}`}>Sức khỏe &amp; Rủi ro</Link>
+        )}
         {can('m:assets') && (
           <Link href="/assets" className={`dt${p === '/assets' ? ' dt-on' : ''}`}>Tài sản đảm bảo</Link>
         )}
