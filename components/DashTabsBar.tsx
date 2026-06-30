@@ -32,14 +32,15 @@ export default function DashTabsBar() {
     )
   }
 
-  if (p === '/dashboard') {
+  const DASH_PATHS = ['/dashboard', '/assets', '/data']
+  if (DASH_PATHS.includes(p)) {
     return (
       <div className="dtbar">
-        <Link href="/dashboard" className="dt dt-on">Tổng quan CEO</Link>
+        <Link href="/dashboard" className={`dt${p === '/dashboard' ? ' dt-on' : ''}`}>Tổng quan CEO</Link>
         <span className="dt dt-dis">Cơ cấu thu-chi</span>
         <span className="dt dt-dis">Sức khỏe &amp; Rủi ro</span>
-        <Link href="/assets" className="dt">Tài sản đảm bảo</Link>
-        <Link href="/data"   className="dt">Nhật ký dòng tiền</Link>
+        <Link href="/assets" className={`dt${p === '/assets' ? ' dt-on' : ''}`}>Tài sản đảm bảo</Link>
+        <Link href="/data"   className={`dt${p === '/data'   ? ' dt-on' : ''}`}>Nhật ký dòng tiền</Link>
       </div>
     )
   }
