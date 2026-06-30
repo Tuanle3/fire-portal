@@ -7,7 +7,15 @@ export const dynamic = 'force-dynamic'
 async function getSession(req: NextRequest) {
   const cookie = req.cookies.get('fire_session')
   if (!cookie) return null
-  try { return JSON.parse(cookie.value) } catch { return null }
+  try {
+    const sess = JSON.parse(cookie.value)
+    // Always fetch current role from DB to avoid stale cookie
+    const users = await getUsers()
+    const dbUser = users.find(u => String(u.id) === String(sess.id))
+      ?? users.find(u => u.username === sess.username)
+    if (!dbUser) return null
+    return { ...sess, role: dbUser.role, id: dbUser.id }
+  } catch { return null }
 }
 
 async function hashPassword(password: string): Promise<string> {
