@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
+import { useDashUnit } from '@/contexts/dash-unit'
 
 type Row = Record<string, unknown>
 
@@ -45,6 +46,13 @@ const PAGE = 100
 
 
 export default function DataPage() {
+  const { unit } = useDashUnit()
+  const divisor  = unit === 'tỷ' ? 1_000_000_000 : unit === 'tr' ? 1_000_000 : 1
+  const fracs    = unit === 'tỷ' ? 3 : unit === 'tr' ? 1 : 0
+  const unitLbl  = unit === 'đ' ? 'đ' : `${unit} đ`
+  const fmtU     = (v: unknown) => { const x = Number(v); return isNaN(x) ? '—' : (x / divisor).toLocaleString('vi-VN', { maximumFractionDigits: fracs }) }
+  const fmtUPS   = (v: unknown) => { const x = Number(v); if (isNaN(x) || x === 0) return '—'; return (x > 0 ? '+' : '') + (x / divisor).toLocaleString('vi-VN', { maximumFractionDigits: fracs }) }
+
   const [dataQuy, setDataQuy] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
@@ -256,10 +264,10 @@ export default function DataPage() {
           {/* KPI */}
           <div className="kpi-row">
             {[
-              { label:'TỔNG THU',       dot:'#22C55E', val: fmtN(kpi.thu)+'đ',    color:'#1F6B3D', sub: filtered.filter(r=>r['Ghi_chu']==='Thu').length+' giao dịch' },
-              { label:'TỔNG CHI',       dot:'#EF4444', val: fmtN(kpi.chi)+'đ',    color:'#8C1F1F', sub: filtered.filter(r=>r['Ghi_chu']==='Chi').length+' giao dịch' },
-              { label:'RÒNG',           dot: kpi.rong>=0?'#22C55E':'#EF4444', val: fmtPS(kpi.rong)+'đ', color: kpi.rong>=0?'#1F6B3D':'#8C1F1F', sub: kpi.rong>=0?'▲ Thặng dư':'▼ Thâm hụt' },
-              { label:'SỐ DƯ CUỐI KỲ', dot:'#D4A64A', val: fmtN(cuoiky)+'đ', color:'#1C3557', sub: 'Tại '+fmtD(dateTo || new Date().toISOString().slice(0,10)) },
+              { label:'TỔNG THU',       dot:'#22C55E', val: fmtU(kpi.thu)+unitLbl,    color:'#1F6B3D', sub: filtered.filter(r=>r['Ghi_chu']==='Thu').length+' giao dịch' },
+              { label:'TỔNG CHI',       dot:'#EF4444', val: fmtU(kpi.chi)+unitLbl,    color:'#8C1F1F', sub: filtered.filter(r=>r['Ghi_chu']==='Chi').length+' giao dịch' },
+              { label:'RÒNG',           dot: kpi.rong>=0?'#22C55E':'#EF4444', val: fmtUPS(kpi.rong)+unitLbl, color: kpi.rong>=0?'#1F6B3D':'#8C1F1F', sub: kpi.rong>=0?'▲ Thặng dư':'▼ Thâm hụt' },
+              { label:'SỐ DƯ CUỐI KỲ', dot:'#D4A64A', val: fmtU(cuoiky)+unitLbl, color:'#1C3557', sub: 'Tại '+fmtD(dateTo || new Date().toISOString().slice(0,10)) },
             ].map(k => (
               <div className="kpi-card" key={k.label}>
                 <div className="kpi-label"><span className="kpi-dot" style={{background:k.dot}}/>{k.label}</div>
@@ -351,8 +359,8 @@ export default function DataPage() {
                             ? <span className={`badge ${loai==='Thu'?'b-thu':loai==='Chi'?'b-chi':''}`}>{String(r['Ghi_chu'] ?? loai)}</span>
                             : <span style={{color:'#D1D5DB'}}>—</span>}
                         </td>
-                        <td className={`r ${pos?'ps-pos':neg?'ps-neg':''}`}>{fmtPS(r['Số_tiền_PS'])}</td>
-                        <td className="r">{fmtN(r['Tồn'])}</td>
+                        <td className={`r ${pos?'ps-pos':neg?'ps-neg':''}`}>{fmtUPS(r['Số_tiền_PS'])}</td>
+                        <td className="r">{fmtU(r['Tồn'])}</td>
                       </tr>
                     )
                   })}

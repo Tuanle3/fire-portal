@@ -43,19 +43,17 @@ export default function DashTabsBar() {
         <span className="dt dt-dis">Sức khỏe &amp; Rủi ro</span>
         <Link href="/assets" className={`dt${p === '/assets' ? ' dt-on' : ''}`}>Tài sản đảm bảo</Link>
         <Link href="/data"   className={`dt${p === '/data'   ? ' dt-on' : ''}`}>Nhật ký dòng tiền</Link>
-        {p === '/dashboard' && (
-          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:3 }}>
-            {(['đ', 'tr', 'tỷ'] as const).map(u => (
-              <button
-                key={u}
-                onClick={() => setUnit(u)}
-                className={`unit-btn${unit === u ? ' on' : ''}`}
-              >
-                {u === 'đ' ? 'đ' : `${u} đ`}
-              </button>
-            ))}
-          </div>
-        )}
+        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:3 }}>
+          {(['đ', 'tr', 'tỷ'] as const).map(u => (
+            <button
+              key={u}
+              onClick={() => setUnit(u)}
+              className={`unit-btn${unit === u ? ' on' : ''}`}
+            >
+              {u === 'đ' ? 'đ' : `${u} đ`}
+            </button>
+          ))}
+        </div>
       </div>
     )
   }

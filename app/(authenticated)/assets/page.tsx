@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
+import { useDashUnit } from '@/contexts/dash-unit'
 
 type TSRow = Record<string, unknown>
 
@@ -59,6 +60,12 @@ function ltvCls(ltv: number | null): string {
 const PAGE = 15
 
 export default function AssetsPage() {
+  const { unit } = useDashUnit()
+  const divisor  = unit === 'tỷ' ? 1_000_000_000 : unit === 'tr' ? 1_000_000 : 1
+  const fracs    = unit === 'tỷ' ? 3 : unit === 'tr' ? 1 : 0
+  const unitLbl  = unit === 'đ' ? 'đ' : `${unit} đ`
+  const fmtU     = (v: number) => (v / divisor).toLocaleString('vi-VN', { maximumFractionDigits: fracs })
+
   const [data,      setData]      = useState<TSRow[]>([])
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState('')
@@ -203,23 +210,23 @@ export default function AssetsPage() {
             {/* Tổng dư nợ */}
             <div className="ts-k" style={{ borderTop:'3px solid #DC2626' }}>
               <div className="ts-k-lbl"><span className="ts-k-dot" style={{ background:'#DC2626' }}/>TỔNG DƯ NỢ HIỆN TẠI</div>
-              <div className="ts-k-val" style={{ color:'#8C1F1F' }}>{fmtN(kpi.totalDuNo)}<span style={{ fontSize:12, marginLeft:2 }}>đ</span></div>
+              <div className="ts-k-val" style={{ color:'#8C1F1F' }}>{fmtU(kpi.totalDuNo)}<span style={{ fontSize:12, marginLeft:2 }}>{unitLbl}</span></div>
               <div className="ts-k-sub">{data.length} tài sản đảm bảo</div>
             </div>
 
             {/* Hạn mức NH ngắn hạn */}
             <div className="ts-k" style={{ borderTop:'3px solid #2563EB' }}>
               <div className="ts-k-lbl"><span className="ts-k-dot" style={{ background:'#2563EB' }}/>HẠN MỨC NH NGẮN HẠN</div>
-              <div className="ts-k-val" style={{ color:'#1C3557' }}>{fmtN(kpi.hanMucTC)}<span style={{ fontSize:12, marginLeft:2 }}>đ</span></div>
-              <div className="ts-k-sub">Đã dùng <span style={{ fontWeight:700, color:'#374151' }}>{fmtN(kpi.duNoTC)}</span> đ</div>
+              <div className="ts-k-val" style={{ color:'#1C3557' }}>{fmtU(kpi.hanMucTC)}<span style={{ fontSize:12, marginLeft:2 }}>{unitLbl}</span></div>
+              <div className="ts-k-sub">Đã dùng <span style={{ fontWeight:700, color:'#374151' }}>{fmtU(kpi.duNoTC)}</span> {unitLbl}</div>
             </div>
 
             {/* Tài sản chưa thế chấp */}
             <div className="ts-k" style={{ borderTop:'3px solid #16A34A' }}>
               <div className="ts-k-lbl"><span className="ts-k-dot" style={{ background:'#16A34A' }}/>TÀI SẢN CHƯA THẾ CHẤP</div>
               <div className="ts-k-val" style={{ color:'#15803D', fontSize:28 }}>{kpi.chuaCount} <span style={{ fontSize:14, fontWeight:600 }}>tài sản</span></div>
-              <div className="ts-k-sub">Định giá <span style={{ fontWeight:700 }}>{fmtN(kpi.chuaDinhGia)}</span> đ</div>
-              <div className="ts-k-tag">Khả dụng: {fmtN(kpi.khadung)} đ</div>
+              <div className="ts-k-sub">Định giá <span style={{ fontWeight:700 }}>{fmtU(kpi.chuaDinhGia)}</span> {unitLbl}</div>
+              <div className="ts-k-tag">Khả dụng: {fmtU(kpi.khadung)} {unitLbl}</div>
             </div>
 
             {/* LTV bình quân */}
@@ -301,16 +308,16 @@ export default function AssetsPage() {
                           {String(f(r,'Ngân hàng vay') ?? '') || <span style={{ color:'#9CA3AF' }}>Chưa vay</span>}
                         </td>
                         <td style={{ fontSize:11, color:'#6B7280' }}>{String(f(r,'Đại diện vay') ?? '') || '—'}</td>
-                        <td className="r">{dinhGia ? fmtN(dinhGia) : '—'}</td>
-                        <td className="r">{hanMuc  ? fmtN(hanMuc)  : '—'}</td>
-                        <td className="r" style={{ color: duNo > 0 ? '#8C1F1F' : '#9CA3AF' }}>{duNo ? fmtN(duNo) : '–'}</td>
+                        <td className="r">{dinhGia ? fmtU(dinhGia) : '—'}</td>
+                        <td className="r">{hanMuc  ? fmtU(hanMuc)  : '—'}</td>
+                        <td className="r" style={{ color: duNo > 0 ? '#8C1F1F' : '#9CA3AF' }}>{duNo ? fmtU(duNo) : '–'}</td>
                         <td className="r">
                           <span className={`ltv-chip ${ltvCls(ltv)}`}>
                             {ltv !== null ? (ltv * 100).toFixed(1) + '%' : '0.0%'}
                           </span>
                         </td>
                         <td className="r" style={{ color: room > 0 ? '#15803D' : '#9CA3AF', fontWeight: room > 0 ? 600 : 400 }}>
-                          {fmtN(room)}
+                          {fmtU(room)}
                         </td>
                       </tr>
                     )
@@ -318,15 +325,15 @@ export default function AssetsPage() {
                   {/* Total row */}
                   <tr className="tot">
                     <td colSpan={5} style={{ textAlign:'right', paddingRight:10, fontSize:11 }}>Tổng ({filtered.length} tài sản)</td>
-                    <td className="r">{fmtN(totals.dinhGia)}</td>
-                    <td className="r">{fmtN(totals.hanMuc)}</td>
-                    <td className="r" style={{ color:'#8C1F1F' }}>{fmtN(totals.duNo)}</td>
+                    <td className="r">{fmtU(totals.dinhGia)}</td>
+                    <td className="r">{fmtU(totals.hanMuc)}</td>
+                    <td className="r" style={{ color:'#8C1F1F' }}>{fmtU(totals.duNo)}</td>
                     <td className="r">
                       <span className={`ltv-chip ${ltvCls(totals.dinhGia > 0 ? totals.duNo / totals.dinhGia : null)}`}>
                         {totals.dinhGia > 0 ? (totals.duNo / totals.dinhGia * 100).toFixed(1) + '%' : '—'}
                       </span>
                     </td>
-                    <td className="r" style={{ color:'#15803D' }}>{fmtN(totals.room)}</td>
+                    <td className="r" style={{ color:'#15803D' }}>{fmtU(totals.room)}</td>
                   </tr>
                 </tbody>
               </table>
