@@ -82,12 +82,18 @@ export default function CocauPage() {
   const totalChi    = monthlyChi.reduce((s, v) => s + v, 0)
   const chiThuRatio = totalThu > 0 ? totalChi / totalThu * 100 : 0
 
-  // Group ranking by current mode
-  const nhomRanked = useMemo(() =>
-    nhomData
+  // Group ranking: CPHĐ* first (sorted by total desc), then others (sorted by total desc)
+  const nhomRanked = useMemo(() => {
+    const isCPHD = (n: string) => n.toUpperCase().startsWith('CPHĐ') || n.toUpperCase().startsWith('CPHD')
+    return nhomData
       .map(g => ({ nhom: g.nhom, total: (mode === 'thu' ? g.thuMonthly : g.chiMonthly).reduce((s, v) => s + v, 0) }))
-      .sort((a, b) => b.total - a.total),
-  [nhomData, mode])
+      .sort((a, b) => {
+        const ac = isCPHD(a.nhom) ? 0 : 1
+        const bc = isCPHD(b.nhom) ? 0 : 1
+        if (ac !== bc) return ac - bc
+        return b.total - a.total
+      })
+  }, [nhomData, mode])
   const grandTotal   = nhomRanked.reduce((s, g) => s + g.total, 0)
   const maxVal       = nhomRanked.filter(g => g.total > 0)[0]?.total || 1
   const activeGroups = nhomRanked.filter(g => g.total > 0).length
