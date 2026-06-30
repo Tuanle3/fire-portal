@@ -489,45 +489,72 @@ export default function DashboardPage() {
 
         {/* ── Chart & Risk alerts row ── */}
         {(() => {
-          const totalDays     = monthRows.length * 30
-          const dailyAvg      = totalDays > 0 ? luykeChi / totalDays : 0
-          const coverDays     = dailyAvg > 0 ? Math.round(totals.cuoiky / dailyAvg) : 999
-          const cnPct         = debtKpi.totalDuNo > 0 ? debtKpi.cnDuNo / debtKpi.totalDuNo * 100 : 0
-          const nhUsedPct     = debtKpi.hanMucTC  > 0 ? debtKpi.duNoTC  / debtKpi.hanMucTC  * 100 : 0
-          const last2         = monthRows.slice(-2)
-          const trendUp       = last2.length < 2 ? true : last2[1].rong >= last2[0].rong
-          const risks = [
+          const totalDays  = monthRows.length * 30
+          const dailyAvg   = totalDays > 0 && luykeChi > 0 ? luykeChi / totalDays : 0
+          const coverDays  = dailyAvg > 0 ? totals.cuoiky / dailyAvg : 999
+          const cnPct      = debtKpi.totalDuNo > 0 ? debtKpi.cnDuNo / debtKpi.totalDuNo * 100 : 0
+          const nhUsedPct  = debtKpi.hanMucTC  > 0 ? debtKpi.duNoTC  / debtKpi.hanMucTC  * 100 : 0
+          const last2      = monthRows.slice(-2)
+          const cashTrend  = last2.length === 2 ? last2[1].rong - last2[0].rong : 0
+          const cumNet     = luykeRong
+          type Lvl = 'r'|'a'|'g'
+          const risks: {id:string;icon:string;title:string;body:string;action:string;lvl:Lvl}[] = [
             {
-              id:'lq', title:'Thanh khoản',
+              id: 'lq',
               lvl: coverDays < 30 ? 'r' : coverDays < 60 ? 'a' : 'g',
-              msg: coverDays >= 999 ? 'Chưa có dữ liệu chi' : `Số dư đủ chi ~${coverDays} ngày`,
-              hint: coverDays < 60 ? 'Thúc đẩy thu hồi công nợ, hạn chế chi không cấp thiết' : null,
+              icon: coverDays < 30 ? '🚨' : coverDays < 60 ? '⚠️' : '✅',
+              title: `Thanh khoản: Dự trữ ${coverDays.toFixed(0)} ngày hoạt động`,
+              body: dailyAvg > 0
+                ? `Số dư tiền mặt ${fmtB(totals.cuoiky)} ${unitLbl} = ${coverDays.toFixed(0)} ngày chi phí (bình quân ${fmtN(dailyAvg)} ${unitLbl}/ngày). ${coverDays < 30 ? 'Rất nguy hiểm.' : coverDays < 60 ? 'Mức cảnh báo.' : 'Thanh khoản an toàn.'}`
+                : 'Chưa có dữ liệu chi trong kỳ.',
+              action: coverDays < 60
+                ? `→ (1) Đẩy nhanh thu hồi công nợ; (2) Giãn chi lớn; (3) Kích hoạt hạn mức ngắn hạn ${fmtN(debtKpi.roomTC)} ${unitLbl}.`
+                : '→ Duy trì dự trữ ≥45 ngày. Gửi kỳ hạn ngắn phần nhàn rỗi.',
             },
             {
-              id:'ds', title:'Cơ cấu dư nợ',
+              id: 'ds',
               lvl: cnPct > 60 ? 'r' : cnPct > 40 ? 'a' : 'g',
-              msg: debtKpi.totalDuNo > 0 ? `Cá nhân đứng tên: ${cnPct.toFixed(1)}% tổng dư nợ` : 'Chưa có dữ liệu dư nợ',
-              hint: cnPct > 40 ? 'Chuyển dần sang vay pháp nhân để giảm rủi ro cá nhân' : null,
+              icon: '🏦',
+              title: `Cơ cấu nợ: ${cnPct.toFixed(1)}% dư nợ đứng tên cá nhân`,
+              body: debtKpi.totalDuNo > 0
+                ? `${fmtN(debtKpi.cnDuNo)}/${fmtN(debtKpi.totalDuNo)} ${unitLbl} đứng tên cá nhân. Lãi vay không đúng chủ thể bị loại khi quyết toán TNDN — mất ~${fmtN(debtKpi.cnDuNo * 0.20 * 0.10)} ${unitLbl}/năm lợi thế thuế.`
+                : 'Chưa có dữ liệu dư nợ.',
+              action: '→ (1) Ký HĐ ủy quyền vay hộ; (2) Chuyển sang khế ước pháp nhân khi đáo hạn; (3) Ưu tiên sang tên TS lớn.',
             },
             {
-              id:'nh', title:'Hạn mức Ngân hàng',
-              lvl: debtKpi.roomTC <= 0 ? 'r' : nhUsedPct > 80 ? 'a' : 'g',
-              msg: debtKpi.roomTC <= 0 ? 'Hạn mức NH đã dùng toàn bộ' : `Đã dùng ${nhUsedPct.toFixed(0)}% hạn mức — còn ${fmtN(debtKpi.roomTC)} ${unitLbl} khả dụng`,
-              hint: debtKpi.roomTC <= 0 ? 'Đàm phán nâng hạn mức hoặc bổ sung NH mới' : null,
+              id: 'nh',
+              lvl: (debtKpi.hanMucTC === 0 ? 'g' : debtKpi.roomTC <= 0 ? 'r' : nhUsedPct > 80 ? 'a' : 'g') as Lvl,
+              icon: '📊',
+              title: `Hạn mức tín dụng ngắn hạn khả dụng: ${fmtN(debtKpi.roomTC)} ${unitLbl}`,
+              body: `Hạn mức cấp ${fmtN(debtKpi.hanMucTC)} ${unitLbl}, đã dùng ${fmtN(debtKpi.duNoTC)} ${unitLbl}, còn ${fmtN(debtKpi.roomTC)} ${unitLbl}.`,
+              action: debtKpi.roomTC > 0
+                ? '→ Ưu tiên dùng hạn mức này trả lãi suất cao. Trả vòng để tái sử dụng.'
+                : '→ Đàm phán nâng hạn mức hoặc bổ sung TSĐB.',
             },
+            ...(debtKpi.chuaCount > 0 ? [{
+              id: 'ts',
+              lvl: 'g' as Lvl,
+              icon: '✨',
+              title: `${debtKpi.chuaCount} tài sản chưa khai thác — Room tín dụng ${fmtN(debtKpi.chuaRoom)} ${unitLbl}`,
+              body: `${debtKpi.chuaCount} BĐS định giá ${fmtN(debtKpi.chuaDinhGia)} ${unitLbl} chưa thế chấp, tương đương hạn mức khả dụng ${fmtN(debtKpi.chuaRoom)} ${unitLbl}.`,
+              action: '→ Thế chấp tại NH lãi suất thấp · Tất toán khoản vay ngoài · Tài trợ dự án mới',
+            }] : []),
             {
-              id:'ts', title:'Tài sản chưa khai thác',
-              lvl: debtKpi.chuaCount === 0 ? 'g' : 'a',
-              msg: debtKpi.chuaCount === 0 ? 'Toàn bộ tài sản đã được thế chấp' : `${debtKpi.chuaCount} tài sản chưa thế chấp — room ~${fmtN(debtKpi.chuaRoom)} ${unitLbl}`,
-              hint: debtKpi.chuaCount > 0 ? 'Xem xét thế chấp bổ sung để mở rộng hạn mức vay' : null,
-            },
-            {
-              id:'cf', title:'Xu hướng dòng tiền',
-              lvl: luykeRong < 0 ? 'r' : !trendUp ? 'a' : 'g',
-              msg: luykeRong < 0 ? `Lũy kế ròng âm: ${fmtPs(luykeRong)} ${unitLbl}` : trendUp ? 'Dòng tiền ròng cải thiện — xu hướng tích cực' : 'Dòng tiền ròng giảm 2 tháng gần nhất',
-              hint: luykeRong < 0 ? 'Rà soát kế hoạch thu chi, ưu tiên thu hồi nợ đến hạn' : null,
+              id: 'cf',
+              lvl: (cumNet >= 0 ? (cashTrend >= 0 ? 'g' : 'a') : 'r') as Lvl,
+              icon: cumNet >= 0 ? (cashTrend >= 0 ? '✅' : '⚠️') : '🔻',
+              title: `Dòng tiền ròng lũy kế: ${fmtPs(cumNet)} ${unitLbl} — Xu hướng ${cashTrend >= 0 ? '▲ Cải thiện' : '▼ Suy giảm'}`,
+              body: last2.length === 2
+                ? `Lũy kế: ${fmtPs(cumNet)} ${unitLbl}. So 2 tháng gần: ${mmLabel(last2[0].mm)} (${fmtPs(last2[0].rong)} ${unitLbl}) → ${mmLabel(last2[1].mm)} (${fmtPs(last2[1].rong)} ${unitLbl}), ${cashTrend >= 0 ? 'xu hướng tích cực.' : 'xu hướng xấu đi.'}`
+                : `Lũy kế: ${fmtPs(cumNet)} ${unitLbl}.`,
+              action: cashTrend < 0
+                ? '→ Phân tích nguyên nhân suy giảm. Đặt chỉ tiêu dòng tiền tháng tới.'
+                : '→ Duy trì. Dùng thặng dư trả trước nợ gốc.',
             },
           ]
+          const bgOf  = (l:Lvl) => l==='r'?'#FFF5F5':l==='a'?'#FFF4E0':'#F0FDF4'
+          const bdOf  = (l:Lvl) => l==='r'?'#FECACA':l==='a'?'#FDE68A':'#BBF7D0'
+          const acOf  = (l:Lvl) => l==='r'?'#B91C1C':l==='a'?'#B45309':'#047857'
           return (
             <div className="ov2" style={{ marginBottom:16, alignItems:'stretch' }}>
               {/* Chart */}
@@ -540,15 +567,15 @@ export default function DashboardPage() {
               {/* Risk alerts */}
               <div className="ov-card">
                 <div className="ov-card-hdr" style={{ background:'#7C2626' }}>⬤ CẢNH BÁO RỦI RO &amp; ĐỀ XUẤT</div>
-                <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', gap:9 }}>
+                <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', gap:10, overflowY:'auto' }}>
                   {risks.map(r => (
-                    <div key={r.id} className={`risk-item risk-${r.lvl}`}>
-                      <div className="risk-hdr">
-                        <span className={`risk-badge rb${r.lvl}`}>{r.lvl==='r'?'RỦI RO':r.lvl==='a'?'CHÚ Ý':'ỔN ĐỊNH'}</span>
-                        <span className="risk-title">{r.title}</span>
+                    <div key={r.id} style={{ background:bgOf(r.lvl), border:`1px solid ${bdOf(r.lvl)}`, borderRadius:8, padding:'10px 12px', display:'flex', gap:10 }}>
+                      <div style={{ fontSize:18, flexShrink:0, lineHeight:1.4 }}>{r.icon}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:acOf(r.lvl), marginBottom:4 }}>{r.title}</div>
+                        <div style={{ fontSize:11, color:'#374151', lineHeight:1.6 }}>{r.body}</div>
+                        <div style={{ fontSize:10.5, color:acOf(r.lvl), fontStyle:'italic', marginTop:5, lineHeight:1.5 }}>{r.action}</div>
                       </div>
-                      <div className="risk-msg">{r.msg}</div>
-                      {r.hint && <div className="risk-suggest">→ {r.hint}</div>}
                     </div>
                   ))}
                 </div>
