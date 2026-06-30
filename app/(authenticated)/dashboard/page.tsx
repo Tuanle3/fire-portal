@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 import { useDashUnit } from '@/contexts/dash-unit'
@@ -174,6 +174,37 @@ export default function DashboardPage() {
     }
   }, [unitRows])
 
+  // Monthly balance split by Cá nhân vs Pháp nhân (for chart lines)
+  const monthlyTypeBalance = useMemo<Array<{mm:string;cn:number;pn:number}>>(() => {
+    const stkUnit = new Map<string,string>()
+    for (const r of data) {
+      const s = String(r['Số_tài_khoản'] ?? ''), u = String(r['Đơn_vị'] ?? '')
+      if (s && u && !stkUnit.has(s)) stkUnit.set(s, u)
+    }
+    const ton = new Map<string,number>(dauKyAcc)
+    const result: Array<{mm:string;cn:number;pn:number}> = []
+    let curMm = ''
+    for (const r of yearData) {
+      const mm = String(r['Ngày'] ?? '').slice(5,7)
+      const stk = String(r['Số_tài_khoản'] ?? '')
+      if (mm !== curMm) {
+        if (curMm) {
+          let cn = 0, pn = 0
+          ton.forEach((v,s) => { const u=(stkUnit.get(s)??'').toLowerCase(); if(u.startsWith('mr')) cn+=v; else pn+=v })
+          result.push({mm:curMm,cn,pn})
+        }
+        curMm = mm
+      }
+      if (stk) ton.set(stk, Number(r['Tồn'] ?? 0))
+    }
+    if (curMm) {
+      let cn = 0, pn = 0
+      ton.forEach((v,s) => { const u=(stkUnit.get(s)??'').toLowerCase(); if(u.startsWith('mr')) cn+=v; else pn+=v })
+      result.push({mm:curMm,cn,pn})
+    }
+    return result
+  }, [data, yearData, dauKyAcc])
+
   // Debt KPI từ data_ts
   const debtKpi = useMemo(() => {
     const tc   = dataTs.filter(r => String(f(r,'Tình trạng') ?? '').toLowerCase() === 'đã thế chấp')
@@ -195,6 +226,66 @@ export default function DashboardPage() {
   const luykeChi  = monthRows.reduce((s, m) => s + m.chi, 0)
   const luykeRong = luykeThu - luykeChi
   const chartMax  = Math.max(...monthRows.map(m => Math.max(m.thu, m.chi)), 1)
+
+  // Chart.js refs
+  const chartRef  = useRef<HTMLCanvasElement>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chartInst = useRef<any>(null)
+
+  useEffect(() => {
+    if (!chartRef.current || !monthRows.length) return
+    const div     = unit === 'tỷ' ? 1_000_000_000 : unit === 'tr' ? 1_000_000 : 1
+    const frac    = unit === 'tỷ' ? 3 : unit === 'tr' ? 1 : 0
+    const uLbl    = unit === 'tỷ' ? 'tỷ đ' : unit === 'tr' ? 'tr đ' : 'đ'
+    const cyShort = String(CY).slice(2)
+
+    function build(C: any) {
+      if (!chartRef.current) return
+      if (chartInst.current) { chartInst.current.destroy(); chartInst.current = null }
+      const labels   = monthRows.map(m => `T${m.mm}/${cyShort}`)
+      const thuData  = monthRows.map(m => m.thu    / div)
+      const chiData  = monthRows.map(m => m.chi    / div)
+      const cuoiData = monthRows.map(m => m.cuoiky / div)
+      const cnData   = monthlyTypeBalance.map(m => m.cn / div)
+      const pnData   = monthlyTypeBalance.map(m => m.pn / div)
+      chartInst.current = new C(chartRef.current, {
+        data: {
+          labels,
+          datasets: [
+            { type:'bar',  label:'Thu',             data:thuData,  backgroundColor:'rgba(134,239,172,.75)', borderColor:'#4ADE80', borderWidth:1, yAxisID:'yBar', order:2 },
+            { type:'bar',  label:'Chi',             data:chiData,  backgroundColor:'rgba(252,165,165,.75)', borderColor:'#F87171', borderWidth:1, yAxisID:'yBar', order:2 },
+            { type:'line', label:'Số dư cuối kỳ',  data:cuoiData, borderColor:'#1C3557', backgroundColor:'transparent', tension:.35, pointRadius:3, borderWidth:2.5, yAxisID:'yLine', order:1 },
+            { type:'line', label:'Số dư Cá nhân',  data:cnData,   borderColor:'#DC2626', backgroundColor:'transparent', tension:.35, pointRadius:3, borderWidth:2,   borderDash:[5,3], yAxisID:'yLine', order:1 },
+            { type:'line', label:'Số dư Pháp nhân',data:pnData,   borderColor:'#2563EB', backgroundColor:'transparent', tension:.35, pointRadius:3, borderWidth:2,   borderDash:[5,3], yAxisID:'yLine', order:1 },
+          ],
+        },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          interaction:{ mode:'index', intersect:false },
+          plugins:{
+            legend:{ position:'top', labels:{ font:{size:9}, boxWidth:9, padding:6 } },
+            tooltip:{ callbacks:{ label:(ctx:any) => ` ${ctx.dataset.label}: ${(ctx.raw as number).toLocaleString('vi-VN',{maximumFractionDigits:frac})} ${uLbl}` } },
+          },
+          scales:{
+            yBar:{  type:'linear', position:'left',  grid:{color:'#F3F4F6'}, ticks:{font:{size:8},color:'#9CA3AF',maxTicksLimit:5}, title:{display:true,text:`Thu / Chi (${uLbl})`,font:{size:8},color:'#9CA3AF'} },
+            yLine:{ type:'linear', position:'right', grid:{drawOnChartArea:false}, ticks:{font:{size:8},color:'#9CA3AF',maxTicksLimit:5}, title:{display:true,text:`Số dư (${uLbl})`,font:{size:8},color:'#9CA3AF'} },
+            x:{ grid:{display:false}, ticks:{font:{size:8},color:'#9CA3AF'} },
+          },
+        },
+      })
+    }
+
+    if ((window as any).Chart) {
+      build((window as any).Chart)
+    } else {
+      const s = document.createElement('script')
+      s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
+      s.onload = () => build((window as any).Chart)
+      document.head.appendChild(s)
+    }
+    return () => { if (chartInst.current) { chartInst.current.destroy(); chartInst.current = null } }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthRows, monthlyTypeBalance, unit])
   const mmLabel   = (mm: string) => `T${mm}/${String(CY).slice(2)}`
   const BAR_W = 56
 
@@ -279,6 +370,17 @@ export default function DashboardPage() {
         .ut .total td:first-child{color:#1C3557;font-weight:700;}
         .ut .total:hover td{background:#F8F7F4;}
         .ut-toggle{display:inline-block;width:14px;text-align:center;font-size:9px;color:#9CA3AF;margin-right:4px;}
+        /* Risk alerts */
+        .risk-item{padding:9px 11px;border-radius:7px;border-left:3px solid transparent;}
+        .risk-r{background:#FEF2F2;border-left-color:#DC2626;}
+        .risk-a{background:#FFFBEB;border-left-color:#F59E0B;}
+        .risk-g{background:#F0FDF4;border-left-color:#22C55E;}
+        .risk-hdr{display:flex;align-items:center;gap:7px;margin-bottom:3px;}
+        .risk-badge{font-size:8.5px;font-weight:700;letter-spacing:.07em;padding:2px 6px;border-radius:3px;white-space:nowrap;}
+        .rbr{background:#DC2626;color:#fff;} .rba{background:#F59E0B;color:#fff;} .rbg{background:#22C55E;color:#fff;}
+        .risk-title{font-size:11.5px;font-weight:700;color:#1F2430;}
+        .risk-msg{font-size:11px;color:#374151;line-height:1.5;}
+        .risk-suggest{font-size:10.5px;color:#6B7280;margin-top:2px;font-style:italic;}
         @media(max-width:900px){.kpi4{grid-template-columns:1fr}.ov2{grid-template-columns:1fr}.ov{padding:14px 12px}}
       `}</style>
 
@@ -384,6 +486,76 @@ export default function DashboardPage() {
           </div>
 
         </div>
+
+        {/* ── Chart & Risk alerts row ── */}
+        {(() => {
+          const totalDays     = monthRows.length * 30
+          const dailyAvg      = totalDays > 0 ? luykeChi / totalDays : 0
+          const coverDays     = dailyAvg > 0 ? Math.round(totals.cuoiky / dailyAvg) : 999
+          const cnPct         = debtKpi.totalDuNo > 0 ? debtKpi.cnDuNo / debtKpi.totalDuNo * 100 : 0
+          const nhUsedPct     = debtKpi.hanMucTC  > 0 ? debtKpi.duNoTC  / debtKpi.hanMucTC  * 100 : 0
+          const last2         = monthRows.slice(-2)
+          const trendUp       = last2.length < 2 ? true : last2[1].rong >= last2[0].rong
+          const risks = [
+            {
+              id:'lq', title:'Thanh khoản',
+              lvl: coverDays < 30 ? 'r' : coverDays < 60 ? 'a' : 'g',
+              msg: coverDays >= 999 ? 'Chưa có dữ liệu chi' : `Số dư đủ chi ~${coverDays} ngày`,
+              hint: coverDays < 60 ? 'Thúc đẩy thu hồi công nợ, hạn chế chi không cấp thiết' : null,
+            },
+            {
+              id:'ds', title:'Cơ cấu dư nợ',
+              lvl: cnPct > 60 ? 'r' : cnPct > 40 ? 'a' : 'g',
+              msg: debtKpi.totalDuNo > 0 ? `Cá nhân đứng tên: ${cnPct.toFixed(1)}% tổng dư nợ` : 'Chưa có dữ liệu dư nợ',
+              hint: cnPct > 40 ? 'Chuyển dần sang vay pháp nhân để giảm rủi ro cá nhân' : null,
+            },
+            {
+              id:'nh', title:'Hạn mức Ngân hàng',
+              lvl: debtKpi.roomTC <= 0 ? 'r' : nhUsedPct > 80 ? 'a' : 'g',
+              msg: debtKpi.roomTC <= 0 ? 'Hạn mức NH đã dùng toàn bộ' : `Đã dùng ${nhUsedPct.toFixed(0)}% hạn mức — còn ${fmtN(debtKpi.roomTC)} ${unitLbl} khả dụng`,
+              hint: debtKpi.roomTC <= 0 ? 'Đàm phán nâng hạn mức hoặc bổ sung NH mới' : null,
+            },
+            {
+              id:'ts', title:'Tài sản chưa khai thác',
+              lvl: debtKpi.chuaCount === 0 ? 'g' : 'a',
+              msg: debtKpi.chuaCount === 0 ? 'Toàn bộ tài sản đã được thế chấp' : `${debtKpi.chuaCount} tài sản chưa thế chấp — room ~${fmtN(debtKpi.chuaRoom)} ${unitLbl}`,
+              hint: debtKpi.chuaCount > 0 ? 'Xem xét thế chấp bổ sung để mở rộng hạn mức vay' : null,
+            },
+            {
+              id:'cf', title:'Xu hướng dòng tiền',
+              lvl: luykeRong < 0 ? 'r' : !trendUp ? 'a' : 'g',
+              msg: luykeRong < 0 ? `Lũy kế ròng âm: ${fmtPs(luykeRong)} ${unitLbl}` : trendUp ? 'Dòng tiền ròng cải thiện — xu hướng tích cực' : 'Dòng tiền ròng giảm 2 tháng gần nhất',
+              hint: luykeRong < 0 ? 'Rà soát kế hoạch thu chi, ưu tiên thu hồi nợ đến hạn' : null,
+            },
+          ]
+          return (
+            <div className="ov2" style={{ marginBottom:16 }}>
+              {/* Chart */}
+              <div className="ov-card">
+                <div className="ov-card-hdr">DIỄN BIẾN DÒNG TIỀN {CY}</div>
+                <div style={{ padding:'12px 14px 10px', height:260, position:'relative' }}>
+                  <canvas ref={chartRef} />
+                </div>
+              </div>
+              {/* Risk alerts */}
+              <div className="ov-card">
+                <div className="ov-card-hdr" style={{ background:'#7C2626' }}>⬤ CẢNH BÁO RỦI RO &amp; ĐỀ XUẤT</div>
+                <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', gap:9 }}>
+                  {risks.map(r => (
+                    <div key={r.id} className={`risk-item risk-${r.lvl}`}>
+                      <div className="risk-hdr">
+                        <span className={`risk-badge rb${r.lvl}`}>{r.lvl==='r'?'RỦI RO':r.lvl==='a'?'CHÚ Ý':'ỔN ĐỊNH'}</span>
+                        <span className="risk-title">{r.title}</span>
+                      </div>
+                      <div className="risk-msg">{r.msg}</div>
+                      {r.hint && <div className="risk-suggest">→ {r.hint}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         <div className="ov2">
           {/* Left: monthly table + chart */}
