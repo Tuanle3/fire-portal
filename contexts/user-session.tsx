@@ -52,6 +52,7 @@ export const PATH_MODULE: Record<string, string> = {
   '/dashboard': 'm:dashboard',
   '/cocau':     'm:dashboard',
   '/suckhoe':   'm:dashboard',
+  '/baocao':    'm:dashboard',
   '/assets':    'm:assets',
   '/data':      'm:data',
   '/tasks':     'm:tasks',
