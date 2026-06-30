@@ -88,6 +88,7 @@ export default function BaocaoPage() {
   const [thuExp,     setThuExp]     = useState<Set<string>>(new Set())
   const [chiExp,     setChiExp]     = useState<Set<string>>(new Set())
   const [annChiExp,  setAnnChiExp]  = useState<Set<string>>(new Set())
+  const [annThuExp,  setAnnThuExp]  = useState<Set<string>>(new Set())
   const [availYears, setAvailYears] = useState<number[]>([CY])
 
   useEffect(() => {
@@ -150,11 +151,11 @@ export default function BaocaoPage() {
     const chiMap = new Map<string, { total: number; sub: Map<string, number> }>()
 
     for (const r of txns) {
-      const nhom  = (String(r['Nhóm_CP'] ?? '').trim()) || 'Không phân nhóm'
-      const donVi = (String(r['Đơn_vị']  ?? '').trim()) || '—'
-      const ps    = Number(r['Số_tiền_PS'] ?? 0)
-      const loai  = String(r['Ghi_chu']   ?? '')
-      const amt   = Math.abs(ps)
+      const nhom    = (String(r['Nhóm_CP'] ?? '').trim()) || 'Không phân nhóm'
+      const chiTiet = (String(r['Chi_tiết_nhóm'] ?? r['Chi tiết nhóm'] ?? '').trim()) || (String(r['Đơn_vị'] ?? '').trim()) || '—'
+      const ps      = Number(r['Số_tiền_PS'] ?? 0)
+      const loai    = String(r['Ghi_chu']   ?? '')
+      const amt     = Math.abs(ps)
       if (!amt) continue
 
       const isThu = loai === 'Thu' || ps > 0
@@ -162,7 +163,7 @@ export default function BaocaoPage() {
       if (!map.has(nhom)) map.set(nhom, { total: 0, sub: new Map() })
       const g = map.get(nhom)!
       g.total += amt
-      g.sub.set(donVi, (g.sub.get(donVi) ?? 0) + amt)
+      g.sub.set(chiTiet, (g.sub.get(chiTiet) ?? 0) + amt)
     }
 
     const flatten = (m: Map<string, { total: number; sub: Map<string, number> }>): GroupAgg[] =>
@@ -217,52 +218,63 @@ export default function BaocaoPage() {
     }
     if (curMm) { let c = 0; ton.forEach(v => { c += v }); monthRows.push({ mm: curMm, thu: mThu, chi: mChi, rong: mThu - mChi, cuoiky: c }) }
 
-    // Nhóm × month matrix
-    const chiNhomMap = new Map<string, Map<string, number>>()
-    const thuNhomMap = new Map<string, Map<string, number>>()
+    // Chi tiết nhóm × month matrix — chi grouped by super-group, thu grouped by nhóm
+    const chiSGMap        = new Map<string, Map<string, Map<string, number>>>()
+    const thuNhomDetailMap = new Map<string, Map<string, Map<string, number>>>()
 
     for (const r of yearTxns) {
-      const mm   = String(r['Ngày'] ?? '').slice(5, 7)
-      const nhom = (String(r['Nhóm_CP'] ?? '').trim()) || 'Không phân nhóm'
-      const ps   = Number(r['Số_tiền_PS'] ?? 0)
-      const loai = String(r['Ghi_chu'] ?? '')
-      const amt  = Math.abs(ps)
+      const mm     = String(r['Ngày'] ?? '').slice(5, 7)
+      const nhom   = (String(r['Nhóm_CP'] ?? '').trim()) || 'Không phân nhóm'
+      const detail = (String(r['Chi_tiết_nhóm'] ?? r['Chi tiết nhóm'] ?? '').trim()) || nhom
+      const ps     = Number(r['Số_tiền_PS'] ?? 0)
+      const loai   = String(r['Ghi_chu'] ?? '')
+      const amt    = Math.abs(ps)
       if (!amt) continue
       if (loai === 'Chi' || ps < 0) {
-        if (!chiNhomMap.has(nhom)) chiNhomMap.set(nhom, new Map())
-        const nm = chiNhomMap.get(nhom)!
-        nm.set(mm, (nm.get(mm) ?? 0) + amt)
+        const sgKey = chiSuperGroupKey(nhom)
+        if (!chiSGMap.has(sgKey)) chiSGMap.set(sgKey, new Map())
+        const sg = chiSGMap.get(sgKey)!
+        if (!sg.has(detail)) sg.set(detail, new Map())
+        const dm = sg.get(detail)!
+        dm.set(mm, (dm.get(mm) ?? 0) + amt)
       }
       if (loai === 'Thu' || ps > 0) {
-        if (!thuNhomMap.has(nhom)) thuNhomMap.set(nhom, new Map())
-        const nm = thuNhomMap.get(nhom)!
-        nm.set(mm, (nm.get(mm) ?? 0) + amt)
+        if (!thuNhomDetailMap.has(nhom)) thuNhomDetailMap.set(nhom, new Map())
+        const ng = thuNhomDetailMap.get(nhom)!
+        if (!ng.has(detail)) ng.set(detail, new Map())
+        const dm = ng.get(detail)!
+        dm.set(mm, (dm.get(mm) ?? 0) + amt)
       }
     }
-
-    const flatNhom = (m: Map<string, Map<string, number>>) =>
-      sortGroups(
-        [...m.entries()].map(([nhom, mmMap]) => ({
-          nhom, mmMap, total: [...mmMap.values()].reduce((s, v) => s + v, 0),
-        }))
-      )
 
     const totalThu = monthRows.reduce((s, r) => s + r.thu, 0)
     const totalChi = monthRows.reduce((s, r) => s + r.chi, 0)
 
-    const chiNhomRows = flatNhom(chiNhomMap)
+    const mkItem = (detail: string, dm: Map<string, number>) => ({
+      nhom: detail, mmMap: dm, total: [...dm.values()].reduce((s, v) => s + v, 0),
+    })
+
     const chiSuperGroups = CHI_SUPER.map(sg => {
-      const items = chiNhomRows.filter(g => chiSuperGroupKey(g.nhom) === sg.key)
-      if (!items.length) return null
+      const detailMap = chiSGMap.get(sg.key)
+      if (!detailMap?.size) return null
+      const items = [...detailMap.entries()].map(([d, dm]) => mkItem(d, dm)).sort((a, b) => b.total - a.total)
       const mmMap = new Map<string, number>()
       for (const g of items) for (const [mm, v] of g.mmMap) mmMap.set(mm, (mmMap.get(mm) ?? 0) + v)
       return { ...sg, mmMap, total: items.reduce((s, g) => s + g.total, 0), items }
     }).filter((x): x is NonNullable<typeof x> => x !== null)
 
+    const thuNhomRows = sortGroups(
+      [...thuNhomDetailMap.entries()].map(([nhom, detailMap]) => {
+        const items = [...detailMap.entries()].map(([d, dm]) => mkItem(d, dm)).sort((a, b) => b.total - a.total)
+        const mmMap = new Map<string, number>()
+        for (const g of items) for (const [mm, v] of g.mmMap) mmMap.set(mm, (mmMap.get(mm) ?? 0) + v)
+        return { nhom, mmMap, total: items.reduce((s, g) => s + g.total, 0), items }
+      })
+    )
+
     return {
       monthRows, yearOpen,
-      chiSuperGroups,
-      thuNhomRows: flatNhom(thuNhomMap),
+      chiSuperGroups, thuNhomRows,
       totalThu, totalChi,
     }
   }, [data, selPrefix])
@@ -271,12 +283,14 @@ export default function BaocaoPage() {
   const toggleThu    = (nhom: string) => setThuExp(p => { const s = new Set(p); s.has(nhom) ? s.delete(nhom) : s.add(nhom); return s })
   const toggleChi    = (nhom: string) => setChiExp(p => { const s = new Set(p); s.has(nhom) ? s.delete(nhom) : s.add(nhom); return s })
   const toggleAnnChi = (key: string)  => setAnnChiExp(p => { const s = new Set(p); s.has(key) ? s.delete(key) : s.add(key); return s })
+  const toggleAnnThu = (nhom: string) => setAnnThuExp(p => { const s = new Set(p); s.has(nhom) ? s.delete(nhom) : s.add(nhom); return s })
   const expandAll  = () => {
     setThuExp(new Set(monthlyData.thuGroups.map(g => g.nhom)))
     setChiExp(new Set(monthlyData.chiGroups.map(g => g.nhom)))
     setAnnChiExp(new Set(annualData.chiSuperGroups.map(sg => sg.key)))
+    setAnnThuExp(new Set(annualData.thuNhomRows.map(g => g.nhom)))
   }
-  const collapseAll = () => { setThuExp(new Set()); setChiExp(new Set()); setAnnChiExp(new Set()) }
+  const collapseAll = () => { setThuExp(new Set()); setChiExp(new Set()); setAnnChiExp(new Set()); setAnnThuExp(new Set()) }
   const handlePrint = () => { expandAll(); setTimeout(() => window.print(), 120) }
   const mmLbl = (mm: string) => `T${mm}/${String(selYear).slice(2)}`
 
@@ -760,21 +774,32 @@ export default function BaocaoPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {thuNhomRows.map(g => (
-                            <tr key={g.nhom} className="nhom-row">
-                              <td>{g.nhom}</td>
+                          {thuNhomRows.flatMap(g => [
+                            <tr key={`tg-${g.nhom}`} className="ann-sg-row" onClick={() => toggleAnnThu(g.nhom)}>
+                              <td>{annThuExp.has(g.nhom) ? '▾' : '▸'} {g.nhom}</td>
                               {monthRows.map(m => {
                                 const v = g.mmMap.get(m.mm) ?? 0
-                                return <td key={m.mm} style={{ color: v ? '#15803d' : '#D1D5DB', fontSize: 11 }}>
-                                  {v ? fmtN(v) : '—'}
-                                </td>
+                                return <td key={m.mm} style={{ color: v ? '#15803d' : '#D1D5DB' }}>{v ? fmtN(v) : '—'}</td>
                               })}
                               <td style={{ color: '#15803d', fontWeight: 700 }}>{fmtN(g.total)}</td>
                               <td style={{ color: '#6b7280' }}>
                                 {totalThu > 0 ? (g.total / totalThu * 100).toFixed(1) + '%' : '—'}
                               </td>
-                            </tr>
-                          ))}
+                            </tr>,
+                            ...(annThuExp.has(g.nhom) ? g.items.map(item => (
+                              <tr key={`ti-${g.nhom}-${item.nhom}`} className="nhom-row ann-detail-row">
+                                <td>{item.nhom}</td>
+                                {monthRows.map(m => {
+                                  const v = item.mmMap.get(m.mm) ?? 0
+                                  return <td key={m.mm} style={{ color: v ? '#15803d' : '#D1D5DB', fontSize: 11 }}>{v ? fmtN(v) : '—'}</td>
+                                })}
+                                <td style={{ color: '#15803d' }}>{fmtN(item.total)}</td>
+                                <td style={{ color: '#6b7280' }}>
+                                  {g.total > 0 ? (item.total / g.total * 100).toFixed(1) + '%' : '—'}
+                                </td>
+                              </tr>
+                            )) : []),
+                          ])}
                           <tr className="foot-row">
                             <td>TỔNG THU</td>
                             {monthRows.map(m => {
