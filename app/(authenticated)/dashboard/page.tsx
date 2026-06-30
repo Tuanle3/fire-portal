@@ -225,69 +225,7 @@ export default function DashboardPage() {
   const luykeThu  = monthRows.reduce((s, m) => s + m.thu, 0)
   const luykeChi  = monthRows.reduce((s, m) => s + m.chi, 0)
   const luykeRong = luykeThu - luykeChi
-  const chartMax  = Math.max(...monthRows.map(m => Math.max(m.thu, m.chi)), 1)
-
-  // Chart.js refs
-  const chartRef  = useRef<HTMLCanvasElement>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chartInst = useRef<any>(null)
-
-  useEffect(() => {
-    if (!chartRef.current || !monthRows.length) return
-    const div     = unit === 'tỷ' ? 1_000_000_000 : unit === 'tr' ? 1_000_000 : 1
-    const frac    = unit === 'tỷ' ? 3 : unit === 'tr' ? 1 : 0
-    const uLbl    = unit === 'tỷ' ? 'tỷ đ' : unit === 'tr' ? 'tr đ' : 'đ'
-    const cyShort = String(CY).slice(2)
-
-    function build(C: any) {
-      if (!chartRef.current) return
-      if (chartInst.current) { chartInst.current.destroy(); chartInst.current = null }
-      const labels   = monthRows.map(m => `T${m.mm}/${cyShort}`)
-      const thuData  = monthRows.map(m => m.thu    / div)
-      const chiData  = monthRows.map(m => m.chi    / div)
-      const cuoiData = monthRows.map(m => m.cuoiky / div)
-      const cnData   = monthlyTypeBalance.map(m => m.cn / div)
-      const pnData   = monthlyTypeBalance.map(m => m.pn / div)
-      chartInst.current = new C(chartRef.current, {
-        data: {
-          labels,
-          datasets: [
-            { type:'bar',  label:'Thu',             data:thuData,  backgroundColor:'rgba(134,239,172,.75)', borderColor:'#4ADE80', borderWidth:1, yAxisID:'yBar', order:2 },
-            { type:'bar',  label:'Chi',             data:chiData,  backgroundColor:'rgba(252,165,165,.75)', borderColor:'#F87171', borderWidth:1, yAxisID:'yBar', order:2 },
-            { type:'line', label:'Số dư cuối kỳ',  data:cuoiData, borderColor:'#1C3557', backgroundColor:'transparent', tension:.35, pointRadius:3, borderWidth:2.5, yAxisID:'yLine', order:1 },
-            { type:'line', label:'Số dư Cá nhân',  data:cnData,   borderColor:'#DC2626', backgroundColor:'transparent', tension:.35, pointRadius:3, borderWidth:2,   borderDash:[5,3], yAxisID:'yLine', order:1 },
-            { type:'line', label:'Số dư Pháp nhân',data:pnData,   borderColor:'#2563EB', backgroundColor:'transparent', tension:.35, pointRadius:3, borderWidth:2,   borderDash:[5,3], yAxisID:'yLine', order:1 },
-          ],
-        },
-        options: {
-          responsive:true, maintainAspectRatio:false,
-          interaction:{ mode:'index', intersect:false },
-          plugins:{
-            legend:{ position:'top', labels:{ font:{size:9}, boxWidth:9, padding:6 } },
-            tooltip:{ callbacks:{ label:(ctx:any) => ` ${ctx.dataset.label}: ${(ctx.raw as number).toLocaleString('vi-VN',{maximumFractionDigits:frac})} ${uLbl}` } },
-          },
-          scales:{
-            yBar:{  type:'linear', position:'left',  grid:{color:'#F3F4F6'}, ticks:{font:{size:8},color:'#9CA3AF',maxTicksLimit:5}, title:{display:true,text:`Thu / Chi (${uLbl})`,font:{size:8},color:'#9CA3AF'} },
-            yLine:{ type:'linear', position:'right', grid:{drawOnChartArea:false}, ticks:{font:{size:8},color:'#9CA3AF',maxTicksLimit:5}, title:{display:true,text:`Số dư (${uLbl})`,font:{size:8},color:'#9CA3AF'} },
-            x:{ grid:{display:false}, ticks:{font:{size:8},color:'#9CA3AF'} },
-          },
-        },
-      })
-    }
-
-    if ((window as any).Chart) {
-      build((window as any).Chart)
-    } else {
-      const s = document.createElement('script')
-      s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
-      s.onload = () => build((window as any).Chart)
-      document.head.appendChild(s)
-    }
-    return () => { if (chartInst.current) { chartInst.current.destroy(); chartInst.current = null } }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthRows, monthlyTypeBalance, unit])
-  const mmLabel   = (mm: string) => `T${mm}/${String(CY).slice(2)}`
-  const BAR_W = 56
+  const mmLabel = (mm: string) => `T${mm}/${String(CY).slice(2)}`
 
   const divisor = unit === 'tỷ' ? 1_000_000_000 : unit === 'tr' ? 1_000_000 : 1
   const fracs   = unit === 'tỷ' ? 3 : unit === 'tr' ? 1 : 0
@@ -349,10 +287,6 @@ export default function DashboardPage() {
         .mt .total td:first-child{color:#1C3557;}
         .mt tr:hover td{background:#FAFAF8;}
         .mt .total:hover td{background:#F8F7F4;}
-        /* Bar chart */
-        .chart-wrap{padding:14px 14px 8px;border-top:1px solid #F3F4F6;}
-        .chart-legend{display:flex;gap:14px;font-size:10px;color:#6B7280;margin-bottom:8px;}
-        .legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
         /* Unit table */
         .ut{width:100%;border-collapse:collapse;font-size:11px;}
         .ut th{padding:7px 8px;background:#1C3557;color:rgba(255,255,255,.7);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:right;white-space:nowrap;}
@@ -557,13 +491,6 @@ export default function DashboardPage() {
           const acOf  = (l:Lvl) => l==='r'?'#B91C1C':l==='a'?'#B45309':'#047857'
           return (
             <div className="ov2" style={{ marginBottom:16, alignItems:'stretch' }}>
-              {/* Chart */}
-              <div className="ov-card" style={{ display:'flex', flexDirection:'column' }}>
-                <div className="ov-card-hdr">DIỄN BIẾN DÒNG TIỀN {CY}</div>
-                <div style={{ padding:'12px 14px 10px', flex:1, minHeight:0, position:'relative' }}>
-                  <canvas ref={chartRef} />
-                </div>
-              </div>
               {/* Risk alerts */}
               <div className="ov-card">
                 <div className="ov-card-hdr" style={{ background:'#7C2626' }}>⬤ CẢNH BÁO RỦI RO &amp; ĐỀ XUẤT</div>
@@ -614,29 +541,6 @@ export default function DashboardPage() {
               </tbody>
             </table>
 
-            {/* Bar chart */}
-            <div className="chart-wrap">
-              <div className="chart-legend">
-                <div style={{ display:'flex', alignItems:'center', gap:4 }}><div className="legend-dot" style={{ background:'#86EFAC' }}/>Thu</div>
-                <div style={{ display:'flex', alignItems:'center', gap:4 }}><div className="legend-dot" style={{ background:'#FCA5A5' }}/>Chi</div>
-              </div>
-              <svg viewBox={`0 0 ${BAR_W * monthRows.length + 30} 160`} style={{ width:'100%', height:160, display:'block' }}>
-                {monthRows.map((m, i) => {
-                  const x = i * BAR_W + 15
-                  const BH = 130, bw = BAR_W / 2 - 3
-                  const thuH = (m.thu / chartMax) * BH
-                  const chiH = (m.chi / chartMax) * BH
-                  return (
-                    <g key={m.mm}>
-                      <rect x={x}         y={BH - thuH + 10} width={bw} height={thuH} fill="#86EFAC" rx={2}/>
-                      <rect x={x + bw + 2} y={BH - chiH + 10} width={bw} height={chiH} fill="#FCA5A5" rx={2}/>
-                      <text x={x + BAR_W / 2 - 2} y={155} fontSize={9} textAnchor="middle" fill="#9CA3AF">{mmLabel(m.mm)}</text>
-                    </g>
-                  )
-                })}
-                <line x1={10} y1={140} x2={BAR_W * monthRows.length + 20} y2={140} stroke="#E5E0D8" strokeWidth={1}/>
-              </svg>
-            </div>
           </div>
 
           {/* Right: unit + account table */}
