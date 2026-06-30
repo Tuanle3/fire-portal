@@ -198,8 +198,6 @@ export default function AssetsPage() {
 
       <div className="ts-wrap">
         <div className="ts-top">
-          <div className="ts-title">Tài sản đảm bảo</div>
-
           {/* KPI cards */}
           <div className="ts-kpi">
             {/* Tổng dư nợ */}

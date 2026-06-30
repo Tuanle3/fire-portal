@@ -176,6 +176,8 @@ body {
 .dt-on { color:var(--navy); border-bottom-color:var(--navy); }
 .dt:hover:not(.dt-on):not(.dt-dis) { color:var(--txt2); }
 .dt-dis { color:#D1D5DB; cursor:default; pointer-events:none; }
+.unit-btn { padding:3px 9px; font-size:10px; font-weight:700; border-radius:5px; cursor:pointer; border:1px solid #E5E0D8; background:#fff; color:#9CA3AF; letter-spacing:.02em; }
+.unit-btn.on { background:#1C3557; color:#fff; border-color:#1C3557; }
 
 /* ── Dashboard ── */
 .dash-main { flex: 1; padding: 32px 36px; overflow-y: auto; }

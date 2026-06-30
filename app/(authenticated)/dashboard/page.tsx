@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
+import { useDashUnit } from '@/contexts/dash-unit'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
@@ -29,7 +30,7 @@ export default function DashboardPage() {
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [unit,     setUnit]     = useState<'đ'|'tr'|'tỷ'>('đ')
+  const { unit } = useDashUnit()
 
   useEffect(() => {
     get(ref(getDb(), 'data_quy'))
@@ -224,23 +225,11 @@ export default function DashboardPage() {
         .ut .total:hover td{background:#F8F7F4;}
         .ut-toggle{display:inline-block;width:14px;text-align:center;font-size:9px;color:#9CA3AF;margin-right:4px;}
         @media(max-width:900px){.kpi4{grid-template-columns:1fr}.ov2{grid-template-columns:1fr}.ov{padding:14px 12px}}
-        .unit-sw{display:flex;align-items:center;gap:3px;}
-        .unit-btn{padding:3px 9px;font-size:10px;font-weight:700;border-radius:5px;cursor:pointer;border:1px solid #E5E0D8;background:#fff;color:#9CA3AF;letter-spacing:.02em;}
-        .unit-btn.on{background:#1C3557;color:#fff;border-color:#1C3557;}
       `}</style>
 
       <main className="ov">
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
-          <div className="ov-title" style={{ marginBottom:0 }}>
-            BÁO CÁO THÁNG {new Date().getMonth() + 1} NĂM {CY} · Firebase Realtime DB
-          </div>
-          <div className="unit-sw">
-            {(['đ', 'tr', 'tỷ'] as const).map(u => (
-              <button key={u} className={`unit-btn${unit === u ? ' on' : ''}`} onClick={() => setUnit(u)}>
-                {u === 'đ' ? 'đ' : `${u} đ`}
-              </button>
-            ))}
-          </div>
+        <div className="ov-title">
+          BÁO CÁO THÁNG {new Date().getMonth() + 1} NĂM {CY} · Firebase Realtime DB
         </div>
 
         {/* KPI cards */}

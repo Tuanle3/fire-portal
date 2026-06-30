@@ -253,8 +253,6 @@ export default function DataPage() {
 
       <div className="jp">
         <div className="jp-top">
-          <div className="jp-title">Nhật ký dòng tiền</div>
-
           {/* KPI */}
           <div className="kpi-row">
             {[
