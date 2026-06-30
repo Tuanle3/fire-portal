@@ -213,18 +213,37 @@ export default function DashboardPage() {
       <style>{`
         .ov{flex:1;overflow-y:auto;padding:20px 24px;background:#FAF8F3;}
         .ov-title{font-size:16px;font-weight:700;color:#1F2430;margin-bottom:14px;}
-        .kpi4{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:16px;}
-        .k4{background:#fff;border:1px solid #E5E0D8;border-radius:10px;padding:14px 18px;}
+        /* 3 cards bằng nhau */
+        .kpi4{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+        .k4{background:#fff;border:1px solid #E5E0D8;border-radius:10px;padding:16px 18px;}
         .k4-lbl{font-size:9.5px;font-weight:700;letter-spacing:.08em;color:#6B7280;text-transform:uppercase;margin-bottom:5px;display:flex;align-items:center;gap:5px;}
-        .k4-dot{width:7px;height:7px;border-radius:50%;}
-        .k4-val{font-size:18px;font-weight:800;font-family:'Roboto Mono',monospace;line-height:1.15;}
-        .k4-sub{font-size:10px;color:#9CA3AF;margin-top:3px;}
+        .k4-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+        .k4-val{font-size:20px;font-weight:800;font-family:'Roboto Mono',monospace;line-height:1.15;}
+        .k4-sub{font-size:10px;color:#9CA3AF;margin-top:2px;line-height:1.5;}
+        /* Card 1 – số dư */
         .k4du-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+        .k4du-delta{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:5px;}
         .k4du-cols{display:grid;grid-template-columns:1fr 1px 1fr;gap:0 14px;}
         .k4du-period{font-size:9px;font-weight:700;letter-spacing:.07em;color:#9CA3AF;text-transform:uppercase;margin-bottom:4px;}
-        .k4du-big{font-family:'Roboto Mono',monospace;font-size:17px;font-weight:800;line-height:1.2;margin-bottom:8px;}
-        .k4du-row{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:#6B7280;padding:2px 0;}
+        .k4du-big{font-family:'Roboto Mono',monospace;font-size:16px;font-weight:800;line-height:1.2;margin-bottom:7px;}
+        .k4du-row{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#6B7280;padding:2px 0;border-bottom:1px dashed #F3F4F6;}
+        .k4du-row:last-child{border-bottom:none;}
         .k4du-row span:last-child{font-family:'Roboto Mono',monospace;font-weight:600;font-size:10px;}
+        /* Card 2 – dư nợ */
+        .k4dn-total{font-size:22px;font-weight:800;font-family:'Roboto Mono',monospace;color:#8C1F1F;line-height:1.1;margin:4px 0 10px;}
+        .k4dn-bar{height:6px;border-radius:3px;background:#F3F4F6;overflow:hidden;margin:8px 0 10px;}
+        .k4dn-bar-cn{height:100%;background:#DC2626;border-radius:3px 0 0 3px;}
+        .k4dn-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #F9FAFB;}
+        .k4dn-row:last-child{border-bottom:none;}
+        .k4dn-lbl{font-size:10.5px;font-weight:600;color:#374151;}
+        .k4dn-val{font-size:11px;font-weight:700;font-family:'Roboto Mono',monospace;}
+        .k4dn-pct{font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;margin-left:5px;}
+        /* Card 3 – khả dụng */
+        .k4kd-sec{padding:10px 0;}
+        .k4kd-sec+.k4kd-sec{border-top:1px solid #F3F4F6;}
+        .k4kd-big{font-size:18px;font-weight:800;font-family:'Roboto Mono',monospace;margin:3px 0 5px;line-height:1.1;}
+        .k4kd-row{display:flex;justify-content:space-between;font-size:10px;color:#6B7280;padding:1px 0;}
+        .k4kd-row span:last-child{font-family:'Roboto Mono',monospace;font-weight:600;color:#374151;}
         .ov2{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
         .ov-card{background:#fff;border:1px solid #E5E0D8;border-radius:10px;overflow:hidden;}
         .ov-card-hdr{background:#1C3557;padding:10px 14px;font-size:10px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.06em;text-transform:uppercase;}
@@ -267,102 +286,91 @@ export default function DashboardPage() {
           BÁO CÁO THÁNG {new Date().getMonth() + 1} NĂM {CY} · Firebase Realtime DB
         </div>
 
-        {/* KPI cards */}
+        {/* KPI cards – 3 columns equal */}
         <div className="kpi4">
-          {/* SỐ DƯ TẠI THỜI ĐIỂM – combined card */}
+
+          {/* ── Card 1: SỐ DƯ TẠI THỜI ĐIỂM ── */}
           <div className="k4">
             <div className="k4du-hdr">
               <div className="k4-lbl" style={{ marginBottom:0 }}>
-                <span className="k4-dot" style={{ background:'#D4A64A' }}/>
-                SỐ DƯ TẠI THỜI ĐIỂM
+                <span className="k4-dot" style={{ background:'#D4A64A' }}/>SỐ DƯ TẠI THỜI ĐIỂM
               </div>
-              <div style={{ fontSize:10.5, fontWeight:700, color: color(totals.cuoiky - totals.dauKy) }}>
-                {totals.cuoiky - totals.dauKy >= 0 ? '▲' : '▼'} {fmtPs(totals.cuoiky - totals.dauKy)} {unitLbl} so với đầu kỳ
-              </div>
+              <span className="k4du-delta" style={{
+                color: color(totals.cuoiky - totals.dauKy),
+                background: totals.cuoiky >= totals.dauKy ? '#F0FDF4' : '#FEF2F2',
+              }}>
+                {totals.cuoiky >= totals.dauKy ? '▲' : '▼'} {fmtPs(totals.cuoiky - totals.dauKy)} {unitLbl}
+              </span>
             </div>
             <div className="k4du-cols">
-              {/* ĐẦU KỲ */}
               <div>
                 <div className="k4du-period">Đầu kỳ · 1/1/{CY}</div>
                 <div className="k4du-big" style={{ color:'#1C3557' }}>
-                  {fmtB(totals.dauKy)}<span style={{ fontSize:11, fontWeight:600, marginLeft:2 }}>{unitLbl}</span>
+                  {fmtB(totals.dauKy)}<span style={{ fontSize:10, fontWeight:600, marginLeft:2 }}>{unitLbl}</span>
                 </div>
-                <div className="k4du-row">
-                  <span>Cá nhân</span>
-                  <span style={{ color: color(totals.dauKyCaNhan) }}>{fmtB(totals.dauKyCaNhan)} {unitLbl}</span>
-                </div>
-                <div className="k4du-row">
-                  <span>Pháp nhân</span>
-                  <span style={{ color: color(totals.dauKyPhapNhan) }}>{fmtB(totals.dauKyPhapNhan)} {unitLbl}</span>
-                </div>
+                <div className="k4du-row"><span>Cá nhân</span><span style={{ color: color(totals.dauKyCaNhan) }}>{fmtB(totals.dauKyCaNhan)} {unitLbl}</span></div>
+                <div className="k4du-row"><span>Pháp nhân</span><span style={{ color: color(totals.dauKyPhapNhan) }}>{fmtB(totals.dauKyPhapNhan)} {unitLbl}</span></div>
               </div>
-              {/* Divider */}
               <div style={{ background:'#E5E0D8' }}/>
-              {/* CUỐI KỲ */}
               <div>
                 <div className="k4du-period">Cuối kỳ · {new Date().toLocaleDateString('vi-VN')}</div>
                 <div className="k4du-big" style={{ color: color(totals.cuoiky) }}>
-                  {fmtB(totals.cuoiky)}<span style={{ fontSize:11, fontWeight:600, marginLeft:2 }}>{unitLbl}</span>
+                  {fmtB(totals.cuoiky)}<span style={{ fontSize:10, fontWeight:600, marginLeft:2 }}>{unitLbl}</span>
                 </div>
-                <div className="k4du-row">
-                  <span>Cá nhân</span>
-                  <span style={{ color: color(totals.cuoikyCaNhan) }}>{fmtB(totals.cuoikyCaNhan)} {unitLbl}</span>
-                </div>
-                <div className="k4du-row">
-                  <span>Pháp nhân</span>
-                  <span style={{ color: color(totals.cuoikyPhapNhan) }}>{fmtB(totals.cuoikyPhapNhan)} {unitLbl}</span>
-                </div>
+                <div className="k4du-row"><span>Cá nhân</span><span style={{ color: color(totals.cuoikyCaNhan) }}>{fmtB(totals.cuoikyCaNhan)} {unitLbl}</span></div>
+                <div className="k4du-row"><span>Pháp nhân</span><span style={{ color: color(totals.cuoikyPhapNhan) }}>{fmtB(totals.cuoikyPhapNhan)} {unitLbl}</span></div>
               </div>
             </div>
           </div>
 
-          {/* TỔNG DƯ NỢ HIỆN TẠI */}
+          {/* ── Card 2: TỔNG DƯ NỢ HIỆN TẠI ── */}
           <div className="k4">
             <div className="k4-lbl"><span className="k4-dot" style={{ background:'#DC2626' }}/>TỔNG DƯ NỢ HIỆN TẠI</div>
-            <div className="k4-val" style={{ color:'#8C1F1F' }}>
-              {fmtN(debtKpi.totalDuNo)}<span style={{ fontSize:12, fontWeight:600, marginLeft:2 }}>{unitLbl}</span>
+            <div className="k4dn-total">
+              {fmtN(debtKpi.totalDuNo)}<span style={{ fontSize:12, fontWeight:600, marginLeft:3 }}>{unitLbl}</span>
             </div>
-            <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:4 }}>
-              <div className="k4du-row">
-                <span style={{ fontSize:10, fontWeight:600, color:'#6B7280' }}>Cá nhân đứng tên</span>
-                <span style={{ color:'#8C1F1F', fontFamily:'Roboto Mono,monospace', fontSize:11, fontWeight:700 }}>
-                  {fmtN(debtKpi.cnDuNo)} {unitLbl}
-                  {debtKpi.totalDuNo > 0 && <span style={{ color:'#9CA3AF', fontWeight:500, fontSize:9, marginLeft:4 }}>
-                    {(debtKpi.cnDuNo / debtKpi.totalDuNo * 100).toFixed(1)}%
-                  </span>}
-                </span>
+            {/* Progress bar CN vs PN */}
+            {debtKpi.totalDuNo > 0 && (
+              <div className="k4dn-bar">
+                <div className="k4dn-bar-cn" style={{ width: `${debtKpi.cnDuNo / debtKpi.totalDuNo * 100}%` }}/>
               </div>
-              <div className="k4du-row">
-                <span style={{ fontSize:10, fontWeight:600, color:'#6B7280' }}>Pháp nhân</span>
-                <span style={{ color:'#374151', fontFamily:'Roboto Mono,monospace', fontSize:11, fontWeight:700 }}>
-                  {fmtN(debtKpi.pnDuNo)} {unitLbl}
-                  {debtKpi.totalDuNo > 0 && <span style={{ color:'#9CA3AF', fontWeight:500, fontSize:9, marginLeft:4 }}>
-                    {(debtKpi.pnDuNo / debtKpi.totalDuNo * 100).toFixed(1)}%
-                  </span>}
-                </span>
-              </div>
+            )}
+            <div className="k4dn-row">
+              <span className="k4dn-lbl">👤 Cá nhân đứng tên</span>
+              <span style={{ display:'flex', alignItems:'center', gap:0 }}>
+                <span className="k4dn-val" style={{ color:'#8C1F1F' }}>{fmtN(debtKpi.cnDuNo)} {unitLbl}</span>
+                {debtKpi.totalDuNo > 0 && <span className="k4dn-pct" style={{ background:'#FEF2F2', color:'#8C1F1F' }}>{(debtKpi.cnDuNo/debtKpi.totalDuNo*100).toFixed(1)}%</span>}
+              </span>
+            </div>
+            <div className="k4dn-row">
+              <span className="k4dn-lbl">🏢 Pháp nhân</span>
+              <span style={{ display:'flex', alignItems:'center', gap:0 }}>
+                <span className="k4dn-val" style={{ color:'#1C3557' }}>{fmtN(debtKpi.pnDuNo)} {unitLbl}</span>
+                {debtKpi.totalDuNo > 0 && <span className="k4dn-pct" style={{ background:'#EFF6FF', color:'#1E40AF' }}>{(debtKpi.pnDuNo/debtKpi.totalDuNo*100).toFixed(1)}%</span>}
+              </span>
             </div>
           </div>
 
-          {/* KHẢ DỤNG */}
-          <div className="k4" style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            <div>
+          {/* ── Card 3: KHẢ DỤNG ── */}
+          <div className="k4">
+            <div className="k4kd-sec">
               <div className="k4-lbl"><span className="k4-dot" style={{ background:'#2563EB' }}/>HẠN MỨC NH NGẮN HẠN</div>
-              <div className="k4-val" style={{ color:'#1C3557', fontSize:16 }}>
-                {fmtN(debtKpi.roomTC)}<span style={{ fontSize:11, fontWeight:600, marginLeft:2 }}>{unitLbl}</span>
+              <div className="k4kd-big" style={{ color: debtKpi.roomTC <= 0 ? '#8C1F1F' : '#1C3557' }}>
+                {fmtN(debtKpi.roomTC)}<span style={{ fontSize:11, fontWeight:600, marginLeft:3 }}>{unitLbl}</span>
               </div>
-              <div className="k4-sub">Hạn mức cấp: {fmtN(debtKpi.hanMucTC)} {unitLbl}</div>
-              <div className="k4-sub">Đã dùng: <span style={{ color:'#8C1F1F', fontWeight:600 }}>{fmtN(debtKpi.duNoTC)} {unitLbl}</span></div>
+              <div className="k4kd-row"><span>Hạn mức cấp</span><span>{fmtN(debtKpi.hanMucTC)} {unitLbl}</span></div>
+              <div className="k4kd-row"><span>Đã dùng</span><span style={{ color:'#8C1F1F', fontWeight:700 }}>{fmtN(debtKpi.duNoTC)} {unitLbl}</span></div>
             </div>
-            <div style={{ borderTop:'1px solid #F3F4F6', paddingTop:8 }}>
+            <div className="k4kd-sec">
               <div className="k4-lbl"><span className="k4-dot" style={{ background:'#16A34A' }}/>TÀI SẢN CHƯA KHAI THÁC</div>
-              <div className="k4-val" style={{ color:'#15803D', fontSize:16 }}>
-                {debtKpi.chuaCount} <span style={{ fontSize:11, fontWeight:600 }}>tài sản</span>
+              <div className="k4kd-big" style={{ color:'#15803D' }}>
+                {debtKpi.chuaCount}<span style={{ fontSize:12, fontWeight:600, marginLeft:4 }}>tài sản</span>
               </div>
-              <div className="k4-sub">Định giá: {fmtN(debtKpi.chuaDinhGia)} {unitLbl}</div>
-              <div className="k4-sub">Room còn dụng: <span style={{ color:'#15803D', fontWeight:600 }}>{fmtN(debtKpi.chuaRoom)} {unitLbl}</span></div>
+              <div className="k4kd-row"><span>Định giá</span><span>{fmtN(debtKpi.chuaDinhGia)} {unitLbl}</span></div>
+              <div className="k4kd-row"><span>Room còn dụng</span><span style={{ color:'#15803D', fontWeight:700 }}>{fmtN(debtKpi.chuaRoom)} {unitLbl}</span></div>
             </div>
           </div>
+
         </div>
 
         <div className="ov2">
