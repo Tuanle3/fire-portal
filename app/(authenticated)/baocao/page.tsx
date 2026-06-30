@@ -291,7 +291,68 @@ export default function BaocaoPage() {
     setAnnThuExp(new Set(annualData.thuNhomRows.map(g => g.nhom)))
   }
   const collapseAll = () => { setThuExp(new Set()); setChiExp(new Set()); setAnnChiExp(new Set()); setAnnThuExp(new Set()) }
-  const handlePrint = () => { expandAll(); setTimeout(() => window.print(), 120) }
+
+  const doExport = (format: 'pdf' | 'word') => {
+    expandAll()
+    setTimeout(() => {
+      const paper = document.getElementById('bc-report-paper')
+      if (!paper) return
+
+      const styles = Array.from(document.querySelectorAll('style'))
+        .map(s => s.textContent ?? '').join('\n')
+
+      const periodLabel = mode === 'monthly'
+        ? `Tháng ${selMonth}/${selYear}`
+        : `Năm ${selYear}`
+
+      const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Báo cáo dòng tiền ${periodLabel}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:11px;background:#fff}
+${styles}
+.bc-bar{display:none!important}
+.bc{padding:0!important;overflow:visible!important;background:#fff!important}
+.bc-paper{border:none!important;box-shadow:none!important;border-radius:0!important;
+  max-width:100%!important;padding:20px 28px!important}
+.bc-grp{cursor:default!important}
+.bc-ann,.bc-gtbl,.bc-tbl{font-size:10px!important}
+.ann-sg-row{cursor:default!important}
+.pagebreak{page-break-before:always;margin-top:0!important}
+@page{size:A4 landscape;margin:15mm}
+@media print{body{background:#fff}}
+</style>
+</head>
+<body>
+${paper.outerHTML}
+${format === 'pdf' ? '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print()},400)}<\/scr' + 'ipt>' : ''}
+</body>
+</html>`
+
+      if (format === 'pdf') {
+        const win = window.open('', '_blank')
+        if (!win) { alert('Trình duyệt đã chặn cửa sổ mới. Vui lòng cho phép pop-up.'); return }
+        win.document.write(html)
+        win.document.close()
+      } else {
+        const blob = new Blob(['﻿', html], { type: 'application/msword' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = mode === 'monthly'
+          ? `BaoCao_T${String(selMonth).padStart(2,'0')}_${selYear}.doc`
+          : `BaoCao_Nam_${selYear}.doc`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
+    }, 300)
+  }
+
   const mmLbl = (mm: string) => `T${mm}/${String(selYear).slice(2)}`
 
   // ─────── Render ───────
@@ -443,13 +504,18 @@ export default function BaocaoPage() {
             </>
           )}
 
-          <button className="bc-btn bc-btn-p" style={{ marginLeft: 'auto' }} onClick={handlePrint}>
-            🖨️ In báo cáo
-          </button>
+          <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+            <button className="bc-btn bc-btn-p" onClick={() => doExport('pdf')}>
+              ⬇ Xuất PDF
+            </button>
+            <button className="bc-btn" onClick={() => doExport('word')}>
+              ⬇ Xuất Word
+            </button>
+          </div>
         </div>
 
         {/* ─── Paper ─── */}
-        <div className="bc-paper">
+        <div className="bc-paper" id="bc-report-paper">
 
           {/* Report header */}
           <div className="bc-hdr">
