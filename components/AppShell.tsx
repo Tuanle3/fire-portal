@@ -1,11 +1,24 @@
 'use client'
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import DashTabsBar from './DashTabsBar'
+import { useUserSession, PATH_MODULE, firstAllowedPath } from '@/contexts/user-session'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { perms, loading } = useUserSession()
+  const router   = useRouter()
+  const pathname = usePathname()
+
+  useEffect(() => {
+    if (loading) return
+    const mod = PATH_MODULE[pathname]
+    if (mod && !perms.includes(mod)) {
+      router.replace(firstAllowedPath(perms))
+    }
+  }, [loading, pathname, perms, router])
 
   return (
     <div className="app-shell">

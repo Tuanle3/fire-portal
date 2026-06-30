@@ -1,37 +1,28 @@
 'use client'
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useUserSession } from '@/contexts/user-session'
 
 const NAV = [
-  { section: 'TỔNG QUAN', items: [
-    { href: '/dashboard', icon: '⊞', label: 'Tổng quan CEO' },
-  ]},
-  { section: 'VẬN HÀNH', items: [
-    { href: '/tasks', icon: '✓', label: 'Công việc' },
-  ]},
-  { section: 'HỆ THỐNG', items: [
-    { href: '/users', icon: '👤', label: 'Quản lý User' },
-  ]},
+  { section: 'TỔNG QUAN', mod: 'm:dashboard', href: '/dashboard', icon: '⊞', label: 'Tổng quan CEO' },
+  { section: 'VẬN HÀNH',  mod: 'm:tasks',     href: '/tasks',     icon: '✓', label: 'Công việc' },
+  { section: 'HỆ THỐNG',  mod: 'm:users',     href: '/users',     icon: '👤', label: 'Quản lý User' },
 ]
 
 const ROLE_LABEL: Record<string, string> = { ceo: 'CEO', finance: 'CFO', admin: 'Admin', pm: 'PM', viewer: 'Viewer' }
 
 export default function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname = usePathname()
-  const [user, setUser] = useState({ name: '...', role: '' })
+  const { name, role, can } = useUserSession()
 
-  useEffect(() => {
-    fetch('/api/me', { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : null)
-      .then(sess => {
-        if (!sess) return
-        setUser({
-          name: sess.full_name || 'Admin',
-          role: ROLE_LABEL[sess.role] ?? (sess.role || '').toUpperCase(),
-        })
-      }).catch(() => {})
-  }, [])
+  // Group allowed items by section
+  const allowed = NAV.filter(item => can(item.mod))
+
+  // Group by section
+  const sections = allowed.reduce<Record<string, typeof NAV>>((acc, item) => {
+    acc[item.section] = [...(acc[item.section] ?? []), item]
+    return acc
+  }, {})
 
   return (
     <nav className={`sidebar${open ? ' open' : ''}`}>
@@ -43,10 +34,10 @@ export default function Sidebar({ open, onClose }: { open?: boolean; onClose?: (
       </div>
 
       <div className="sb-nav">
-        {NAV.map(group => (
-          <div key={group.section}>
-            <div className="sb-section">{group.section}</div>
-            {group.items.map(item => (
+        {Object.entries(sections).map(([section, items]) => (
+          <div key={section}>
+            <div className="sb-section">{section}</div>
+            {items.map(item => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -61,10 +52,10 @@ export default function Sidebar({ open, onClose }: { open?: boolean; onClose?: (
       </div>
 
       <div className="sb-foot">
-        <div className="sb-avatar">{user.name.charAt(0).toUpperCase()}</div>
+        <div className="sb-avatar">{(name || '?').charAt(0).toUpperCase()}</div>
         <div>
-          <div className="sb-uname">{user.name}</div>
-          <div className="sb-urole">{user.role}</div>
+          <div className="sb-uname">{name || 'Đang tải…'}</div>
+          <div className="sb-urole">{ROLE_LABEL[role] ?? (role || '').toUpperCase()}</div>
         </div>
       </div>
     </nav>

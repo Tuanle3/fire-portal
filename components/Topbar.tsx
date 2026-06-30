@@ -1,7 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useTopbarInfo } from '@/contexts/topbar-info'
+import { useUserSession } from '@/contexts/user-session'
 
 const MODULE_TITLE: Record<string, { name: string; icon: string }> = {
   '/tasks':     { name: 'Quản trị công việc',  icon: '✓' },
@@ -11,21 +11,14 @@ const MODULE_TITLE: Record<string, { name: string; icon: string }> = {
   '/data':      { name: 'Nhật ký dòng tiền',    icon: '💰' },
 }
 
+const ROLE_LABEL: Record<string, string> = { ceo: 'CEO', finance: 'CFO', admin: 'Admin', pm: 'PM', viewer: 'Viewer' }
+
 export default function Topbar({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const router   = useRouter()
   const pathname = usePathname()
   const { info } = useTopbarInfo()
-  const [user, setUser] = useState({ name: 'Admin', role: '' })
-
-  useEffect(() => {
-    fetch('/api/me')
-      .then(r => r.ok ? r.json() : null)
-      .then(sess => {
-        if (!sess) return
-        const roles: Record<string, string> = { ceo: 'CEO', finance: 'CFO', admin: 'Admin', pm: 'PM', viewer: 'Viewer' }
-        setUser({ name: sess.full_name || 'Admin', role: roles[sess.role] ?? (sess.role || '').toUpperCase() })
-      }).catch(() => {})
-  }, [])
+  const { name, role } = useUserSession()
+  const user = { name: name || 'Admin', role: ROLE_LABEL[role] ?? (role || '').toUpperCase() }
 
   function handleLogout() {
     document.cookie = 'fire_session=; path=/; max-age=0'

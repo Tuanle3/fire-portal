@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useDashUnit } from '@/contexts/dash-unit'
+import { useUserSession } from '@/contexts/user-session'
 
 const TASK_VIEWS = [
   { key: 'list',      label: 'Danh sách' },
@@ -17,6 +18,7 @@ export default function DashTabsBar() {
   const params = useSearchParams()
   const view   = params.get('view') ?? 'list'
   const { unit, setUnit } = useDashUnit()
+  const { can } = useUserSession()
 
   if (p === '/tasks') {
     return (
@@ -38,11 +40,17 @@ export default function DashTabsBar() {
   if (DASH_PATHS.includes(p)) {
     return (
       <div className="dtbar" style={{ display:'flex', alignItems:'center' }}>
-        <Link href="/dashboard" className={`dt${p === '/dashboard' ? ' dt-on' : ''}`}>Tổng quan CEO</Link>
+        {can('m:dashboard') && (
+          <Link href="/dashboard" className={`dt${p === '/dashboard' ? ' dt-on' : ''}`}>Tổng quan CEO</Link>
+        )}
         <span className="dt dt-dis">Cơ cấu thu-chi</span>
         <span className="dt dt-dis">Sức khỏe &amp; Rủi ro</span>
-        <Link href="/assets" className={`dt${p === '/assets' ? ' dt-on' : ''}`}>Tài sản đảm bảo</Link>
-        <Link href="/data"   className={`dt${p === '/data'   ? ' dt-on' : ''}`}>Nhật ký dòng tiền</Link>
+        {can('m:assets') && (
+          <Link href="/assets" className={`dt${p === '/assets' ? ' dt-on' : ''}`}>Tài sản đảm bảo</Link>
+        )}
+        {can('m:data') && (
+          <Link href="/data" className={`dt${p === '/data' ? ' dt-on' : ''}`}>Nhật ký dòng tiền</Link>
+        )}
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:3 }}>
           {(['đ', 'tr', 'tỷ'] as const).map(u => (
             <button
