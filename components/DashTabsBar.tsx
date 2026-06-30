@@ -36,14 +36,16 @@ export default function DashTabsBar() {
     )
   }
 
-  const DASH_PATHS = ['/dashboard', '/assets', '/data']
+  const DASH_PATHS = ['/dashboard', '/cocau', '/assets', '/data']
   if (DASH_PATHS.includes(p)) {
     return (
       <div className="dtbar" style={{ display:'flex', alignItems:'center' }}>
         {can('m:dashboard') && (
           <Link href="/dashboard" className={`dt${p === '/dashboard' ? ' dt-on' : ''}`}>Tổng quan CEO</Link>
         )}
-        <span className="dt dt-dis">Cơ cấu thu-chi</span>
+        {can('m:dashboard') && (
+          <Link href="/cocau" className={`dt${p === '/cocau' ? ' dt-on' : ''}`}>Cơ cấu thu-chi</Link>
+        )}
         <span className="dt dt-dis">Sức khỏe &amp; Rủi ro</span>
         {can('m:assets') && (
           <Link href="/assets" className={`dt${p === '/assets' ? ' dt-on' : ''}`}>Tài sản đảm bảo</Link>
