@@ -529,11 +529,11 @@ export default function DashboardPage() {
             },
           ]
           return (
-            <div className="ov2" style={{ marginBottom:16 }}>
+            <div className="ov2" style={{ marginBottom:16, alignItems:'stretch' }}>
               {/* Chart */}
-              <div className="ov-card">
+              <div className="ov-card" style={{ display:'flex', flexDirection:'column' }}>
                 <div className="ov-card-hdr">DIỄN BIẾN DÒNG TIỀN {CY}</div>
-                <div style={{ padding:'12px 14px 10px', height:260, position:'relative' }}>
+                <div style={{ padding:'12px 14px 10px', flex:1, minHeight:0, position:'relative' }}>
                   <canvas ref={chartRef} />
                 </div>
               </div>
