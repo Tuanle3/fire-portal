@@ -238,12 +238,13 @@ export default function DashboardPage() {
         .k4dn-lbl{font-size:10.5px;font-weight:600;color:#374151;}
         .k4dn-val{font-size:11px;font-weight:700;font-family:'Roboto Mono',monospace;}
         .k4dn-pct{font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;margin-left:5px;}
-        /* Card 3 – khả dụng */
-        .k4kd-sec{padding:10px 0;}
-        .k4kd-sec+.k4kd-sec{border-top:1px solid #F3F4F6;}
-        .k4kd-big{font-size:18px;font-weight:800;font-family:'Roboto Mono',monospace;margin:3px 0 5px;line-height:1.1;}
-        .k4kd-row{display:flex;justify-content:space-between;font-size:10px;color:#6B7280;padding:1px 0;}
-        .k4kd-row span:last-child{font-family:'Roboto Mono',monospace;font-weight:600;color:#374151;}
+        /* Card 3 – khả dụng (2 cột như card 1) */
+        .k4kd-cols{display:grid;grid-template-columns:1fr 1px 1fr;gap:0 14px;margin-top:8px;}
+        .k4kd-period{font-size:9px;font-weight:700;letter-spacing:.07em;color:#9CA3AF;text-transform:uppercase;margin-bottom:4px;}
+        .k4kd-big{font-size:16px;font-weight:800;font-family:'Roboto Mono',monospace;line-height:1.2;margin-bottom:7px;}
+        .k4kd-row{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#6B7280;padding:2px 0;border-bottom:1px dashed #F3F4F6;}
+        .k4kd-row:last-child{border-bottom:none;}
+        .k4kd-row span:last-child{font-family:'Roboto Mono',monospace;font-weight:600;color:#374151;font-size:10px;}
         .ov2{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
         .ov-card{background:#fff;border:1px solid #E5E0D8;border-radius:10px;overflow:hidden;}
         .ov-card-hdr{background:#1C3557;padding:10px 14px;font-size:10px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.06em;text-transform:uppercase;}
@@ -351,23 +352,34 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ── Card 3: KHẢ DỤNG ── */}
+          {/* ── Card 3: KHẢ DỤNG – 2 cột ngang như card 1 ── */}
           <div className="k4">
-            <div className="k4kd-sec">
-              <div className="k4-lbl"><span className="k4-dot" style={{ background:'#2563EB' }}/>HẠN MỨC NH NGẮN HẠN</div>
-              <div className="k4kd-big" style={{ color: debtKpi.roomTC <= 0 ? '#8C1F1F' : '#1C3557' }}>
-                {fmtN(debtKpi.roomTC)}<span style={{ fontSize:11, fontWeight:600, marginLeft:3 }}>{unitLbl}</span>
+            <div className="k4du-hdr">
+              <div className="k4-lbl" style={{ marginBottom:0 }}>
+                <span className="k4-dot" style={{ background:'#2563EB' }}/>KHẢ DỤNG
               </div>
-              <div className="k4kd-row"><span>Hạn mức cấp</span><span>{fmtN(debtKpi.hanMucTC)} {unitLbl}</span></div>
-              <div className="k4kd-row"><span>Đã dùng</span><span style={{ color:'#8C1F1F', fontWeight:700 }}>{fmtN(debtKpi.duNoTC)} {unitLbl}</span></div>
             </div>
-            <div className="k4kd-sec">
-              <div className="k4-lbl"><span className="k4-dot" style={{ background:'#16A34A' }}/>TÀI SẢN CHƯA KHAI THÁC</div>
-              <div className="k4kd-big" style={{ color:'#15803D' }}>
-                {debtKpi.chuaCount}<span style={{ fontSize:12, fontWeight:600, marginLeft:4 }}>tài sản</span>
+            <div className="k4kd-cols">
+              {/* Hạn mức NH */}
+              <div>
+                <div className="k4kd-period">Hạn mức NH ngắn hạn</div>
+                <div className="k4kd-big" style={{ color: debtKpi.roomTC <= 0 ? '#8C1F1F' : '#1C3557' }}>
+                  {fmtN(debtKpi.roomTC)}<span style={{ fontSize:10, fontWeight:600, marginLeft:2 }}>{unitLbl}</span>
+                </div>
+                <div className="k4kd-row"><span>Hạn mức cấp</span><span>{fmtN(debtKpi.hanMucTC)} {unitLbl}</span></div>
+                <div className="k4kd-row"><span>Đã dùng</span><span style={{ color:'#8C1F1F', fontWeight:700 }}>{fmtN(debtKpi.duNoTC)} {unitLbl}</span></div>
               </div>
-              <div className="k4kd-row"><span>Định giá</span><span>{fmtN(debtKpi.chuaDinhGia)} {unitLbl}</span></div>
-              <div className="k4kd-row"><span>Room còn dụng</span><span style={{ color:'#15803D', fontWeight:700 }}>{fmtN(debtKpi.chuaRoom)} {unitLbl}</span></div>
+              {/* Divider */}
+              <div style={{ background:'#E5E0D8' }}/>
+              {/* Tài sản chưa khai thác */}
+              <div>
+                <div className="k4kd-period">Tài sản chưa khai thác</div>
+                <div className="k4kd-big" style={{ color:'#15803D' }}>
+                  {debtKpi.chuaCount}<span style={{ fontSize:10, fontWeight:600, marginLeft:4 }}>tài sản</span>
+                </div>
+                <div className="k4kd-row"><span>Định giá</span><span>{fmtN(debtKpi.chuaDinhGia)} {unitLbl}</span></div>
+                <div className="k4kd-row"><span>Room còn dụng</span><span style={{ color:'#15803D', fontWeight:700 }}>{fmtN(debtKpi.chuaRoom)} {unitLbl}</span></div>
+              </div>
             </div>
           </div>
 
