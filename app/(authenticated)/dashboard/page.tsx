@@ -16,6 +16,18 @@ function toArr(snap: any): Row[] {
   return []
 }
 
+// Try field name with spaces AND underscores
+function f(row: Row, name: string): unknown {
+  return row[name] ?? row[name.replace(/ /g, '_')]
+}
+function nf(row: Row, name: string): number { const x = Number(f(row, name)); return isNaN(x) ? 0 : x }
+
+// Cá nhân = đại diện bắt đầu bằng Mr / Mrs / Ms (không phân biệt hoa thường)
+function isCaNhan(row: Row): boolean {
+  const dd = String(f(row, 'Đại diện vay') ?? '').trim().toLowerCase()
+  return /^(mr|mrs|ms)[\s./]/.test(dd) || dd === 'mr' || dd === 'mrs' || dd === 'ms'
+}
+
 const color = (v: number) => (v > 0 ? '#1F6B3D' : v < 0 ? '#8C1F1F' : '#374151')
 
 const CY    = new Date().getFullYear()
@@ -26,19 +38,25 @@ interface AccRow     { label: string; stk: string; dauKy: number; thu: number; c
 interface UnitRow    { unit: string; dauKy: number; thu: number; chi: number; rong: number; cuoiky: number; accounts: AccRow[] }
 
 export default function DashboardPage() {
-  const [data,     setData]     = useState<Row[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState('')
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [data,       setData]       = useState<Row[]>([])
+  const [dataTs,     setDataTs]     = useState<Row[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState('')
+  const [expanded,   setExpanded]   = useState<Set<string>>(new Set())
   const { unit } = useDashUnit()
 
   useEffect(() => {
-    get(ref(getDb(), 'data_quy'))
-      .then(snap =>
-        setData(toArr(snap).sort((a, b) =>
+    const db = getDb()
+    Promise.all([
+      get(ref(db, 'data_quy')),
+      get(ref(db, 'data_ts')),
+    ])
+      .then(([snapQuy, snapTs]) => {
+        setData(toArr(snapQuy).sort((a, b) =>
           String(a['Ngày'] ?? '').localeCompare(String(b['Ngày'] ?? ''))
         ))
-      )
+        setDataTs(toArr(snapTs))
+      })
       .catch(e => setError(e instanceof Error ? e.message : 'Lỗi Firebase'))
       .finally(() => setLoading(false))
   }, [])
@@ -155,6 +173,23 @@ export default function DashboardPage() {
       cuoikyPhapNhan:  phapNhan.reduce((s, u) => s + u.cuoiky, 0),
     }
   }, [unitRows])
+
+  // Debt KPI từ data_ts
+  const debtKpi = useMemo(() => {
+    const tc   = dataTs.filter(r => String(f(r,'Tình trạng') ?? '').toLowerCase() === 'đã thế chấp')
+    const chua = dataTs.filter(r => String(f(r,'Tình trạng') ?? '').toLowerCase() === 'chưa thế chấp')
+    const cn   = dataTs.filter(isCaNhan)
+    const pn   = dataTs.filter(r => !isCaNhan(r))
+    const totalDuNo  = dataTs.reduce((s, r) => s + nf(r,'Dư nợ phân bổ theo TSĐB'), 0)
+    const cnDuNo     = cn.reduce((s, r) => s + nf(r,'Dư nợ phân bổ theo TSĐB'), 0)
+    const pnDuNo     = pn.reduce((s, r) => s + nf(r,'Dư nợ phân bổ theo TSĐB'), 0)
+    const hanMucTC   = tc.reduce((s, r) => s + nf(r,'Hạn mức cho vay'), 0)
+    const duNoTC     = tc.reduce((s, r) => s + nf(r,'Dư nợ phân bổ theo TSĐB'), 0)
+    const roomTC     = hanMucTC - duNoTC
+    const chuaDinhGia = chua.reduce((s, r) => s + nf(r,'Định giá'), 0)
+    const chuaRoom    = chua.reduce((s, r) => s + nf(r,'Hạn mức cho vay'), 0)
+    return { totalDuNo, cnDuNo, pnDuNo, hanMucTC, duNoTC, roomTC, chuaCount: chua.length, chuaDinhGia, chuaRoom }
+  }, [dataTs])
 
   const luykeThu  = monthRows.reduce((s, m) => s + m.thu, 0)
   const luykeChi  = monthRows.reduce((s, m) => s + m.chi, 0)
@@ -281,18 +316,52 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* TỔNG THU */}
+          {/* TỔNG DƯ NỢ HIỆN TẠI */}
           <div className="k4">
-            <div className="k4-lbl"><span className="k4-dot" style={{ background:'#22C55E' }}/>TỔNG THU</div>
-            <div className="k4-val" style={{ color:'#1F6B3D' }}>{fmtN(totals.thu)}<span style={{ fontSize:12, fontWeight:600, marginLeft:2 }}>{unitLbl}</span></div>
-            <div className="k4-sub">{unitRows.length} đơn vị · {monthRows.length} tháng</div>
+            <div className="k4-lbl"><span className="k4-dot" style={{ background:'#DC2626' }}/>TỔNG DƯ NỢ HIỆN TẠI</div>
+            <div className="k4-val" style={{ color:'#8C1F1F' }}>
+              {fmtN(debtKpi.totalDuNo)}<span style={{ fontSize:12, fontWeight:600, marginLeft:2 }}>{unitLbl}</span>
+            </div>
+            <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:4 }}>
+              <div className="k4du-row">
+                <span style={{ fontSize:10, fontWeight:600, color:'#6B7280' }}>Cá nhân đứng tên</span>
+                <span style={{ color:'#8C1F1F', fontFamily:'Roboto Mono,monospace', fontSize:11, fontWeight:700 }}>
+                  {fmtN(debtKpi.cnDuNo)} {unitLbl}
+                  {debtKpi.totalDuNo > 0 && <span style={{ color:'#9CA3AF', fontWeight:500, fontSize:9, marginLeft:4 }}>
+                    {(debtKpi.cnDuNo / debtKpi.totalDuNo * 100).toFixed(1)}%
+                  </span>}
+                </span>
+              </div>
+              <div className="k4du-row">
+                <span style={{ fontSize:10, fontWeight:600, color:'#6B7280' }}>Pháp nhân</span>
+                <span style={{ color:'#374151', fontFamily:'Roboto Mono,monospace', fontSize:11, fontWeight:700 }}>
+                  {fmtN(debtKpi.pnDuNo)} {unitLbl}
+                  {debtKpi.totalDuNo > 0 && <span style={{ color:'#9CA3AF', fontWeight:500, fontSize:9, marginLeft:4 }}>
+                    {(debtKpi.pnDuNo / debtKpi.totalDuNo * 100).toFixed(1)}%
+                  </span>}
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* TỔNG CHI */}
-          <div className="k4">
-            <div className="k4-lbl"><span className="k4-dot" style={{ background:'#EF4444' }}/>TỔNG CHI</div>
-            <div className="k4-val" style={{ color:'#8C1F1F' }}>{fmtN(totals.chi)}<span style={{ fontSize:12, fontWeight:600, marginLeft:2 }}>{unitLbl}</span></div>
-            <div className="k4-sub">Ròng: <span style={{ color: color(totals.rong), fontWeight:700 }}>{fmtPs(totals.rong)} {unitLbl}</span></div>
+          {/* KHẢ DỤNG */}
+          <div className="k4" style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div>
+              <div className="k4-lbl"><span className="k4-dot" style={{ background:'#2563EB' }}/>HẠN MỨC NH NGẮN HẠN</div>
+              <div className="k4-val" style={{ color:'#1C3557', fontSize:16 }}>
+                {fmtN(debtKpi.roomTC)}<span style={{ fontSize:11, fontWeight:600, marginLeft:2 }}>{unitLbl}</span>
+              </div>
+              <div className="k4-sub">Hạn mức cấp: {fmtN(debtKpi.hanMucTC)} {unitLbl}</div>
+              <div className="k4-sub">Đã dùng: <span style={{ color:'#8C1F1F', fontWeight:600 }}>{fmtN(debtKpi.duNoTC)} {unitLbl}</span></div>
+            </div>
+            <div style={{ borderTop:'1px solid #F3F4F6', paddingTop:8 }}>
+              <div className="k4-lbl"><span className="k4-dot" style={{ background:'#16A34A' }}/>TÀI SẢN CHƯA KHAI THÁC</div>
+              <div className="k4-val" style={{ color:'#15803D', fontSize:16 }}>
+                {debtKpi.chuaCount} <span style={{ fontSize:11, fontWeight:600 }}>tài sản</span>
+              </div>
+              <div className="k4-sub">Định giá: {fmtN(debtKpi.chuaDinhGia)} {unitLbl}</div>
+              <div className="k4-sub">Room còn dụng: <span style={{ color:'#15803D', fontWeight:600 }}>{fmtN(debtKpi.chuaRoom)} {unitLbl}</span></div>
+            </div>
           </div>
         </div>
 
