@@ -21,6 +21,21 @@ const CUR_MM = new Date().getMonth() + 1
 
 const isCPHD = (n: string) => n.toUpperCase().startsWith('CPHĐ') || n.toUpperCase().startsWith('CPHD')
 
+function chiSuperGroupKey(nhom: string): 'cp-hoatdong' | 'goc-lai' | 'tra-ncc' | 'khac' {
+  if (isCPHD(nhom)) return 'cp-hoatdong'
+  const u = nhom.toUpperCase()
+  if (u.includes('GỐC VAY') || u.includes('GOC VAY')) return 'goc-lai'
+  if (u.includes('LÃI VAY') || u.includes('LAI VAY')) return 'goc-lai'
+  if (u.startsWith('TRẢ NCC') || u.startsWith('TRA NCC')) return 'tra-ncc'
+  return 'khac'
+}
+const CHI_SUPER = [
+  { key: 'cp-hoatdong' as const, label: 'CP Hoạt động' },
+  { key: 'goc-lai'     as const, label: 'Trả gốc & lãi vay' },
+  { key: 'tra-ncc'     as const, label: 'Trả NCC' },
+  { key: 'khac'        as const, label: 'Khác' },
+]
+
 // Sort groups: CPHD* first (by total desc), then others (by total desc)
 function sortGroups<T extends { nhom: string; total: number }>(arr: T[]): T[] {
   return [...arr].sort((a, b) => {
@@ -72,6 +87,7 @@ export default function BaocaoPage() {
   const [selMonth,   setSelMonth]   = useState(CUR_MM)
   const [thuExp,     setThuExp]     = useState<Set<string>>(new Set())
   const [chiExp,     setChiExp]     = useState<Set<string>>(new Set())
+  const [annChiExp,  setAnnChiExp]  = useState<Set<string>>(new Set())
   const [availYears, setAvailYears] = useState<number[]>([CY])
 
   useEffect(() => {
@@ -234,22 +250,33 @@ export default function BaocaoPage() {
     const totalThu = monthRows.reduce((s, r) => s + r.thu, 0)
     const totalChi = monthRows.reduce((s, r) => s + r.chi, 0)
 
+    const chiNhomRows = flatNhom(chiNhomMap)
+    const chiSuperGroups = CHI_SUPER.map(sg => {
+      const items = chiNhomRows.filter(g => chiSuperGroupKey(g.nhom) === sg.key)
+      if (!items.length) return null
+      const mmMap = new Map<string, number>()
+      for (const g of items) for (const [mm, v] of g.mmMap) mmMap.set(mm, (mmMap.get(mm) ?? 0) + v)
+      return { ...sg, mmMap, total: items.reduce((s, g) => s + g.total, 0), items }
+    }).filter((x): x is NonNullable<typeof x> => x !== null)
+
     return {
       monthRows, yearOpen,
-      chiNhomRows: flatNhom(chiNhomMap),
+      chiSuperGroups,
       thuNhomRows: flatNhom(thuNhomMap),
       totalThu, totalChi,
     }
   }, [data, selPrefix])
 
   // Helpers
-  const toggleThu = (nhom: string) => setThuExp(p => { const s = new Set(p); s.has(nhom) ? s.delete(nhom) : s.add(nhom); return s })
-  const toggleChi = (nhom: string) => setChiExp(p => { const s = new Set(p); s.has(nhom) ? s.delete(nhom) : s.add(nhom); return s })
+  const toggleThu    = (nhom: string) => setThuExp(p => { const s = new Set(p); s.has(nhom) ? s.delete(nhom) : s.add(nhom); return s })
+  const toggleChi    = (nhom: string) => setChiExp(p => { const s = new Set(p); s.has(nhom) ? s.delete(nhom) : s.add(nhom); return s })
+  const toggleAnnChi = (key: string)  => setAnnChiExp(p => { const s = new Set(p); s.has(key) ? s.delete(key) : s.add(key); return s })
   const expandAll  = () => {
     setThuExp(new Set(monthlyData.thuGroups.map(g => g.nhom)))
     setChiExp(new Set(monthlyData.chiGroups.map(g => g.nhom)))
+    setAnnChiExp(new Set(annualData.chiSuperGroups.map(sg => sg.key)))
   }
-  const collapseAll = () => { setThuExp(new Set()); setChiExp(new Set()) }
+  const collapseAll = () => { setThuExp(new Set()); setChiExp(new Set()); setAnnChiExp(new Set()) }
   const handlePrint = () => { expandAll(); setTimeout(() => window.print(), 120) }
   const mmLbl = (mm: string) => `T${mm}/${String(selYear).slice(2)}`
 
@@ -334,6 +361,11 @@ export default function BaocaoPage() {
         .bc-ann .foot-row td{background:#1C3557;color:#fff;font-weight:800;border:none}
         .bc-ann .foot-row td:first-child{color:#fff}
         .bc-ann .gr-row td{background:#F5F8FC;font-size:10px;font-style:italic;color:#9ca3af;border-top:1px solid #E0E7F0}
+        .bc-ann .ann-sg-row{cursor:pointer}
+        .bc-ann .ann-sg-row td{background:#EEF3FA;font-weight:700;font-size:11.5px;color:#1C3557;border-top:2px solid #C5D3E8;border-bottom:1px solid #C5D3E8}
+        .bc-ann .ann-sg-row:hover td{background:#E3EBF6}
+        .bc-ann .ann-sg-row td:first-child{color:#1C3557}
+        .bc-ann .ann-detail-row td:first-child{padding-left:28px!important;font-weight:400;color:#4B6A8A;font-size:11px}
 
         /* Growth table */
         .bc-gtbl{width:100%;border-collapse:collapse;font-size:11.5px}
@@ -572,7 +604,7 @@ export default function BaocaoPage() {
 
           {/* ══════════ ANNUAL MODE ══════════ */}
           {mode === 'annual' && (() => {
-            const { monthRows, yearOpen, chiNhomRows, thuNhomRows, totalThu, totalChi } = annualData
+            const { monthRows, yearOpen, chiSuperGroups, thuNhomRows, totalThu, totalChi } = annualData
             const rong = totalThu - totalChi
 
             if (monthRows.length === 0) return (
@@ -581,7 +613,7 @@ export default function BaocaoPage() {
               </div>
             )
 
-            const thuSectionNum = chiNhomRows.length > 0 && thuNhomRows.length > 1 ? 'III' : null
+            const thuSectionNum = chiSuperGroups.length > 0 && thuNhomRows.length > 1 ? 'III' : null
             const growthNum     = thuSectionNum ? 'IV' : 'III'
 
             return (
@@ -651,8 +683,8 @@ export default function BaocaoPage() {
                   </AutoFit>
                 </div>
 
-                {/* II. Chi by nhom */}
-                {chiNhomRows.length > 0 && (
+                {/* II. Chi by super-group (expandable) */}
+                {chiSuperGroups.length > 0 && (
                   <div className="bc-sec pagebreak">
                     <div className="bc-stitle">
                       <span className="bc-stitle-lbl">II. CƠ CẤU CHI THEO NHÓM</span>
@@ -669,25 +701,36 @@ export default function BaocaoPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {chiNhomRows.map(g => (
-                            <tr key={g.nhom} className="nhom-row">
-                              <td>{g.nhom}</td>
+                          {chiSuperGroups.flatMap(sg => [
+                            <tr key={`sg-${sg.key}`} className="ann-sg-row" onClick={() => toggleAnnChi(sg.key)}>
+                              <td>{annChiExp.has(sg.key) ? '▾' : '▸'} {sg.label}</td>
                               {monthRows.map(m => {
-                                const v = g.mmMap.get(m.mm) ?? 0
-                                return <td key={m.mm} style={{ color: v ? '#dc2626' : '#D1D5DB', fontSize: 11 }}>
-                                  {v ? fmtN(v) : '—'}
-                                </td>
+                                const v = sg.mmMap.get(m.mm) ?? 0
+                                return <td key={m.mm} style={{ color: v ? '#dc2626' : '#D1D5DB' }}>{v ? fmtN(v) : '—'}</td>
                               })}
-                              <td style={{ color: '#dc2626', fontWeight: 700 }}>{fmtN(g.total)}</td>
+                              <td style={{ color: '#dc2626', fontWeight: 700 }}>{fmtN(sg.total)}</td>
                               <td style={{ color: '#6b7280' }}>
-                                {totalChi > 0 ? (g.total / totalChi * 100).toFixed(1) + '%' : '—'}
+                                {totalChi > 0 ? (sg.total / totalChi * 100).toFixed(1) + '%' : '—'}
                               </td>
-                            </tr>
-                          ))}
+                            </tr>,
+                            ...(annChiExp.has(sg.key) ? sg.items.map(g => (
+                              <tr key={`si-${sg.key}-${g.nhom}`} className="nhom-row ann-detail-row">
+                                <td>{g.nhom}</td>
+                                {monthRows.map(m => {
+                                  const v = g.mmMap.get(m.mm) ?? 0
+                                  return <td key={m.mm} style={{ color: v ? '#dc2626' : '#D1D5DB', fontSize: 11 }}>{v ? fmtN(v) : '—'}</td>
+                                })}
+                                <td style={{ color: '#dc2626' }}>{fmtN(g.total)}</td>
+                                <td style={{ color: '#6b7280' }}>
+                                  {sg.total > 0 ? (g.total / sg.total * 100).toFixed(1) + '%' : '—'}
+                                </td>
+                              </tr>
+                            )) : []),
+                          ])}
                           <tr className="foot-row">
                             <td>TỔNG CHI</td>
                             {monthRows.map(m => {
-                              const c = chiNhomRows.reduce((s, g) => s + (g.mmMap.get(m.mm) ?? 0), 0)
+                              const c = chiSuperGroups.reduce((s, sg) => s + (sg.mmMap.get(m.mm) ?? 0), 0)
                               return <td key={m.mm}>{fmtN(c)}</td>
                             })}
                             <td>{fmtN(totalChi)}</td>
