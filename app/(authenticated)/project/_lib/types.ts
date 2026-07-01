@@ -120,6 +120,8 @@ export interface ChungTuRow {
   don_vi: string
   trang_thai: string
   chung_tu_so: string
+  ghi_chu?: string
+  link_file?: string
 }
 
 export const PREFIX = 'NOXH_NT'
