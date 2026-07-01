@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { getDb } from '@/lib/firebase'
-import { ref, get, push } from 'firebase/database'
+import { ref, get, push, set, remove } from 'firebase/database'
 import { useUserSession } from '@/contexts/user-session'
 import type {
   ProjectInfo, ThiCongItem, LienDanhMember, PhapLyDoc, BanHangUnit,
@@ -71,6 +71,8 @@ export default function ProjectPage() {
   const [editInfo, setEditInfo] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
   const [infoForm, setInfoForm] = useState<ProjectInfo>(DEFAULT_INFO)
+  const [syncing,  setSyncing]  = useState(false)
+  const [syncLog,  setSyncLog]  = useState<string[]>([])
 
   const [info,     setInfo]     = useState<ProjectInfo>(DEFAULT_INFO)
   const [thiCong,  setThiCong]  = useState<ThiCongItem[]>([])
@@ -134,9 +136,75 @@ export default function ProjectPage() {
 
   async function saveInfo() {
     setSavingInfo(true)
-    const { set } = await import('firebase/database')
     await set(ref(getDb(), `${PREFIX}_Info`), infoForm)
     setSavingInfo(false); setEditInfo(false); loadAll()
+  }
+
+  async function syncFromSheet() {
+    if (!confirm('Đồng bộ sẽ XÓA toàn bộ dữ liệu Firebase và nhập lại từ Google Sheet. Tiếp tục?')) return
+    setSyncing(true)
+    setSyncLog(['⏳ Đang tải dữ liệu từ Google Sheet...'])
+
+    try {
+      const res  = await fetch('/api/sync-noxh-sheet')
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error)
+
+      const db   = getDb()
+      const log  = (msg: string) => setSyncLog(prev => [...prev, msg])
+      const { thongTin, phapLy, thiCong, lienDanh, vonVay, banHang, congNo, thanhToan } = json.data
+
+      // Helper: clear node then push all rows
+      async function replaceNode(path: string, rows: object[]) {
+        const snap = await get(ref(db, path))
+        if (snap.exists()) {
+          for (const k of Object.keys(snap.val())) await remove(ref(db, `${path}/${k}`))
+        }
+        for (const row of rows) await push(ref(db, path), row)
+      }
+
+      // Thông tin dự án (merge with existing)
+      if (Object.keys(thongTin).length > 0) {
+        const infoSnap = await get(ref(db, `${PREFIX}_Info`))
+        const current  = infoSnap.exists() ? infoSnap.val() : DEFAULT_INFO
+        await set(ref(db, `${PREFIX}_Info`), { ...current, ...thongTin })
+        log(`✓ Thông tin dự án: cập nhật ${Object.keys(thongTin).length} trường`)
+      }
+
+      // Pháp lý
+      await replaceNode(`${PREFIX}_PhapLy`, phapLy)
+      log(`✓ Pháp lý: ${phapLy.length} hồ sơ`)
+
+      // Thi công
+      await replaceNode(`${PREFIX}_ThiCong`, thiCong)
+      log(`✓ Thi công: ${thiCong.length} hạng mục`)
+
+      // Liên danh
+      await replaceNode(`${PREFIX}_LienDanh`, lienDanh)
+      log(`✓ Liên danh: ${lienDanh.length} thành viên`)
+
+      // Vốn vay
+      await replaceNode(`${PREFIX}_VonVay`, vonVay)
+      log(`✓ Vốn vay: ${vonVay.length} đợt`)
+
+      // Bán hàng
+      await replaceNode(`${PREFIX}_BanHang`, banHang)
+      log(`✓ Bán hàng: ${banHang.length} căn hộ`)
+
+      // Chứng từ Thu (từ sheet Công nợ)
+      await replaceNode(`${PREFIX}_ChungTu`, congNo)
+      log(`✓ Chứng từ Thu: ${congNo.length} phiếu`)
+
+      // Thanh toán (Chi)
+      await replaceNode(`${PREFIX}_ThanhToan`, thanhToan)
+      log(`✓ Thanh toán Chi: ${thanhToan.length} phiếu`)
+
+      log('🎉 Đồng bộ hoàn tất!')
+      await loadAll()
+    } catch (e: any) {
+      setSyncLog(prev => [...prev, `❌ Lỗi: ${e.message}`])
+    }
+    setSyncing(false)
   }
 
   async function exportCSV() {
@@ -198,6 +266,13 @@ export default function ProjectPage() {
                 ))}
               </div>
               {canEdit && <button className="prj-btn-edit" onClick={()=>setEditInfo(e=>!e)}>⚙️ Cài đặt</button>}
+              {canEdit && (
+                <button className="prj-btn-export"
+                  style={{ background: syncing ? '#9ca3af' : '#22C55E', color:'#fff', display:'flex', alignItems:'center', gap:6 }}
+                  onClick={syncFromSheet} disabled={syncing}>
+                  {syncing ? '⏳ Đang đồng bộ...' : '🔄 Đồng bộ GSheet'}
+                </button>
+              )}
               <button className="prj-btn-export" onClick={exportCSV}>⬇️ Xuất báo cáo</button>
             </div>
           </div>
@@ -236,6 +311,18 @@ export default function ProjectPage() {
           </div>
         )}
 
+        {/* Sync log */}
+        {syncLog.length > 0 && (
+          <div style={{ background:'#F0FDF4', borderBottom:'1px solid #BBF7D0', padding:'12px 28px', display:'flex', gap:12, flexWrap:'wrap', alignItems:'center' }}>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap', flex:1 }}>
+              {syncLog.map((msg, i) => (
+                <span key={i} style={{ fontSize:11.5, color: msg.startsWith('❌')?'#DC2626': msg.startsWith('🎉')?'#15803D':'#374151', fontWeight: msg.startsWith('🎉')||msg.startsWith('❌')?700:400 }}>{msg}</span>
+              ))}
+            </div>
+            {!syncing && <button onClick={()=>setSyncLog([])} style={{ fontSize:11, color:'#6B7280', background:'none', border:'none', cursor:'pointer' }}>✕ Đóng</button>}
+          </div>
+        )}
+
         {/* Tab bar */}
         <div className="prj-topbar">
           {TABS.map(t => (
@@ -253,13 +340,13 @@ export default function ProjectPage() {
           {!loading && !error && (
             <>
               {tab === 'ceo'       && <TabCEO      info={info} thiCong={thiCong} lienDanh={lienDanh} payments={payments} tasks={tasks} unit={unit} />}
-              {tab === 'phap-ly'   && <TabPhapLy   docs={phapLy}  canEdit={canEdit} onReload={loadAll} unit={unit} />}
-              {tab === 'tai-chinh' && <TabTaiChinh info={info} lienDanh={lienDanh} payments={payments} vonVay={vonVay} canEdit={canEdit} onReload={loadAll} unit={unit} />}
-              {tab === 'thi-cong'  && <TabThiCong  items={thiCong} canEdit={canEdit} onReload={loadAll} unit={unit} />}
-              {tab === 'tien-do'   && <TabTienDo   phases={phases} canEdit={canEdit} onReload={loadAll} unit={unit} />}
-              {tab === 'ban-hang'  && <TabBanHang  units={banHang} info={info} canEdit={canEdit} onReload={loadAll} unit={unit} />}
-              {tab === 'ke-toan'   && <TabKeToan   payments={payments} canEdit={canEdit} onReload={loadAll} unit={unit} />}
-              {tab === 'chung-tu'  && <TabChungTu  rows={chungTu} canEdit={canEdit} onReload={loadAll} unit={unit} />}
+              {tab === 'phap-ly'   && <TabPhapLy   docs={phapLy}  canEdit={false} onReload={loadAll} unit={unit} />}
+              {tab === 'tai-chinh' && <TabTaiChinh info={info} lienDanh={lienDanh} payments={payments} vonVay={vonVay} canEdit={false} onReload={loadAll} unit={unit} />}
+              {tab === 'thi-cong'  && <TabThiCong  items={thiCong} canEdit={false} onReload={loadAll} unit={unit} />}
+              {tab === 'tien-do'   && <TabTienDo   phases={phases} canEdit={false} onReload={loadAll} unit={unit} />}
+              {tab === 'ban-hang'  && <TabBanHang  units={banHang} info={info} canEdit={false} onReload={loadAll} unit={unit} />}
+              {tab === 'ke-toan'   && <TabKeToan   payments={payments} canEdit={false} onReload={loadAll} unit={unit} />}
+              {tab === 'chung-tu'  && <TabChungTu  rows={chungTu} canEdit={false} onReload={loadAll} unit={unit} />}
             </>
           )}
         </div>
