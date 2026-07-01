@@ -554,18 +554,18 @@ export default function DashboardPage() {
           return (
             <div className="ov2" style={{ marginBottom:16, alignItems:'stretch' }}>
               {/* Cash flow chart */}
-              <div className="ov-card">
-                <div className="ov-card-hdr" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                  <span>⬤ DIỄN BIẾN DÒNG TIỀN {CY}</span>
-                  <span style={{ display:'flex', alignItems:'center', gap:12, fontWeight:400, textTransform:'none', letterSpacing:0 }}>
-                    <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:10, height:10, borderRadius:2, background:'#7b8da7', display:'inline-block' }}/> Thu</span>
-                    <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:10, height:10, borderRadius:2, background:'#e6c5db', display:'inline-block' }}/> Chi</span>
-                    <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:18, height:2, background:'#734ad4', display:'inline-block', borderTop:'2px dashed #734ad4' }}/> Số dư</span>
-                    <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:18, height:2, background:'#E05A8A', display:'inline-block', borderTop:'2px dashed #E05A8A' }}/> CN</span>
-                  </span>
-                </div>
-                <div style={{ padding:'12px 14px', height:220 }}>
+              <div className="ov-card" style={{ display:'flex', flexDirection:'column' }}>
+                <div className="ov-card-hdr">⬤ DIỄN BIẾN DÒNG TIỀN {CY}</div>
+                <div style={{ flex:1, padding:'12px 14px', minHeight:300 }}>
                   <canvas ref={chartRef}/>
+                </div>
+                {/* Legend bên dưới chart */}
+                <div style={{ padding:'8px 14px 12px', display:'flex', flexWrap:'wrap', gap:'10px 20px', borderTop:'1px solid #F3F4F6' }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:12, height:12, borderRadius:3, background:'#7b8da7', display:'inline-block' }}/> Thu</span>
+                  <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:12, height:12, borderRadius:3, background:'#e6c5db', display:'inline-block' }}/> Chi</span>
+                  <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:20, height:0, borderTop:'2.5px dashed #734ad4', display:'inline-block', verticalAlign:'middle' }}/> Số dư cuối kỳ</span>
+                  <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:20, height:0, borderTop:'2px dashed #734ad4', borderTopStyle:'dashed', display:'inline-block', verticalAlign:'middle', opacity:.6 }}/> Số dư pháp nhân</span>
+                  <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:20, height:0, borderTop:'2px dashed #E05A8A', display:'inline-block', verticalAlign:'middle' }}/> Số dư cá nhân</span>
                 </div>
               </div>
               {/* Risk alerts */}
