@@ -71,8 +71,9 @@ export default function ProjectPage() {
   const [editInfo, setEditInfo] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
   const [infoForm, setInfoForm] = useState<ProjectInfo>(DEFAULT_INFO)
-  const [syncing,  setSyncing]  = useState(false)
-  const [syncLog,  setSyncLog]  = useState<string[]>([])
+  const [syncing,   setSyncing]  = useState(false)
+  const [syncLog,   setSyncLog]  = useState<string[]>([])
+  const [lastSync,  setLastSync] = useState<string|null>(null)
 
   const [info,     setInfo]     = useState<ProjectInfo>(DEFAULT_INFO)
   const [thiCong,  setThiCong]  = useState<ThiCongItem[]>([])
@@ -91,7 +92,7 @@ export default function ProjectPage() {
       const db = getDb()
       await seedDefaults(db)
       const [
-        infoSnap, tcSnap, ldSnap, plSnap, bhSnap, ttSnap, vvSnap, taskSnap, tdSnap, ctSnap
+        infoSnap, tcSnap, ldSnap, plSnap, bhSnap, ttSnap, vvSnap, taskSnap, tdSnap, ctSnap, slSnap
       ] = await Promise.all([
         get(ref(db, `${PREFIX}_Info`)),
         get(ref(db, `${PREFIX}_ThiCong`)),
@@ -103,6 +104,7 @@ export default function ProjectPage() {
         get(ref(db, `${PREFIX}_Tasks`)),
         get(ref(db, `${PREFIX}_TienDo`)),
         get(ref(db, `${PREFIX}_ChungTu`)),
+        get(ref(db, `${PREFIX}_SyncLog`)),
       ])
       const infoVal = infoSnap.exists() ? (infoSnap.val() as ProjectInfo) : DEFAULT_INFO
       const tc      = fbArr<ThiCongItem>(tcSnap.exists()   ? tcSnap.val()   : null)
@@ -128,6 +130,7 @@ export default function ProjectPage() {
       setTasks(fbArr<ProjectTask>(taskSnap.exists()  ? taskSnap.val() : null))
       setPhases(fbArr<Phase>(tdSnap.exists()         ? tdSnap.val()   : null))
       setChungTu(fbArr<ChungTuRow>(ctSnap.exists()   ? ctSnap.val()   : null))
+      if (slSnap.exists()) setLastSync((slSnap.val() as any).last_sync ?? null)
     } catch (e: any) { setError(e.message) }
     setLoading(false)
   }, [])
@@ -255,6 +258,7 @@ export default function ProjectPage() {
                 <span>📐 {info.area}</span>
                 <span>💰 {fmtU(info.totalCap, unit)} VĐT</span>
                 <span>📅 {info.startDate} → {info.estEnd}</span>
+                {lastSync && <span title="Tự đồng bộ mỗi 30 phút từ Google Sheet">🔄 {new Date(lastSync).toLocaleString('vi-VN',{dateStyle:'short',timeStyle:'short'})}</span>}
               </div>
             </div>
             <div className="prj-actions">
