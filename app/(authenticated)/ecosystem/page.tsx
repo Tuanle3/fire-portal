@@ -98,7 +98,6 @@ export default function EcosystemPage() {
   // Form: cổ đông
   const [shName, setShName] = useState('')
   const [shVal,  setShVal]  = useState('')
-  const [shPct,  setShPct]  = useState('')
 
   // Form: HĐQT / Điều hành
   const [memName, setMemName] = useState('')
@@ -121,7 +120,7 @@ export default function EcosystemPage() {
   function openEdit(co: CompanyData) {
     setEditCo(co); setEditTab('info')
     setFVon(String(co.von))
-    setShName(''); setShVal(''); setShPct('')
+    setShName(''); setShVal('')
     setMemName(''); setMemRole('')
     setSaveMsg('')
   }
@@ -150,17 +149,19 @@ export default function EcosystemPage() {
   }
 
   async function addShareholder() {
-    if (!editCo || !shName || !shVal || !shPct) return
+    if (!editCo || !shName || !shVal) return
     setSaving(true); setSaveMsg('')
     const db = getDb()
+    const valTy = parseFloat(shVal)
+    const tyLe  = editCo.von > 0 ? valTy / editCo.von : 0
     await push(ref(db, 'Data_CoDong'), {
       Don_vi: editCo.donVi, Cong_ty: editCo.donVi,
       Loai: 'Cổ đông', Chuc_vu: '',
       Ho_va_ten: shName,
-      So_tien: parseFloat(shVal) * 1_000_000_000,
-      Ty_le: parseFloat(shPct) / 100,
+      So_tien: valTy * 1_000_000_000,
+      Ty_le: tyLe,
     })
-    setShName(''); setShVal(''); setShPct('')
+    setShName(''); setShVal('')
     setSaving(false); setSaveMsg('✓ Đã thêm cổ đông')
     const snap = await get(ref(db, 'Data_CoDong'))
     const rows = snap.exists() ? toArr(snap.val()) : []
@@ -503,18 +504,18 @@ export default function EcosystemPage() {
                       <label className="eco-label">Họ và tên cổ đông</label>
                       <input className="eco-input" value={shName} onChange={e=>setShName(e.target.value)} placeholder="Nguyễn Văn A"/>
                     </div>
-                    <div className="eco-row2">
-                      <div className="eco-field">
-                        <label className="eco-label">Giá trị góp vốn (tỷ)</label>
-                        <input className="eco-input" type="number" value={shVal} onChange={e=>setShVal(e.target.value)} placeholder="112.5"/>
-                      </div>
-                      <div className="eco-field">
-                        <label className="eco-label">Tỷ lệ (%)</label>
-                        <input className="eco-input" type="number" value={shPct} onChange={e=>setShPct(e.target.value)} placeholder="75"/>
-                      </div>
+                    <div className="eco-field">
+                      <label className="eco-label">Giá trị góp vốn (tỷ đồng)</label>
+                      <input className="eco-input" type="number" value={shVal} onChange={e=>setShVal(e.target.value)} placeholder="112.5"/>
                     </div>
+                    {shVal && editCo.von > 0 && (
+                      <div style={{fontSize:12,color:'#6B7280',marginBottom:10,padding:'6px 10px',background:'#F0F4FB',borderRadius:6}}>
+                        Tỷ lệ tự tính: <strong style={{color:'#1C3557'}}>{(parseFloat(shVal)/editCo.von*100).toFixed(2)}%</strong>
+                        &nbsp;({shVal} / {editCo.von} tỷ)
+                      </div>
+                    )}
                     <button className="eco-btn eco-btn-primary" onClick={addShareholder}
-                      disabled={saving||!shName||!shVal||!shPct}>
+                      disabled={saving||!shName||!shVal}>
                       {saving?'Đang lưu...':'➕ Thêm cổ đông'}
                     </button>
                   </div>
