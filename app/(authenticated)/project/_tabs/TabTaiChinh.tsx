@@ -89,7 +89,7 @@ function TongHop({ info, lienDanh, payments, vonVay, unit }: { info:ProjectInfo;
           <thead>
             <tr style={{ background:'#F5F8FC' }}>
               {['Tháng','Thu','Chi','Còn lại'].map(h => (
-                <th key={h} style={{ padding:'10px 14px', textAlign:'right', fontWeight:700, color:'#6B7280', borderBottom:'1px solid #E5E0D8', ':firstChild':{textAlign:'left'} }}>{h}</th>
+                <th key={h} style={{ padding:'10px 14px', textAlign: h==='Tháng' ? 'left' : 'right', fontWeight:700, color:'#6B7280', borderBottom:'1px solid #E5E0D8' }}>{h}</th>
               ))}
             </tr>
           </thead>
