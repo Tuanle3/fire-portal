@@ -8,10 +8,10 @@ import { parseCSV, fetchSheetCSV, writeToGAS, SHEET_ID } from '@/lib/gasClient'
 
 interface Props { rows: ChungTuRow[]; canEdit: boolean; onReload: () => void; unit: ProjectUnit }
 
-const NHOM_LIST = ['Thu nhà ở','Thu HDMB','Chi nhà thầu','Chi NCC','Chi hoạt động','Chi thuế','Chi khác']
+const NHOM_LIST = ['Vốn góp','Thu nhà ở','Thu HDMB','Chi nhà thầu','Chi trả NCC','Chi hoạt động','Chi góp vốn','Chi khác']
 const LOAI_LIST: ['Thu','Chi'] = ['Thu','Chi']
 
-const EMPTY: Omit<ChungTuRow,'key'> = { ngay:'', loai:'Thu', nhom:'Thu nhà ở', mo_ta:'', so_tien:0, don_vi:'NOXH_NT', trang_thai:'da_xac_nhan', chung_tu_so:'' }
+const EMPTY: Omit<ChungTuRow,'key'> = { ngay:'', loai:'Thu', nhom:'Vốn góp', mo_ta:'', so_tien:0, don_vi:'NOXH_NT', trang_thai:'da_xac_nhan', chung_tu_so:'' }
 
 export default function TabChungTu({ rows, canEdit, onReload, unit }: Props) {
   const [loaiFilter, setLoaiFilter] = useState<'all'|'Thu'|'Chi'>('all')
@@ -23,6 +23,8 @@ export default function TabChungTu({ rows, canEdit, onReload, unit }: Props) {
   const [syncing,    setSyncing]    = useState(false)
   const [syncMsg,    setSyncMsg]    = useState('')
   const [sheetTab,   setSheetTab]   = useState('Chung_Tu')
+  const [importing,  setImporting]  = useState(false)
+  const [importMsg,  setImportMsg]  = useState('')
 
   const filtered = rows.filter(r =>
     (loaiFilter === 'all' || r.loai === loaiFilter) &&
@@ -87,6 +89,41 @@ export default function TabChungTu({ rows, canEdit, onReload, unit }: Props) {
     setSyncing(false)
   }
 
+  // Import toàn bộ từ SAG Portal Google Sheets (Thu + Chi tabs)
+  async function importFromSagPortal() {
+    if (!confirm('Thao tác này sẽ XÓA toàn bộ chứng từ hiện có và nhập lại từ sag-portal. Tiếp tục?')) return
+    setImporting(true); setImportMsg('⏳ Đang tải dữ liệu từ Google Sheets sag-portal...')
+    try {
+      const res  = await fetch('/api/migrate-noxh')
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error ?? 'API lỗi')
+
+      setImportMsg(`⏳ Đã lấy ${json.count} chứng từ. Đang ghi vào Firebase...`)
+      const db = getDb()
+
+      // Xóa data cũ
+      const snap = await get(ref(db, `${PREFIX}_ChungTu`))
+      if (snap.exists()) {
+        const keys = Object.keys(snap.val() as Record<string, unknown>)
+        for (const k of keys) await remove(ref(db, `${PREFIX}_ChungTu/${k}`))
+      }
+
+      // Ghi dữ liệu mới
+      let written = 0
+      for (const row of json.rows) {
+        await push(ref(db, `${PREFIX}_ChungTu`), row)
+        written++
+        if (written % 5 === 0) setImportMsg(`⏳ Đã ghi ${written}/${json.count} chứng từ...`)
+      }
+
+      setImportMsg(`✅ Hoàn tất! Đã nhập ${written} chứng từ (${json.rows.filter((r: any) => r.loai === 'Thu').length} Thu + ${json.rows.filter((r: any) => r.loai === 'Chi').length} Chi)`)
+      onReload()
+    } catch (e: any) {
+      setImportMsg(`❌ Lỗi: ${e.message}`)
+    }
+    setImporting(false)
+  }
+
   // Export Firebase → Google Sheets
   async function exportToSheets() {
     setSyncing(true); setSyncMsg('Đang ghi lên Google Sheets...')
@@ -120,9 +157,31 @@ export default function TabChungTu({ rows, canEdit, onReload, unit }: Props) {
         </div>
       </div>
 
+      {/* SAG Portal Import Panel */}
+      <div style={{ background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:12, padding:'16px 18px', marginBottom:14 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:'#C2410C', marginBottom:3 }}>📥 Nhập dữ liệu từ SAG Portal (Google Sheets)</div>
+            <div style={{ fontSize:11, color:'#9A3412' }}>Tự động lấy toàn bộ chứng từ Thu + Chi từ sheet dự án NOXH trên SAG Portal và ghi vào Firebase</div>
+          </div>
+          <button style={{ ...btnGS, background:'#EA580C', flexShrink:0, padding:'9px 20px', fontSize:12.5 }}
+            onClick={importFromSagPortal} disabled={importing}>
+            {importing ? '⏳ Đang nhập...' : '🔄 Nhập từ SAG Portal'}
+          </button>
+        </div>
+        {importMsg && (
+          <div style={{ fontSize:12, padding:'8px 12px', borderRadius:7,
+            background: importMsg.startsWith('✅')?'#F0FDF4':importMsg.startsWith('❌')?'#FEF2F2':'#FFFBEB',
+            color:      importMsg.startsWith('✅')?'#15803D':importMsg.startsWith('❌')?'#DC2626':'#D97706',
+            marginTop:4 }}>
+            {importMsg}
+          </div>
+        )}
+      </div>
+
       {/* Google Sheets Sync Panel */}
       <div style={{ background:'#F5F8FC', border:'1px solid #D0DCE8', borderRadius:12, padding:'16px 18px', marginBottom:18 }}>
-        <div style={{ fontSize:12, fontWeight:700, color:'#1C3557', marginBottom:12 }}>🔗 Đồng bộ Google Sheets</div>
+        <div style={{ fontSize:12, fontWeight:700, color:'#1C3557', marginBottom:12 }}>🔗 Đồng bộ Google Sheets thủ công</div>
         <div style={{ fontSize:11, color:'#6B7280', marginBottom:10 }}>
           Sheet ID: <code style={{ background:'#E5E7EB', padding:'1px 6px', borderRadius:4, fontSize:10 }}>{SHEET_ID}</code>
         </div>
