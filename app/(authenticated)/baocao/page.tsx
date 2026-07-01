@@ -36,11 +36,19 @@ const CHI_SUPER = [
   { key: 'khac'        as const, label: 'Khác' },
 ]
 
-// Sort groups: CPHD* first (by total desc), then others (by total desc)
+// Sort order: CPHĐ* → Trả gốc vay → Trả lãi vay → Trả NCC → Khác*
+function chiGroupPriority(nhom: string): number {
+  if (isCPHD(nhom)) return 0
+  const u = nhom.toUpperCase()
+  if (u.includes('GỐC VAY') || u.includes('GOC VAY')) return 1
+  if (u.includes('LÃI VAY') || u.includes('LAI VAY')) return 2
+  if (u.startsWith('TRẢ NCC') || u.startsWith('TRA NCC')) return 3
+  return 4
+}
 function sortGroups<T extends { nhom: string; total: number }>(arr: T[]): T[] {
   return [...arr].sort((a, b) => {
-    const ac = isCPHD(a.nhom) ? 0 : 1, bc = isCPHD(b.nhom) ? 0 : 1
-    if (ac !== bc) return ac - bc
+    const ap = chiGroupPriority(a.nhom), bp = chiGroupPriority(b.nhom)
+    if (ap !== bp) return ap - bp
     return b.total - a.total
   })
 }
