@@ -249,17 +249,13 @@ export default function ProjectPage() {
       <div className="prj-main">
         {/* Header */}
         <div className="prj-header">
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-            <div>
-              <div className="prj-breadcrumb">Dự án › NOXH Nguyễn Trãi</div>
-              <div className="prj-title">NOXH Nguyễn Trãi</div>
-              <div className="prj-meta">
-                <span>📍 P. Sơn Qui, Đồng Tháp</span>
-                <span>📐 {info.area}</span>
-                <span>💰 {fmtU(info.totalCap, unit)} VĐT</span>
-                <span>📅 {info.startDate} → {info.estEnd}</span>
-                {lastSync && <span title="Tự đồng bộ mỗi 30 phút từ Google Sheet">🔄 {new Date(lastSync).toLocaleString('vi-VN',{dateStyle:'short',timeStyle:'short'})}</span>}
-              </div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div className="prj-meta" style={{ margin:0 }}>
+              <span>📍 P. Sơn Qui, Đồng Tháp</span>
+              <span>📐 {info.area}</span>
+              <span>💰 {fmtU(info.totalCap, unit)} VĐT</span>
+              <span>📅 {info.startDate} → {info.estEnd}</span>
+              {lastSync && <span title="Tự đồng bộ mỗi 30 phút từ Google Sheet">🔄 {new Date(lastSync).toLocaleString('vi-VN',{dateStyle:'short',timeStyle:'short'})}</span>}
             </div>
             <div className="prj-actions">
               <div style={{ display:'flex', gap:4 }}>
@@ -280,6 +276,7 @@ export default function ProjectPage() {
               <button className="prj-btn-export" onClick={exportCSV}>⬇️ Xuất báo cáo</button>
             </div>
           </div>
+
 
           {/* Alert strip */}
           {(treCount > 0 || gvThieu > 0.01 || choDuyet > 0) && (

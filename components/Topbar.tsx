@@ -3,12 +3,13 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useTopbarInfo } from '@/contexts/topbar-info'
 import { useUserSession } from '@/contexts/user-session'
 
-const MODULE_TITLE: Record<string, { name: string; icon: string }> = {
+const MODULE_TITLE: Record<string, { name: string; icon: string; breadcrumb?: string }> = {
   '/tasks':     { name: 'Quản trị công việc',  icon: '✓' },
   '/users':     { name: 'Quản lý người dùng',  icon: '👥' },
   '/dashboard': { name: 'Tổng quan',            icon: '⊞' },
   '/assets':    { name: 'Tài sản đảm bảo',      icon: '🏦' },
   '/data':      { name: 'Nhật ký dòng tiền',    icon: '💰' },
+  '/project':   { name: 'NOXH Nguyễn Trãi',    icon: '🏗️', breadcrumb: 'Dự án' },
 }
 
 const ROLE_LABEL: Record<string, string> = { ceo: 'CEO', finance: 'CFO', admin: 'Admin', pm: 'PM', viewer: 'Viewer' }
@@ -31,6 +32,11 @@ export default function Topbar({ onMenuToggle }: { onMenuToggle?: () => void }) 
     <header className="topbar">
       <button className="menu-toggle" onClick={onMenuToggle} aria-label="Mở menu">☰</button>
       <div className="topbar-brand">
+        {module.breadcrumb && (
+          <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400, marginRight: 6 }}>
+            {module.breadcrumb} ›
+          </span>
+        )}
         <span className="topbar-brand-name">{module.name}</span>
       </div>
 
