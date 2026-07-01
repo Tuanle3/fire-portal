@@ -44,6 +44,8 @@ export default function DashboardPage() {
   const [error,      setError]      = useState('')
   const [expanded,   setExpanded]   = useState<Set<string>>(new Set())
   const { unit } = useDashUnit()
+  const chartRef      = useRef<HTMLCanvasElement>(null)
+  const chartInstance = useRef<any>(null)
 
   useEffect(() => {
     const db = getDb()
@@ -221,6 +223,66 @@ export default function DashboardPage() {
     const chuaRoom    = chua.reduce((s, r) => s + nf(r,'Hạn mức cho vay'), 0)
     return { totalDuNo, cnDuNo, pnDuNo, hanMucTC, duNoTC, roomTC, chuaCount: chua.length, chuaDinhGia, chuaRoom }
   }, [dataTs])
+
+  // ── vẽ chart ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!chartRef.current || monthRows.length === 0) return
+
+    const labels    = monthRows.map(m => mmLabel(m.mm))
+    const thuData   = monthRows.map(m => +(m.thu    / divisor).toFixed(2))
+    const chiData   = monthRows.map(m => +(m.chi    / divisor).toFixed(2))
+    const soDuData  = monthRows.map(m => +(m.cuoiky / divisor).toFixed(2))
+    const pnData    = monthRows.map(m => {
+      const found = monthlyTypeBalance.find(b => b.mm === m.mm)
+      return found ? +(found.pn / divisor).toFixed(2) : null
+    })
+    const cnData    = monthRows.map(m => {
+      const found = monthlyTypeBalance.find(b => b.mm === m.mm)
+      return found ? +(found.cn / divisor).toFixed(2) : null
+    })
+
+    const buildChart = () => {
+      const Chart = (window as any).Chart
+      if (!Chart || !chartRef.current) return
+      if (chartInstance.current) { chartInstance.current.destroy(); chartInstance.current = null }
+      chartInstance.current = new Chart(chartRef.current, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Thu', data: thuData, backgroundColor: '#7b8da7', borderRadius: 4, yAxisID: 'y', order: 2 },
+            { label: 'Chi', data: chiData, backgroundColor: '#e6c5db', borderRadius: 4, yAxisID: 'y', order: 2 },
+            { label: 'Số dư cuối kỳ', data: soDuData, type: 'line' as any, borderColor: '#734ad4', backgroundColor: 'transparent', pointBackgroundColor: '#D4A64A', pointRadius: 4, borderWidth: 2, borderDash: [4, 4], yAxisID: 'y2', order: 1, tension: 0.3 },
+            { label: 'Số dư pháp nhân', data: pnData, type: 'line' as any, borderColor: '#734ad4', backgroundColor: 'transparent', pointBackgroundColor: '#D4A64A', pointRadius: 3, borderWidth: 1.5, borderDash: [6, 3], yAxisID: 'y2', order: 1, tension: 0.3 },
+            { label: 'Số dư cá nhân', data: cnData, type: 'line' as any, borderColor: '#E05A8A', backgroundColor: 'transparent', pointBackgroundColor: '#E05A8A', pointRadius: 3, borderWidth: 1.5, borderDash: [2, 3], yAxisID: 'y2', order: 1, tension: 0.3 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx: any) => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${unitLbl}` } },
+          },
+          scales: {
+            y:  { position: 'left',  grid: { color: '#F0F4FA' }, ticks: { font: { size: 10 }, color: '#9CA3AF', callback: (v: any) => v.toLocaleString('vi-VN') + ' ' + unitLbl } },
+            y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { font: { size: 10 }, color: '#9CA3AF', callback: (v: any) => v.toLocaleString('vi-VN') + ' ' + unitLbl } },
+            x:  { grid: { display: false }, ticks: { font: { size: 10 }, color: '#6B7280' } },
+          },
+        },
+      })
+    }
+
+    if ((window as any).Chart) {
+      buildChart()
+    } else {
+      const s = document.createElement('script')
+      s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
+      s.onload = buildChart
+      document.head.appendChild(s)
+    }
+    return () => { chartInstance.current?.destroy(); chartInstance.current = null }
+  }, [monthRows, monthlyTypeBalance, unit])
 
   const luykeThu  = monthRows.reduce((s, m) => s + m.thu, 0)
   const luykeChi  = monthRows.reduce((s, m) => s + m.chi, 0)
@@ -491,6 +553,21 @@ export default function DashboardPage() {
           const acOf  = (l:Lvl) => l==='r'?'#B91C1C':l==='a'?'#B45309':'#047857'
           return (
             <div className="ov2" style={{ marginBottom:16, alignItems:'stretch' }}>
+              {/* Cash flow chart */}
+              <div className="ov-card">
+                <div className="ov-card-hdr" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <span>⬤ DIỄN BIẾN DÒNG TIỀN {CY}</span>
+                  <span style={{ display:'flex', alignItems:'center', gap:12, fontWeight:400, textTransform:'none', letterSpacing:0 }}>
+                    <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:10, height:10, borderRadius:2, background:'#7b8da7', display:'inline-block' }}/> Thu</span>
+                    <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:10, height:10, borderRadius:2, background:'#e6c5db', display:'inline-block' }}/> Chi</span>
+                    <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:18, height:2, background:'#734ad4', display:'inline-block', borderTop:'2px dashed #734ad4' }}/> Số dư</span>
+                    <span style={{ display:'flex', alignItems:'center', gap:4 }}><span style={{ width:18, height:2, background:'#E05A8A', display:'inline-block', borderTop:'2px dashed #E05A8A' }}/> CN</span>
+                  </span>
+                </div>
+                <div style={{ padding:'12px 14px', height:220 }}>
+                  <canvas ref={chartRef}/>
+                </div>
+              </div>
               {/* Risk alerts */}
               <div className="ov-card">
                 <div className="ov-card-hdr" style={{ background:'#7C2626' }}>⬤ CẢNH BÁO RỦI RO &amp; ĐỀ XUẤT</div>
