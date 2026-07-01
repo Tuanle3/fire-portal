@@ -249,14 +249,7 @@ export default function ProjectPage() {
       <div className="prj-main">
         {/* Header */}
         <div className="prj-header">
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <div className="prj-meta" style={{ margin:0 }}>
-              <span>📍 P. Sơn Qui, Đồng Tháp</span>
-              <span>📐 {info.area}</span>
-              <span>💰 {fmtU(info.totalCap, unit)} VĐT</span>
-              <span>📅 {info.startDate} → {info.estEnd}</span>
-              {lastSync && <span title="Tự đồng bộ mỗi 30 phút từ Google Sheet">🔄 {new Date(lastSync).toLocaleString('vi-VN',{dateStyle:'short',timeStyle:'short'})}</span>}
-            </div>
+          <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center' }}>
             <div className="prj-actions">
               <div style={{ display:'flex', gap:4 }}>
                 {(['ty','trieu','dong'] as ProjectUnit[]).map(u => (
@@ -276,16 +269,6 @@ export default function ProjectPage() {
               <button className="prj-btn-export" onClick={exportCSV}>⬇️ Xuất báo cáo</button>
             </div>
           </div>
-
-
-          {/* Alert strip */}
-          {(treCount > 0 || gvThieu > 0.01 || choDuyet > 0) && (
-            <div style={{ display:'flex', gap:8, marginTop:10, flexWrap:'wrap' }}>
-              {treCount > 0   && <Alert msg={`${treCount} hạng mục thi công đang trễ tiến độ`} />}
-              {gvThieu > 0.01 && <Alert msg={`Thiếu vốn góp liên danh ${fmtU(gvThieu, unit)}`} />}
-              {choDuyet > 0   && <Alert msg={`${choDuyet} phiếu thanh toán chờ duyệt`} />}
-            </div>
-          )}
         </div>
 
         {/* Settings panel */}
