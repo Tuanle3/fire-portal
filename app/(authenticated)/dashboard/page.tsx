@@ -252,7 +252,6 @@ export default function DashboardPage() {
           datasets: [
             { label: 'Thu', data: thuData, backgroundColor: '#7b8da7', borderRadius: 4, yAxisID: 'y', order: 2 },
             { label: 'Chi', data: chiData, backgroundColor: '#e6c5db', borderRadius: 4, yAxisID: 'y', order: 2 },
-            { label: 'Số dư cuối kỳ', data: soDuData, type: 'line' as any, borderColor: '#734ad4', backgroundColor: 'transparent', pointBackgroundColor: '#D4A64A', pointRadius: 4, borderWidth: 2, borderDash: [4, 4], yAxisID: 'y2', order: 1, tension: 0.3 },
             { label: 'Số dư pháp nhân', data: pnData, type: 'line' as any, borderColor: '#734ad4', backgroundColor: 'transparent', pointBackgroundColor: '#D4A64A', pointRadius: 3, borderWidth: 1.5, borderDash: [6, 3], yAxisID: 'y2', order: 1, tension: 0.3 },
             { label: 'Số dư cá nhân', data: cnData, type: 'line' as any, borderColor: '#E05A8A', backgroundColor: 'transparent', pointBackgroundColor: '#E05A8A', pointRadius: 3, borderWidth: 1.5, borderDash: [2, 3], yAxisID: 'y2', order: 1, tension: 0.3 },
           ],
@@ -563,7 +562,6 @@ export default function DashboardPage() {
                 <div style={{ padding:'8px 14px 12px', display:'flex', flexWrap:'wrap', gap:'10px 20px', borderTop:'1px solid #F3F4F6' }}>
                   <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:12, height:12, borderRadius:3, background:'#7b8da7', display:'inline-block' }}/> Thu</span>
                   <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:12, height:12, borderRadius:3, background:'#e6c5db', display:'inline-block' }}/> Chi</span>
-                  <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:20, height:0, borderTop:'2.5px dashed #734ad4', display:'inline-block', verticalAlign:'middle' }}/> Số dư cuối kỳ</span>
                   <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:20, height:0, borderTop:'2px dashed #734ad4', borderTopStyle:'dashed', display:'inline-block', verticalAlign:'middle', opacity:.6 }}/> Số dư pháp nhân</span>
                   <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6B7280' }}><span style={{ width:20, height:0, borderTop:'2px dashed #E05A8A', display:'inline-block', verticalAlign:'middle' }}/> Số dư cá nhân</span>
                 </div>
