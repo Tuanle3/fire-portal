@@ -4,7 +4,7 @@ import { getDb } from '@/lib/firebase'
 import { ref, push, remove, get } from 'firebase/database'
 import type { ChungTuRow, ProjectUnit } from '../_lib/types'
 import { PREFIX, fmtU } from '../_lib/types'
-import { parseCSV, fetchSheetCSV, writeToGAS, SHEET_ID } from '@/lib/gasClient'
+import { parseCSV, fetchSheetCSV, SHEET_ID } from '@/lib/gasClient'
 
 interface Props { rows: ChungTuRow[]; canEdit: boolean; onReload: () => void; unit: ProjectUnit }
 
@@ -34,18 +34,28 @@ export default function TabChungTu({ rows, canEdit, onReload, unit }: Props) {
   const totalThu = rows.filter(r => r.loai === 'Thu').reduce((s, r) => s + r.so_tien, 0)
   const totalChi = rows.filter(r => r.loai === 'Chi').reduce((s, r) => s + r.so_tien, 0)
 
-  // Add row to Firebase
+  // Write to GAS via server-side proxy (avoids CORS)
+  async function gasWrite(payload: Record<string, unknown>): Promise<void> {
+    try {
+      await fetch('/api/gas-write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    } catch { /* best-effort */ }
+  }
+
+  // Add row to Firebase then auto-sync to Google Sheets
   async function addRow() {
     if (!form.mo_ta && !form.nhom) return
     setSaving(true)
     const db = getDb()
     const newRow = { ...form, so_tien: Number(form.so_tien) }
-    const fbRef  = await push(ref(db, `${PREFIX}_ChungTu`), newRow)
-    // Also write to Google Sheets via GAS
-    try {
-      await writeToGAS({ action: 'addChungTu', prefix: PREFIX, ...newRow })
-    } catch { /* GAS write is best-effort */ }
-    setSaving(false); setMsg('✓ Đã thêm'); onReload()
+    await push(ref(db, `${PREFIX}_ChungTu`), newRow)
+    // Auto-sync: append to Google Sheets
+    setMsg('✓ Đã thêm • đang ghi GSheet...')
+    await gasWrite({ action: 'addRow', row: newRow })
+    setSaving(false); setMsg('✓ Đã thêm & ghi Google Sheets'); onReload()
     setForm(EMPTY); setShowAdd(false)
   }
 
@@ -124,15 +134,29 @@ export default function TabChungTu({ rows, canEdit, onReload, unit }: Props) {
     setImporting(false)
   }
 
-  // Export Firebase → Google Sheets
+  // Export Firebase → Google Sheets (full sync via server proxy)
   async function exportToSheets() {
     setSyncing(true); setSyncMsg('Đang ghi lên Google Sheets...')
     try {
-      await writeToGAS({ action: 'syncChungTu', prefix: PREFIX, rows: rows.map(r => ({
-        ngay: r.ngay, loai: r.loai, nhom: r.nhom, mo_ta: r.mo_ta,
-        so_tien: r.so_tien, don_vi: r.don_vi, trang_thai: r.trang_thai, chung_tu_so: r.chung_tu_so,
-      })) })
-      setSyncMsg('✓ Đã gửi lên Google Sheets (GAS sẽ cập nhật Sheet)')
+      const res = await fetch('/api/gas-write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'syncChungTu',
+          rows: rows.map(r => ({
+            loai: r.loai, don_vi: r.don_vi, ngay: r.ngay,
+            mo_ta: r.mo_ta, so_tien: r.so_tien, chung_tu_so: r.chung_tu_so,
+            ghi_chu: r.ghi_chu ?? '', link_file: r.link_file ?? '',
+          })),
+        }),
+      })
+      const json = await res.json()
+      if (json.ok) {
+        const g = json.gas as any
+        setSyncMsg(`✓ Ghi thành công: ${g?.thu ?? '?'} Thu + ${g?.chi ?? '?'} Chi lên Google Sheets`)
+      } else {
+        setSyncMsg(`⚠️ GAS phản hồi: ${JSON.stringify(json.gas ?? json.error)}`)
+      }
     } catch (e: any) {
       setSyncMsg(`❌ Lỗi: ${e.message}`)
     }
@@ -279,7 +303,13 @@ export default function TabChungTu({ rows, canEdit, onReload, unit }: Props) {
                 <td style={{ padding:'9px 12px', color:'#6B7280' }}>{r.don_vi||'—'}</td>
                 {canEdit && (
                   <td style={{ padding:'9px 12px' }}>
-                    <button style={{...btnSm,color:'#DC2626'}} onClick={async()=>{ if(confirm('Xóa chứng từ này?')){ await remove(ref(getDb(),`${PREFIX}_ChungTu/${r.key}`)); onReload() } }}>🗑</button>
+                    <button style={{...btnSm,color:'#DC2626'}} onClick={async()=>{
+                      if(!confirm('Xóa chứng từ này?')) return
+                      await remove(ref(getDb(),`${PREFIX}_ChungTu/${r.key}`))
+                      // Auto-sync: delete from Google Sheets
+                      gasWrite({ action:'deleteRow', chung_tu_so: r.chung_tu_so, loai: r.loai })
+                      onReload()
+                    }}>🗑</button>
                   </td>
                 )}
               </tr>
