@@ -4,9 +4,10 @@ import { usePathname } from 'next/navigation'
 import { useUserSession } from '@/contexts/user-session'
 
 const NAV = [
-  { section: 'TỔNG QUAN',    mod: 'm:dashboard', href: '/dashboard',  icon: '⊞', label: 'Tổng quan CEO' },
+  { section: 'TỔNG QUAN',    mod: 'm:dashboard', href: '/dashboard',  icon: '⊞',  label: 'Tổng quan CEO' },
   { section: 'MODULE CHÍNH', mod: 'm:dashboard', href: '/ecosystem',  icon: '🌐', label: 'Hệ sinh thái' },
-  { section: 'VẬN HÀNH',     mod: 'm:tasks',     href: '/tasks',      icon: '✓', label: 'Công việc' },
+  { section: 'DỰ ÁN',        mod: 'm:project',   href: '/project',    icon: '🏗️', label: 'NOXH Nguyễn Trãi' },
+  { section: 'VẬN HÀNH',     mod: 'm:tasks',     href: '/tasks',      icon: '✓',  label: 'Công việc' },
   { section: 'HỆ THỐNG',     mod: 'm:users',     href: '/users',      icon: '👤', label: 'Quản lý User' },
 ]
 
