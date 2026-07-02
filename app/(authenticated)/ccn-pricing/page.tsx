@@ -257,6 +257,7 @@ export default function CcnPricingPage() {
         /* ── section header (numbered) ──────────────── */
         .ccn-section { margin-bottom:20px; }
         .ccn-section:last-child { margin-bottom:0; }
+        .ccn-section-full { margin-top:24px; padding-top:20px; border-top:1px solid var(--border); }
         .ccn-section-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
         .ccn-section-num { width:26px; height:26px; border-radius:50%; background:var(--navy); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12.5px; flex-shrink:0; }
         .ccn-section-title { font-size:14.5px; font-weight:800; color:var(--navy); }
@@ -327,8 +328,8 @@ export default function CcnPricingPage() {
         table.ccn-table td:first-child, table.ccn-table th:first-child { position:sticky; left:0; background:var(--surf2); font-weight:700; color:var(--navy); z-index:1; }
         table.ccn-table td.hit { background:var(--gold); color:var(--navy-dark); font-weight:800; border-radius:4px; }
         .ccn-table-note { font-size:10.5px; color:var(--muted); padding:8px 10px; }
-        .ccn-sens-cols { display:grid; grid-template-columns:1fr; gap:16px; }
-        @media(min-width:1100px) { .ccn-sens-cols { grid-template-columns:1fr 1fr; } }
+        .ccn-market-cols { display:grid; grid-template-columns:1fr; column-gap:24px; }
+        @media(min-width:900px) { .ccn-market-cols { grid-template-columns:1fr 1fr; } }
 
         /* ── market comparison ──────────────────────── */
         .ccn-market-row { display:grid; grid-template-columns:1fr auto auto auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
@@ -515,106 +516,106 @@ export default function CcnPricingPage() {
                 </div>
               </details>
             </div>
-
-            {/* ── 3. PHÂN TÍCH ĐỘ NHẠY ── */}
-            <div className="ccn-section">
-              <div className="ccn-section-header">
-                <div className="ccn-section-num">3</div>
-                <div className="ccn-section-title">Phân tích độ nhạy</div>
-                <div className="ccn-section-hint">So sánh kịch bản để cân nhắc rủi ro</div>
-              </div>
-
-              <div className="ccn-sens-cols">
-                <details className="ccn-acc card" open>
-                  <summary>Lấp đầy × Lợi nhuận mục tiêu</summary>
-                  <div className="ccn-acc-body">
-                    <div className="ccn-table-wrap">
-                      <table className="ccn-table">
-                        <thead>
-                          <tr>
-                            <th>LN mục tiêu ＼ Lấp đầy</th>
-                            {OCC_STEPS.map(o => <th key={o}>{o}%</th>)}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {table1.map(row => (
-                            <tr key={row.profit}>
-                              <td>{row.profit}%</td>
-                              {row.cells.map((v, i) => {
-                                const hit = row.profit === inp.targetProfitRatePct && OCC_STEPS[i] === inp.occupancyRate
-                                return <td key={i} className={hit ? 'hit' : ''}>${fmtUsd(v)}</td>
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="ccn-table-note">Đơn giá USD/m²/chu kỳ (trước chiết khấu). Ô vàng = kịch bản hiện tại đang nhập.</div>
-                  </div>
-                </details>
-
-                <details className="ccn-acc card" open>
-                  <summary>Tổng vốn đầu tư × Lấp đầy</summary>
-                  <div className="ccn-acc-body">
-                    <div className="ccn-table-wrap">
-                      <table className="ccn-table">
-                        <thead>
-                          <tr>
-                            <th>Vốn đầu tư ＼ Lấp đầy</th>
-                            {OCC_STEPS.map(o => <th key={o}>{o}%</th>)}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {table2.map(row => (
-                            <tr key={row.delta}>
-                              <td>{row.investBil.toFixed(0)} tỷ<br /><span style={{ fontWeight: 400, fontSize: 9.5 }}>({row.delta > 0 ? '+' : ''}{row.delta}%)</span></td>
-                              {row.cells.map((v, i) => {
-                                const hit = row.delta === 0 && OCC_STEPS[i] === inp.occupancyRate
-                                return <td key={i} className={hit ? 'hit' : ''}>${fmtUsd(v)}</td>
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="ccn-table-note">Đơn giá USD/m²/chu kỳ (trước chiết khấu), tại lợi nhuận mục tiêu hiện tại ({inp.targetProfitRatePct}%). Ô vàng = kịch bản gốc.</div>
-                  </div>
-                </details>
-              </div>
-
-              <details className="ccn-acc card" open>
-                <summary>So sánh với đơn giá thị trường</summary>
-                <div className="ccn-acc-body">
-                  {market.map(row => {
-                    const maxScale = Math.max(...market.map(m => m.high), r.unitOneTimeAfterDiscUsd || 0) * 1.1 || 1
-                    const barLeft = row.low / maxScale * 100
-                    const barWidth = (row.high - row.low) / maxScale * 100
-                    const markerLeft = isFinite(r.unitOneTimeAfterDiscUsd) ? Math.min(r.unitOneTimeAfterDiscUsd / maxScale * 100, 100) : null
-                    return (
-                      <div key={row.id} style={{ marginBottom: 12 }}>
-                        <div className="ccn-market-row">
-                          <input type="text" value={row.name} onChange={e => updateMarketRow(row.id, { name: e.target.value })} />
-                          <div className="ccn-market-nums">
-                            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>$</span>
-                            <input type="number" value={row.low} onChange={e => updateMarketRow(row.id, { low: Number(e.target.value) })} />
-                            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>–</span>
-                            <input type="number" value={row.high} onChange={e => updateMarketRow(row.id, { high: Number(e.target.value) })} />
-                          </div>
-                          <button className="ccn-market-del" onClick={() => removeMarketRow(row.id)} aria-label="Xóa">✕</button>
-                        </div>
-                        <div className="ccn-market-bar-wrap">
-                          <div className="ccn-market-bar" style={{ left: `${barLeft}%`, width: `${barWidth}%` }} />
-                          {markerLeft !== null && <div className="ccn-market-marker" style={{ left: `${markerLeft}%` }} />}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  <button className="ccn-btn" onClick={addMarketRow}>+ Thêm dự án so sánh</button>
-                  <div className="ccn-note">Vạch đỏ trên thanh so sánh = giá đề xuất hiện tại của dự án bạn (${fmtUsd(r.unitOneTimeAfterDiscUsd)}/m²).</div>
-                </div>
-              </details>
-            </div>
           </div>
+        </div>
+
+        {/* ══════════════ 3. PHÂN TÍCH ĐỘ NHẠY (full width) ══════════════ */}
+        <div className="ccn-section ccn-section-full">
+          <div className="ccn-section-header">
+            <div className="ccn-section-num">3</div>
+            <div className="ccn-section-title">Phân tích độ nhạy</div>
+            <div className="ccn-section-hint">So sánh kịch bản để cân nhắc rủi ro</div>
+          </div>
+
+          <details className="ccn-acc card" open>
+            <summary>Bảng 1 · Lấp đầy × Lợi nhuận mục tiêu</summary>
+            <div className="ccn-acc-body">
+              <div className="ccn-table-wrap">
+                <table className="ccn-table">
+                  <thead>
+                    <tr>
+                      <th>LN mục tiêu ＼ Lấp đầy</th>
+                      {OCC_STEPS.map(o => <th key={o}>{o}%</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {table1.map(row => (
+                      <tr key={row.profit}>
+                        <td>{row.profit}%</td>
+                        {row.cells.map((v, i) => {
+                          const hit = row.profit === inp.targetProfitRatePct && OCC_STEPS[i] === inp.occupancyRate
+                          return <td key={i} className={hit ? 'hit' : ''}>${fmtUsd(v)}</td>
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="ccn-table-note">Đơn giá USD/m²/chu kỳ (trước chiết khấu). Ô vàng = kịch bản hiện tại đang nhập.</div>
+            </div>
+          </details>
+
+          <details className="ccn-acc card" open>
+            <summary>Bảng 2 · Tổng vốn đầu tư × Lấp đầy</summary>
+            <div className="ccn-acc-body">
+              <div className="ccn-table-wrap">
+                <table className="ccn-table">
+                  <thead>
+                    <tr>
+                      <th>Vốn đầu tư ＼ Lấp đầy</th>
+                      {OCC_STEPS.map(o => <th key={o}>{o}%</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {table2.map(row => (
+                      <tr key={row.delta}>
+                        <td>{row.investBil.toFixed(0)} tỷ<br /><span style={{ fontWeight: 400, fontSize: 9.5 }}>({row.delta > 0 ? '+' : ''}{row.delta}%)</span></td>
+                        {row.cells.map((v, i) => {
+                          const hit = row.delta === 0 && OCC_STEPS[i] === inp.occupancyRate
+                          return <td key={i} className={hit ? 'hit' : ''}>${fmtUsd(v)}</td>
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="ccn-table-note">Đơn giá USD/m²/chu kỳ (trước chiết khấu), tại lợi nhuận mục tiêu hiện tại ({inp.targetProfitRatePct}%). Ô vàng = kịch bản gốc.</div>
+            </div>
+          </details>
+
+          <details className="ccn-acc card" open>
+            <summary>Bảng 3 · So sánh với đơn giá thị trường</summary>
+            <div className="ccn-acc-body">
+              <div className="ccn-market-cols">
+                {market.map(row => {
+                  const maxScale = Math.max(...market.map(m => m.high), r.unitOneTimeAfterDiscUsd || 0) * 1.1 || 1
+                  const barLeft = row.low / maxScale * 100
+                  const barWidth = (row.high - row.low) / maxScale * 100
+                  const markerLeft = isFinite(r.unitOneTimeAfterDiscUsd) ? Math.min(r.unitOneTimeAfterDiscUsd / maxScale * 100, 100) : null
+                  return (
+                    <div key={row.id} style={{ marginBottom: 12 }}>
+                      <div className="ccn-market-row">
+                        <input type="text" value={row.name} onChange={e => updateMarketRow(row.id, { name: e.target.value })} />
+                        <div className="ccn-market-nums">
+                          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>$</span>
+                          <input type="number" value={row.low} onChange={e => updateMarketRow(row.id, { low: Number(e.target.value) })} />
+                          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>–</span>
+                          <input type="number" value={row.high} onChange={e => updateMarketRow(row.id, { high: Number(e.target.value) })} />
+                        </div>
+                        <button className="ccn-market-del" onClick={() => removeMarketRow(row.id)} aria-label="Xóa">✕</button>
+                      </div>
+                      <div className="ccn-market-bar-wrap">
+                        <div className="ccn-market-bar" style={{ left: `${barLeft}%`, width: `${barWidth}%` }} />
+                        {markerLeft !== null && <div className="ccn-market-marker" style={{ left: `${markerLeft}%` }} />}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <button className="ccn-btn" onClick={addMarketRow}>+ Thêm dự án so sánh</button>
+              <div className="ccn-note">Vạch đỏ trên thanh so sánh = giá đề xuất hiện tại của dự án bạn (${fmtUsd(r.unitOneTimeAfterDiscUsd)}/m²).</div>
+            </div>
+          </details>
         </div>
       </div></div>
     </>
