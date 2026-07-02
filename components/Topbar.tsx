@@ -9,6 +9,7 @@ const MODULE_TITLE: Record<string, { name: string; icon: string; breadcrumb?: st
   '/dashboard': { name: 'Tổng quan',            icon: '⊞' },
   '/assets':    { name: 'Tài sản đảm bảo',      icon: '🏦' },
   '/data':      { name: 'Nhật ký dòng tiền',    icon: '💰' },
+  '/ccn-pricing': { name: 'Tính giá cho thuê CCN', icon: '🏭' },
 }
 
 const ROLE_LABEL: Record<string, string> = { ceo: 'CEO', finance: 'CFO', admin: 'Admin', pm: 'PM', viewer: 'Viewer' }
