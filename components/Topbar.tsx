@@ -9,7 +9,6 @@ const MODULE_TITLE: Record<string, { name: string; icon: string; breadcrumb?: st
   '/dashboard': { name: 'Tổng quan',            icon: '⊞' },
   '/assets':    { name: 'Tài sản đảm bảo',      icon: '🏦' },
   '/data':      { name: 'Nhật ký dòng tiền',    icon: '💰' },
-  '/project':   { name: 'NOXH Nguyễn Trãi',    icon: '🏗️', breadcrumb: 'Dự án' },
 }
 
 const ROLE_LABEL: Record<string, string> = { ceo: 'CEO', finance: 'CFO', admin: 'Admin', pm: 'PM', viewer: 'Viewer' }
