@@ -227,6 +227,7 @@ export default function CcnPricingPage() {
   return (
     <>
       <style>{`
+        .ccn-scroll { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; }
         .ccn-wrap { font-family:'Be Vietnam Pro',sans-serif; font-size:13px; color:var(--txt); padding:16px; max-width:1100px; margin:0 auto; }
         .ccn-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
         .ccn-title { font-size:18px; font-weight:800; color:var(--navy); }
@@ -317,7 +318,7 @@ export default function CcnPricingPage() {
         }
       `}</style>
 
-      <div className="ccn-wrap">
+      <div className="ccn-scroll"><div className="ccn-wrap">
         <div className="ccn-head">
           <div>
             <div className="ccn-title">🏭 Tính giá cho thuê CCN</div>
@@ -540,7 +541,7 @@ export default function CcnPricingPage() {
             <div className="ccn-note">Vạch đỏ trên thanh so sánh = giá đề xuất hiện tại của dự án bạn (${fmtUsd(r.unitOneTimeAfterDiscUsd)}/m²).</div>
           </div>
         </details>
-      </div>
+      </div></div>
     </>
   )
 }
