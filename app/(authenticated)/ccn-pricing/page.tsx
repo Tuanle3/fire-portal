@@ -228,22 +228,49 @@ export default function CcnPricingPage() {
     <>
       <style>{`
         .ccn-scroll { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; }
-        .ccn-wrap { font-family:'Be Vietnam Pro',sans-serif; font-size:13px; color:var(--txt); padding:16px; max-width:1100px; margin:0 auto; }
-        .ccn-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
-        .ccn-title { font-size:18px; font-weight:800; color:var(--navy); }
-        .ccn-sub { font-size:11.5px; color:var(--muted); margin-top:2px; }
+
+        /* ── sticky quick-glance bar ─────────────────── */
+        .ccn-stickybar { position:sticky; top:0; z-index:30; background:var(--navy-dark); color:#fff; padding:9px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; box-shadow:0 2px 8px rgba(13,31,51,.18); }
+        .ccn-stickybar-price { font-family:'Roboto Mono',monospace; font-weight:800; font-size:16px; display:flex; align-items:baseline; gap:6px; }
+        .ccn-stickybar-price small { font-size:10.5px; font-weight:600; color:rgba(255,255,255,.6); }
+        .ccn-stickybar-badge { font-size:10px; font-weight:800; padding:4px 10px; border-radius:20px; white-space:nowrap; }
+        .ccn-stickybar-badge.safe { background:var(--status-safe-text); color:#fff; }
+        .ccn-stickybar-badge.critical { background:var(--status-critical-text); color:#fff; }
+
+        .ccn-wrap { font-family:'Be Vietnam Pro',sans-serif; font-size:13px; color:var(--txt); padding:16px; max-width:1360px; margin:0 auto; }
+        .ccn-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+        .ccn-title { font-size:19px; font-weight:800; color:var(--navy); font-family:'Playfair Display',serif; }
+        .ccn-sub { font-size:11.5px; color:var(--muted); margin-top:3px; }
         .ccn-actions { display:flex; gap:8px; flex-wrap:wrap; }
         .ccn-btn { border-radius:8px; padding:7px 12px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; border:1px solid var(--border2); background:#fff; color:var(--txt2); }
         .ccn-btn:hover { border-color:var(--navy); background:var(--surf2); }
         .ccn-btn.gold { background:var(--gold); border-color:var(--gold); color:var(--navy-dark); }
         .ccn-btn.gold:hover { background:var(--gold2); }
 
+        /* ── 2-column layout: input rail | output ───────── */
+        .ccn-layout { display:flex; flex-direction:column; gap:20px; }
+        @media(min-width:1100px) {
+          .ccn-layout { display:grid; grid-template-columns:380px 1fr; align-items:start; gap:22px; }
+          .ccn-col-input { position:sticky; top:16px; max-height:calc(100vh - 90px); overflow-y:auto; }
+        }
+
+        /* ── section header (numbered) ──────────────── */
+        .ccn-section { margin-bottom:20px; }
+        .ccn-section:last-child { margin-bottom:0; }
+        .ccn-section-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+        .ccn-section-num { width:26px; height:26px; border-radius:50%; background:var(--navy); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12.5px; flex-shrink:0; }
+        .ccn-section-title { font-size:14.5px; font-weight:800; color:var(--navy); }
+        .ccn-section-hint { font-size:10.5px; color:var(--muted); font-weight:500; margin-left:auto; }
+
+        /* ── input panel: distinct background ───────── */
+        .ccn-input-panel { background:var(--surf3); border:1.5px solid var(--gold-lt); border-radius:16px; padding:16px; }
+
         /* ── verdict banner ─────────────────────────── */
         .ccn-verdict { border-radius:14px; padding:16px 18px; margin-bottom:14px; box-shadow:var(--sh); }
         .ccn-verdict.safe     { background:var(--status-safe-bg);     border:1px solid var(--status-safe-border); }
         .ccn-verdict.critical { background:var(--status-critical-bg); border:1px solid var(--status-critical-border); }
         .ccn-verdict-row { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
-        .ccn-verdict-price { font-size:30px; font-weight:800; font-family:'Roboto Mono',monospace; line-height:1; }
+        .ccn-verdict-price { font-size:32px; font-weight:800; font-family:'Roboto Mono',monospace; line-height:1; }
         .ccn-verdict.safe .ccn-verdict-price     { color:var(--status-safe-text); }
         .ccn-verdict.critical .ccn-verdict-price { color:var(--status-critical-text); }
         .ccn-verdict-unit { font-size:11px; font-weight:600; color:var(--muted); margin-top:3px; }
@@ -255,26 +282,29 @@ export default function CcnPricingPage() {
         .ccn-verdict.critical .ccn-verdict-text { color:var(--status-critical-text); }
 
         /* ── quick KPI row ──────────────────────────── */
-        .ccn-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
+        .ccn-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
         .ccn-kpi { background:#fff; border:1px solid var(--border3); border-radius:10px; padding:10px 12px; box-shadow:var(--sh); }
         .ccn-kpi-label { font-size:9.5px; font-weight:700; letter-spacing:.06em; color:var(--muted); text-transform:uppercase; margin-bottom:4px; }
         .ccn-kpi-val { font-size:15px; font-weight:800; font-family:'Roboto Mono',monospace; color:var(--navy); }
         .ccn-kpi-sub { font-size:10px; color:var(--muted2); margin-top:2px; }
 
         /* ── accordion sections ─────────────────────── */
-        .ccn-acc { background:#fff; border:1px solid var(--border3); border-radius:12px; margin-bottom:10px; overflow:hidden; box-shadow:var(--sh); }
-        .ccn-acc > summary { list-style:none; cursor:pointer; padding:12px 16px; font-size:12.5px; font-weight:700; color:var(--navy); background:var(--surf2); display:flex; align-items:center; justify-content:space-between; }
+        .ccn-acc { background:#fff; border:1px solid var(--border2); border-radius:10px; margin-bottom:8px; overflow:hidden; }
+        .ccn-acc:last-child { margin-bottom:0; }
+        .ccn-input-panel .ccn-acc { background:#fff; }
+        .ccn-acc.card { background:#fff; border:1px solid var(--border3); border-radius:12px; margin-bottom:12px; box-shadow:var(--sh); }
+        .ccn-acc.card:last-child { margin-bottom:0; }
+        .ccn-acc > summary { list-style:none; cursor:pointer; padding:11px 14px; font-size:12px; font-weight:700; color:var(--navy); background:var(--surf2); display:flex; align-items:center; justify-content:space-between; }
         .ccn-acc > summary::-webkit-details-marker { display:none; }
         .ccn-acc > summary::after { content:'▾'; color:var(--muted); transition:transform .15s; }
         .ccn-acc[open] > summary::after { transform:rotate(180deg); }
-        .ccn-acc-body { padding:14px 16px; }
+        .ccn-acc-body { padding:14px; }
 
         .ccn-field-grid { display:grid; grid-template-columns:1fr; gap:10px; }
-        @media(min-width:640px) { .ccn-field-grid { grid-template-columns:1fr 1fr; } }
         .ccn-field { display:flex; flex-direction:column; gap:4px; }
         .ccn-field label { font-size:11px; font-weight:600; color:var(--txt2); }
         .ccn-field-input { display:flex; align-items:center; border:1px solid var(--border2); border-radius:8px; overflow:hidden; background:#fff; }
-        .ccn-field-input input { flex:1; min-width:0; border:none; outline:none; padding:9px 10px; font-size:14px; font-family:'Roboto Mono',monospace; color:var(--txt); background:transparent; }
+        .ccn-field-input input { flex:1; min-width:0; width:100%; border:none; outline:none; padding:9px 10px; font-size:14px; font-family:'Roboto Mono',monospace; color:var(--txt); background:transparent; }
         .ccn-field-input .unit { padding:0 10px; font-size:10.5px; font-weight:700; color:var(--muted); background:var(--surf2); align-self:stretch; display:flex; align-items:center; white-space:nowrap; }
         .ccn-field-input:focus-within { border-color:var(--navy2); }
 
@@ -286,6 +316,8 @@ export default function CcnPricingPage() {
         .ccn-result-val { font-size:13px; font-weight:700; color:var(--navy); font-family:'Roboto Mono',monospace; text-align:right; white-space:nowrap; }
         .ccn-result-val .usd { display:block; font-size:11px; font-weight:600; color:var(--gold2); }
         .ccn-result-val.strong { font-size:15px; color:var(--navy-dark); }
+        .ccn-result-cols { display:grid; grid-template-columns:1fr; gap:16px; }
+        @media(min-width:800px) { .ccn-result-cols { grid-template-columns:1fr 1fr; } }
 
         /* ── sensitivity tables ─────────────────────── */
         .ccn-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--border3); border-radius:10px; }
@@ -295,6 +327,8 @@ export default function CcnPricingPage() {
         table.ccn-table td:first-child, table.ccn-table th:first-child { position:sticky; left:0; background:var(--surf2); font-weight:700; color:var(--navy); z-index:1; }
         table.ccn-table td.hit { background:var(--gold); color:var(--navy-dark); font-weight:800; border-radius:4px; }
         .ccn-table-note { font-size:10.5px; color:var(--muted); padding:8px 10px; }
+        .ccn-sens-cols { display:grid; grid-template-columns:1fr; gap:16px; }
+        @media(min-width:1100px) { .ccn-sens-cols { grid-template-columns:1fr 1fr; } }
 
         /* ── market comparison ──────────────────────── */
         .ccn-market-row { display:grid; grid-template-columns:1fr auto auto auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
@@ -315,8 +349,17 @@ export default function CcnPricingPage() {
           .ccn-actions .ccn-btn { flex:1; }
           .ccn-market-row { grid-template-columns:1fr; }
           .ccn-market-row .ccn-market-nums { display:flex; gap:8px; align-items:center; }
+          .ccn-section-hint { display:none; }
         }
       `}</style>
+
+      {/* ── Sticky quick-glance bar (always visible while scrolling) ── */}
+      {verdict && (
+        <div className="ccn-stickybar">
+          <div className="ccn-stickybar-price">${fmtUsd(r.unitOneTimeAfterDiscUsd)}<small>/m² · thu 1 lần</small></div>
+          <div className={`ccn-stickybar-badge ${verdict.level}`}>{verdict.level === 'critical' ? '⚠ CẦN XEM LẠI' : '✓ KHẢ THI'}</div>
+        </div>
+      )}
 
       <div className="ccn-scroll"><div className="ccn-wrap">
         <div className="ccn-head">
@@ -330,217 +373,249 @@ export default function CcnPricingPage() {
           </div>
         </div>
 
-        {/* ── Verdict banner ─────────────────────────────────────── */}
-        {verdict && (
-          <div className={`ccn-verdict ${verdict.level}`}>
-            <div className="ccn-verdict-row">
-              <div>
-                <div className="ccn-verdict-price">${fmtUsd(r.unitOneTimeAfterDiscUsd)}<span style={{ fontSize: 14, fontWeight: 700 }}>/m²</span></div>
-                <div className="ccn-verdict-unit">Giá đề xuất (thu 1 lần, sau chiết khấu {inp.oneTimeDiscountRatePct}%) · chu kỳ {inp.leaseCycleYears} năm</div>
-              </div>
-              <div className="ccn-verdict-badge">{verdict.level === 'critical' ? '⚠ CẦN XEM LẠI' : '✓ KHẢ THI'}</div>
+        <div className="ccn-layout">
+          {/* ══════════════ 1. THÔNG TIN ĐẦU VÀO ══════════════ */}
+          <div className="ccn-col-input">
+            <div className="ccn-section-header">
+              <div className="ccn-section-num">1</div>
+              <div className="ccn-section-title">Thông tin đầu vào</div>
             </div>
-            <div className="ccn-verdict-text">{verdict.text}</div>
-          </div>
-        )}
-
-        {/* ── Quick KPI row ──────────────────────────────────────── */}
-        <div className="ccn-kpi-row">
-          <div className="ccn-kpi">
-            <div className="ccn-kpi-label">Diện tích hiệu dụng</div>
-            <div className="ccn-kpi-val">{fmt0(r.effAreaM2)} m²</div>
-            <div className="ccn-kpi-sub">lấp đầy {inp.occupancyRate}%</div>
-          </div>
-          <div className="ccn-kpi">
-            <div className="ccn-kpi-label">Tổng chi phí thực tế</div>
-            <div className="ccn-kpi-val">{r.totalActualCostBil.toFixed(1)} tỷ</div>
-            <div className="ccn-kpi-sub">gồm lãi vay XD {r.constructionInterestBil.toFixed(1)} tỷ</div>
-          </div>
-          <div className="ccn-kpi">
-            <div className="ccn-kpi-label">Doanh thu cần thu</div>
-            <div className="ccn-kpi-val">{r.totalRevenueRequiredBil.toFixed(1)} tỷ</div>
-            <div className="ccn-kpi-sub">LN mục tiêu {inp.targetProfitRatePct}%</div>
-          </div>
-          <div className="ccn-kpi">
-            <div className="ccn-kpi-label">Giá thu hàng năm</div>
-            <div className="ccn-kpi-val">${fmtUsd(r.unitAnnualAfterDiscUsd)}</div>
-            <div className="ccn-kpi-sub">USD/m²/năm</div>
-          </div>
-        </div>
-
-        {/* ── Inputs A ───────────────────────────────────────────── */}
-        <details className="ccn-acc" open>
-          <summary>A. Quy mô dự án CCN</summary>
-          <div className="ccn-acc-body">
-            <div className="ccn-field-grid">
-              <Field label="Tổng diện tích cụm công nghiệp" unit="ha" value={inp.totalAreaHa} onChange={v => set('totalAreaHa', v)} />
-              <Field label="Diện tích đất công nghiệp cho thuê" unit="ha" value={inp.leasableAreaHa} onChange={v => set('leasableAreaHa', v)} />
-              <Field label="Tỷ lệ lấp đầy kỳ vọng" unit="%" value={inp.occupancyRate} onChange={v => set('occupancyRate', v)} />
-              <Field label="Chu kỳ cho thuê" unit="năm" value={inp.leaseCycleYears} onChange={v => set('leaseCycleYears', v)} />
-            </div>
-          </div>
-        </details>
-
-        <details className="ccn-acc">
-          <summary>B. Chi phí đầu tư</summary>
-          <div className="ccn-acc-body">
-            <div className="ccn-field-grid">
-              <Field label="Tổng vốn đầu tư hạ tầng CCN (gồm GPMB)" unit="tỷ đồng" value={inp.infraInvestTotalBil} onChange={v => set('infraInvestTotalBil', v)} />
-              <Field label="Chi phí đền bù GPMB" unit="tỷ đồng" value={inp.compensationCostBil} onChange={v => set('compensationCostBil', v)} />
-              <Field label="Chi phí quản lý & vận hành / năm" unit="tỷ đồng" value={inp.opexPerYearBil} onChange={v => set('opexPerYearBil', v)} />
-              <Field label="Lãi vay vốn đầu tư" unit="%/năm" value={inp.loanInterestRatePct} onChange={v => set('loanInterestRatePct', v)} />
-              <Field label="Thời gian xây dựng trước khi cho thuê" unit="năm" value={inp.constructionYears} onChange={v => set('constructionYears', v)} />
-            </div>
-            <div className="ccn-note">* Lãi vay trong thời gian xây dựng ước tính trên dư nợ bình quân = 50% tổng vốn đầu tư × lãi suất × số năm xây dựng.</div>
-          </div>
-        </details>
-
-        <details className="ccn-acc">
-          <summary>C. Mục tiêu lợi nhuận</summary>
-          <div className="ccn-acc-body">
-            <div className="ccn-field-grid">
-              <Field label="Tỷ suất lợi nhuận mục tiêu" unit="%/TP" value={inp.targetProfitRatePct} onChange={v => set('targetProfitRatePct', v)} />
-              <Field label="Phí quản lý hàng năm tính thêm" unit="đ/m²/năm" value={inp.annualMgmtFeeExtra} onChange={v => set('annualMgmtFeeExtra', v)} />
-              <Field label="Tỷ giá USD/VND" unit="đ/USD" value={inp.usdVndRate} onChange={v => set('usdVndRate', v)} />
-            </div>
-          </div>
-        </details>
-
-        <details className="ccn-acc">
-          <summary>D. Chiết khấu và ưu đãi</summary>
-          <div className="ccn-acc-body">
-            <div className="ccn-field-grid">
-              <Field label="Chiết khấu khách thuê trả 1 lần" unit="%" value={inp.oneTimeDiscountRatePct} onChange={v => set('oneTimeDiscountRatePct', v)} />
-              <Field label="Ưu đãi khách hàng đặc biệt (FDI lớn)" unit="%" value={inp.fdiIncentiveRatePct} onChange={v => set('fdiIncentiveRatePct', v)} />
-              <Field label="Tăng giá thuê hàng năm (escalation)" unit="%/năm" value={inp.annualEscalationRatePct} onChange={v => set('annualEscalationRatePct', v)} />
-            </div>
-          </div>
-        </details>
-
-        {/* ── Results ────────────────────────────────────────────── */}
-        <details className="ccn-acc" open>
-          <summary>Kết quả định giá cho thuê</summary>
-          <div className="ccn-acc-body">
-            <div className="ccn-sc-title">I. Xác định chi phí thực tế</div>
-            <Row label="Chi phí đền bù GPMB" val={`${fmt0(inp.compensationCostBil * 1e9)} đ`} />
-            <Row label="Chi phí đầu tư hạ tầng (không gồm GPMB)" val={`${fmt0(r.infraCostExGPMB * 1e9)} đ`} />
-            <Row label="Lãi vay trong thời gian xây dựng" val={`${fmt0(r.constructionInterestBil * 1e9)} đ`} />
-            <Row label="Tổng chi phí thực tế" val={`${fmt0(r.totalActualCostBil * 1e9)} đ`} strong />
-            <Row label={`Lợi nhuận mục tiêu (${inp.targetProfitRatePct}%)`} val={`${fmt0(r.targetProfitBil * 1e9)} đ`} />
-            <Row label="Tổng doanh thu cần thu về" val={`${fmt0(r.totalRevenueRequiredBil * 1e9)} đ`} strong />
-
-            <div className="ccn-sc-title" style={{ marginTop: 16 }}>II. Diện tích tính giá</div>
-            <Row label="Tổng diện tích cụm công nghiệp" val={`${fmt0(r.totalAreaM2)} m²`} />
-            <Row label="Diện tích đất cho thuê" val={`${fmt0(r.leasableAreaM2)} m²`} />
-            <Row label="Diện tích thực tế phát sinh doanh thu" val={`${fmt0(r.effAreaM2)} m²`} strong />
-
-            <div className="ccn-sc-title" style={{ marginTop: 16 }}>III. Đơn giá đề xuất (thu tiền 1 lần)</div>
-            <Row label="Đơn giá trước ưu đãi" val={`${fmt0(r.unitOneTimeBeforeVnd)} đ/m²/chu kỳ`} usd={`$${fmtUsd(r.unitOneTimeBeforeUsd)}/m²`} />
-            <Row label={`Đơn giá sau chiết khấu ${inp.oneTimeDiscountRatePct}%`} val={`${fmt0(r.unitOneTimeAfterDiscVnd)} đ/m²/chu kỳ`} usd={`$${fmtUsd(r.unitOneTimeAfterDiscUsd)}/m²`} strong />
-            <Row label={`Đơn giá ưu đãi FDI (giảm ${inp.fdiIncentiveRatePct}%)`} val={`${fmt0(r.unitFdiVnd)} đ/m²/chu kỳ`} usd={`$${fmtUsd(r.unitFdiUsd)}/m²`} />
-
-            <div className="ccn-sc-title" style={{ marginTop: 16 }}>IV. Đơn giá đề xuất (thu tiền hàng năm)</div>
-            <Row label="Đơn giá hằng năm (chia đều)" val={`${fmt0(r.unitAnnualVnd)} đ/m²/năm`} usd={`$${fmtUsd(r.unitAnnualUsd)}/m²/năm`} />
-            <Row label={`Đơn giá hằng năm sau chiết khấu ${inp.oneTimeDiscountRatePct}%`} val={`${fmt0(r.unitAnnualAfterDiscVnd)} đ/m²/năm`} usd={`$${fmtUsd(r.unitAnnualAfterDiscUsd)}/m²/năm`} strong />
-            <Row label={`Giá thuê năm cuối chu kỳ (trượt giá ${inp.annualEscalationRatePct}%/năm)`} val={`${fmt0(r.escalatedFinalYearVnd)} đ/m²/năm`} usd={`$${fmtUsd(r.escalatedFinalYearUsd)}/m²/năm`} />
-
-            <div className="ccn-sc-title" style={{ marginTop: 16 }}>V. Phí quản lý hàng năm</div>
-            <Row label="Chi phí vận hành / năm" val={`${fmt0(inp.opexPerYearBil * 1e9)} đ/năm`} />
-            <Row label="Phí quản lý / m² / năm (từ chi phí vận hành)" val={`${fmt0(r.mgmtFeePerM2PerYearVnd)} đ/m²/năm`} usd={`$${fmtUsd(r.mgmtFeePerM2PerYearUsd)}/m²/năm`} />
-            <Row label="Phí quản lý tính thêm (nhập tay)" val={`${fmt0(inp.annualMgmtFeeExtra)} đ/m²/năm`} usd={`$${fmtUsd(r.mgmtFeeExtraUsd)}/m²/năm`} />
-          </div>
-        </details>
-
-        {/* ── Sensitivity 1 ──────────────────────────────────────── */}
-        <details className="ccn-acc">
-          <summary>Phân tích độ nhạy 1 · Lấp đầy × Lợi nhuận mục tiêu</summary>
-          <div className="ccn-acc-body">
-            <div className="ccn-table-wrap">
-              <table className="ccn-table">
-                <thead>
-                  <tr>
-                    <th>LN mục tiêu ＼ Lấp đầy</th>
-                    {OCC_STEPS.map(o => <th key={o}>{o}%</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {table1.map(row => (
-                    <tr key={row.profit}>
-                      <td>{row.profit}%</td>
-                      {row.cells.map((v, i) => {
-                        const hit = row.profit === inp.targetProfitRatePct && OCC_STEPS[i] === inp.occupancyRate
-                        return <td key={i} className={hit ? 'hit' : ''}>${fmtUsd(v)}</td>
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="ccn-table-note">Đơn giá USD/m²/chu kỳ (trước chiết khấu). Ô vàng = kịch bản hiện tại đang nhập.</div>
-          </div>
-        </details>
-
-        {/* ── Sensitivity 2 ──────────────────────────────────────── */}
-        <details className="ccn-acc">
-          <summary>Phân tích độ nhạy 2 · Tổng vốn đầu tư × Lấp đầy</summary>
-          <div className="ccn-acc-body">
-            <div className="ccn-table-wrap">
-              <table className="ccn-table">
-                <thead>
-                  <tr>
-                    <th>Vốn đầu tư ＼ Lấp đầy</th>
-                    {OCC_STEPS.map(o => <th key={o}>{o}%</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {table2.map(row => (
-                    <tr key={row.delta}>
-                      <td>{row.investBil.toFixed(0)} tỷ<br /><span style={{ fontWeight: 400, fontSize: 9.5 }}>({row.delta > 0 ? '+' : ''}{row.delta}%)</span></td>
-                      {row.cells.map((v, i) => {
-                        const hit = row.delta === 0 && OCC_STEPS[i] === inp.occupancyRate
-                        return <td key={i} className={hit ? 'hit' : ''}>${fmtUsd(v)}</td>
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="ccn-table-note">Đơn giá USD/m²/chu kỳ (trước chiết khấu), tại lợi nhuận mục tiêu hiện tại ({inp.targetProfitRatePct}%). Ô vàng = kịch bản gốc.</div>
-          </div>
-        </details>
-
-        {/* ── Market comparison ─────────────────────────────────── */}
-        <details className="ccn-acc" open>
-          <summary>Bảng 3 · So sánh với đơn giá thị trường</summary>
-          <div className="ccn-acc-body">
-            {market.map(row => {
-              const maxScale = Math.max(...market.map(m => m.high), r.unitOneTimeAfterDiscUsd || 0) * 1.1 || 1
-              const barLeft = row.low / maxScale * 100
-              const barWidth = (row.high - row.low) / maxScale * 100
-              const markerLeft = isFinite(r.unitOneTimeAfterDiscUsd) ? Math.min(r.unitOneTimeAfterDiscUsd / maxScale * 100, 100) : null
-              return (
-                <div key={row.id} style={{ marginBottom: 12 }}>
-                  <div className="ccn-market-row">
-                    <input type="text" value={row.name} onChange={e => updateMarketRow(row.id, { name: e.target.value })} />
-                    <div className="ccn-market-nums">
-                      <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>$</span>
-                      <input type="number" value={row.low} onChange={e => updateMarketRow(row.id, { low: Number(e.target.value) })} />
-                      <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>–</span>
-                      <input type="number" value={row.high} onChange={e => updateMarketRow(row.id, { high: Number(e.target.value) })} />
-                    </div>
-                    <button className="ccn-market-del" onClick={() => removeMarketRow(row.id)} aria-label="Xóa">✕</button>
-                  </div>
-                  <div className="ccn-market-bar-wrap">
-                    <div className="ccn-market-bar" style={{ left: `${barLeft}%`, width: `${barWidth}%` }} />
-                    {markerLeft !== null && <div className="ccn-market-marker" style={{ left: `${markerLeft}%` }} />}
+            <div className="ccn-input-panel">
+              <details className="ccn-acc" open>
+                <summary>A. Quy mô dự án CCN</summary>
+                <div className="ccn-acc-body">
+                  <div className="ccn-field-grid">
+                    <Field label="Tổng diện tích cụm công nghiệp" unit="ha" value={inp.totalAreaHa} onChange={v => set('totalAreaHa', v)} />
+                    <Field label="Diện tích đất công nghiệp cho thuê" unit="ha" value={inp.leasableAreaHa} onChange={v => set('leasableAreaHa', v)} />
+                    <Field label="Tỷ lệ lấp đầy kỳ vọng" unit="%" value={inp.occupancyRate} onChange={v => set('occupancyRate', v)} />
+                    <Field label="Chu kỳ cho thuê" unit="năm" value={inp.leaseCycleYears} onChange={v => set('leaseCycleYears', v)} />
                   </div>
                 </div>
-              )
-            })}
-            <button className="ccn-btn" onClick={addMarketRow}>+ Thêm dự án so sánh</button>
-            <div className="ccn-note">Vạch đỏ trên thanh so sánh = giá đề xuất hiện tại của dự án bạn (${fmtUsd(r.unitOneTimeAfterDiscUsd)}/m²).</div>
+              </details>
+
+              <details className="ccn-acc">
+                <summary>B. Chi phí đầu tư</summary>
+                <div className="ccn-acc-body">
+                  <div className="ccn-field-grid">
+                    <Field label="Tổng vốn đầu tư hạ tầng CCN (gồm GPMB)" unit="tỷ đồng" value={inp.infraInvestTotalBil} onChange={v => set('infraInvestTotalBil', v)} />
+                    <Field label="Chi phí đền bù GPMB" unit="tỷ đồng" value={inp.compensationCostBil} onChange={v => set('compensationCostBil', v)} />
+                    <Field label="Chi phí quản lý & vận hành / năm" unit="tỷ đồng" value={inp.opexPerYearBil} onChange={v => set('opexPerYearBil', v)} />
+                    <Field label="Lãi vay vốn đầu tư" unit="%/năm" value={inp.loanInterestRatePct} onChange={v => set('loanInterestRatePct', v)} />
+                    <Field label="Thời gian xây dựng trước khi cho thuê" unit="năm" value={inp.constructionYears} onChange={v => set('constructionYears', v)} />
+                  </div>
+                  <div className="ccn-note">* Lãi vay trong thời gian xây dựng ước tính trên dư nợ bình quân = 50% tổng vốn đầu tư × lãi suất × số năm xây dựng.</div>
+                </div>
+              </details>
+
+              <details className="ccn-acc">
+                <summary>C. Mục tiêu lợi nhuận</summary>
+                <div className="ccn-acc-body">
+                  <div className="ccn-field-grid">
+                    <Field label="Tỷ suất lợi nhuận mục tiêu" unit="%/TP" value={inp.targetProfitRatePct} onChange={v => set('targetProfitRatePct', v)} />
+                    <Field label="Phí quản lý hàng năm tính thêm" unit="đ/m²/năm" value={inp.annualMgmtFeeExtra} onChange={v => set('annualMgmtFeeExtra', v)} />
+                    <Field label="Tỷ giá USD/VND" unit="đ/USD" value={inp.usdVndRate} onChange={v => set('usdVndRate', v)} />
+                  </div>
+                </div>
+              </details>
+
+              <details className="ccn-acc">
+                <summary>D. Chiết khấu và ưu đãi</summary>
+                <div className="ccn-acc-body">
+                  <div className="ccn-field-grid">
+                    <Field label="Chiết khấu khách thuê trả 1 lần" unit="%" value={inp.oneTimeDiscountRatePct} onChange={v => set('oneTimeDiscountRatePct', v)} />
+                    <Field label="Ưu đãi khách hàng đặc biệt (FDI lớn)" unit="%" value={inp.fdiIncentiveRatePct} onChange={v => set('fdiIncentiveRatePct', v)} />
+                    <Field label="Tăng giá thuê hàng năm (escalation)" unit="%/năm" value={inp.annualEscalationRatePct} onChange={v => set('annualEscalationRatePct', v)} />
+                  </div>
+                </div>
+              </details>
+            </div>
           </div>
-        </details>
+
+          {/* ══════════════ Output column ══════════════ */}
+          <div className="ccn-col-output">
+            {/* ── 2. ĐƠN GIÁ CHO THUÊ ── */}
+            <div className="ccn-section">
+              <div className="ccn-section-header">
+                <div className="ccn-section-num">2</div>
+                <div className="ccn-section-title">Đơn giá cho thuê</div>
+                <div className="ccn-section-hint">Cập nhật theo thời gian thực khi bạn nhập số liệu</div>
+              </div>
+
+              {verdict && (
+                <div className={`ccn-verdict ${verdict.level}`}>
+                  <div className="ccn-verdict-row">
+                    <div>
+                      <div className="ccn-verdict-price">${fmtUsd(r.unitOneTimeAfterDiscUsd)}<span style={{ fontSize: 14, fontWeight: 700 }}>/m²</span></div>
+                      <div className="ccn-verdict-unit">Giá đề xuất (thu 1 lần, sau chiết khấu {inp.oneTimeDiscountRatePct}%) · chu kỳ {inp.leaseCycleYears} năm</div>
+                    </div>
+                    <div className="ccn-verdict-badge">{verdict.level === 'critical' ? '⚠ CẦN XEM LẠI' : '✓ KHẢ THI'}</div>
+                  </div>
+                  <div className="ccn-verdict-text">{verdict.text}</div>
+                </div>
+              )}
+
+              <div className="ccn-kpi-row">
+                <div className="ccn-kpi">
+                  <div className="ccn-kpi-label">Diện tích hiệu dụng</div>
+                  <div className="ccn-kpi-val">{fmt0(r.effAreaM2)} m²</div>
+                  <div className="ccn-kpi-sub">lấp đầy {inp.occupancyRate}%</div>
+                </div>
+                <div className="ccn-kpi">
+                  <div className="ccn-kpi-label">Tổng chi phí thực tế</div>
+                  <div className="ccn-kpi-val">{r.totalActualCostBil.toFixed(1)} tỷ</div>
+                  <div className="ccn-kpi-sub">gồm lãi vay XD {r.constructionInterestBil.toFixed(1)} tỷ</div>
+                </div>
+                <div className="ccn-kpi">
+                  <div className="ccn-kpi-label">Doanh thu cần thu</div>
+                  <div className="ccn-kpi-val">{r.totalRevenueRequiredBil.toFixed(1)} tỷ</div>
+                  <div className="ccn-kpi-sub">LN mục tiêu {inp.targetProfitRatePct}%</div>
+                </div>
+                <div className="ccn-kpi">
+                  <div className="ccn-kpi-label">Giá thu hàng năm</div>
+                  <div className="ccn-kpi-val">${fmtUsd(r.unitAnnualAfterDiscUsd)}</div>
+                  <div className="ccn-kpi-sub">USD/m²/năm</div>
+                </div>
+              </div>
+
+              <details className="ccn-acc card" open>
+                <summary>Chi tiết định giá (I–V)</summary>
+                <div className="ccn-acc-body">
+                  <div className="ccn-result-cols">
+                    <div>
+                      <div className="ccn-sc-title">I. Xác định chi phí thực tế</div>
+                      <Row label="Chi phí đền bù GPMB" val={`${fmt0(inp.compensationCostBil * 1e9)} đ`} />
+                      <Row label="Chi phí đầu tư hạ tầng (không gồm GPMB)" val={`${fmt0(r.infraCostExGPMB * 1e9)} đ`} />
+                      <Row label="Lãi vay trong thời gian xây dựng" val={`${fmt0(r.constructionInterestBil * 1e9)} đ`} />
+                      <Row label="Tổng chi phí thực tế" val={`${fmt0(r.totalActualCostBil * 1e9)} đ`} strong />
+                      <Row label={`Lợi nhuận mục tiêu (${inp.targetProfitRatePct}%)`} val={`${fmt0(r.targetProfitBil * 1e9)} đ`} />
+                      <Row label="Tổng doanh thu cần thu về" val={`${fmt0(r.totalRevenueRequiredBil * 1e9)} đ`} strong />
+
+                      <div className="ccn-sc-title" style={{ marginTop: 16 }}>II. Diện tích tính giá</div>
+                      <Row label="Tổng diện tích cụm công nghiệp" val={`${fmt0(r.totalAreaM2)} m²`} />
+                      <Row label="Diện tích đất cho thuê" val={`${fmt0(r.leasableAreaM2)} m²`} />
+                      <Row label="Diện tích thực tế phát sinh doanh thu" val={`${fmt0(r.effAreaM2)} m²`} strong />
+                    </div>
+                    <div>
+                      <div className="ccn-sc-title">III. Đơn giá đề xuất (thu tiền 1 lần)</div>
+                      <Row label="Đơn giá trước ưu đãi" val={`${fmt0(r.unitOneTimeBeforeVnd)} đ/m²/chu kỳ`} usd={`$${fmtUsd(r.unitOneTimeBeforeUsd)}/m²`} />
+                      <Row label={`Đơn giá sau chiết khấu ${inp.oneTimeDiscountRatePct}%`} val={`${fmt0(r.unitOneTimeAfterDiscVnd)} đ/m²/chu kỳ`} usd={`$${fmtUsd(r.unitOneTimeAfterDiscUsd)}/m²`} strong />
+                      <Row label={`Đơn giá ưu đãi FDI (giảm ${inp.fdiIncentiveRatePct}%)`} val={`${fmt0(r.unitFdiVnd)} đ/m²/chu kỳ`} usd={`$${fmtUsd(r.unitFdiUsd)}/m²`} />
+
+                      <div className="ccn-sc-title" style={{ marginTop: 16 }}>IV. Đơn giá đề xuất (thu tiền hàng năm)</div>
+                      <Row label="Đơn giá hằng năm (chia đều)" val={`${fmt0(r.unitAnnualVnd)} đ/m²/năm`} usd={`$${fmtUsd(r.unitAnnualUsd)}/m²/năm`} />
+                      <Row label={`Đơn giá hằng năm sau chiết khấu ${inp.oneTimeDiscountRatePct}%`} val={`${fmt0(r.unitAnnualAfterDiscVnd)} đ/m²/năm`} usd={`$${fmtUsd(r.unitAnnualAfterDiscUsd)}/m²/năm`} strong />
+                      <Row label={`Giá thuê năm cuối chu kỳ (trượt giá ${inp.annualEscalationRatePct}%/năm)`} val={`${fmt0(r.escalatedFinalYearVnd)} đ/m²/năm`} usd={`$${fmtUsd(r.escalatedFinalYearUsd)}/m²/năm`} />
+
+                      <div className="ccn-sc-title" style={{ marginTop: 16 }}>V. Phí quản lý hàng năm</div>
+                      <Row label="Chi phí vận hành / năm" val={`${fmt0(inp.opexPerYearBil * 1e9)} đ/năm`} />
+                      <Row label="Phí quản lý / m² / năm (từ chi phí vận hành)" val={`${fmt0(r.mgmtFeePerM2PerYearVnd)} đ/m²/năm`} usd={`$${fmtUsd(r.mgmtFeePerM2PerYearUsd)}/m²/năm`} />
+                      <Row label="Phí quản lý tính thêm (nhập tay)" val={`${fmt0(inp.annualMgmtFeeExtra)} đ/m²/năm`} usd={`$${fmtUsd(r.mgmtFeeExtraUsd)}/m²/năm`} />
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            {/* ── 3. PHÂN TÍCH ĐỘ NHẠY ── */}
+            <div className="ccn-section">
+              <div className="ccn-section-header">
+                <div className="ccn-section-num">3</div>
+                <div className="ccn-section-title">Phân tích độ nhạy</div>
+                <div className="ccn-section-hint">So sánh kịch bản để cân nhắc rủi ro</div>
+              </div>
+
+              <div className="ccn-sens-cols">
+                <details className="ccn-acc card" open>
+                  <summary>Lấp đầy × Lợi nhuận mục tiêu</summary>
+                  <div className="ccn-acc-body">
+                    <div className="ccn-table-wrap">
+                      <table className="ccn-table">
+                        <thead>
+                          <tr>
+                            <th>LN mục tiêu ＼ Lấp đầy</th>
+                            {OCC_STEPS.map(o => <th key={o}>{o}%</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {table1.map(row => (
+                            <tr key={row.profit}>
+                              <td>{row.profit}%</td>
+                              {row.cells.map((v, i) => {
+                                const hit = row.profit === inp.targetProfitRatePct && OCC_STEPS[i] === inp.occupancyRate
+                                return <td key={i} className={hit ? 'hit' : ''}>${fmtUsd(v)}</td>
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="ccn-table-note">Đơn giá USD/m²/chu kỳ (trước chiết khấu). Ô vàng = kịch bản hiện tại đang nhập.</div>
+                  </div>
+                </details>
+
+                <details className="ccn-acc card" open>
+                  <summary>Tổng vốn đầu tư × Lấp đầy</summary>
+                  <div className="ccn-acc-body">
+                    <div className="ccn-table-wrap">
+                      <table className="ccn-table">
+                        <thead>
+                          <tr>
+                            <th>Vốn đầu tư ＼ Lấp đầy</th>
+                            {OCC_STEPS.map(o => <th key={o}>{o}%</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {table2.map(row => (
+                            <tr key={row.delta}>
+                              <td>{row.investBil.toFixed(0)} tỷ<br /><span style={{ fontWeight: 400, fontSize: 9.5 }}>({row.delta > 0 ? '+' : ''}{row.delta}%)</span></td>
+                              {row.cells.map((v, i) => {
+                                const hit = row.delta === 0 && OCC_STEPS[i] === inp.occupancyRate
+                                return <td key={i} className={hit ? 'hit' : ''}>${fmtUsd(v)}</td>
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="ccn-table-note">Đơn giá USD/m²/chu kỳ (trước chiết khấu), tại lợi nhuận mục tiêu hiện tại ({inp.targetProfitRatePct}%). Ô vàng = kịch bản gốc.</div>
+                  </div>
+                </details>
+              </div>
+
+              <details className="ccn-acc card" open>
+                <summary>So sánh với đơn giá thị trường</summary>
+                <div className="ccn-acc-body">
+                  {market.map(row => {
+                    const maxScale = Math.max(...market.map(m => m.high), r.unitOneTimeAfterDiscUsd || 0) * 1.1 || 1
+                    const barLeft = row.low / maxScale * 100
+                    const barWidth = (row.high - row.low) / maxScale * 100
+                    const markerLeft = isFinite(r.unitOneTimeAfterDiscUsd) ? Math.min(r.unitOneTimeAfterDiscUsd / maxScale * 100, 100) : null
+                    return (
+                      <div key={row.id} style={{ marginBottom: 12 }}>
+                        <div className="ccn-market-row">
+                          <input type="text" value={row.name} onChange={e => updateMarketRow(row.id, { name: e.target.value })} />
+                          <div className="ccn-market-nums">
+                            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>$</span>
+                            <input type="number" value={row.low} onChange={e => updateMarketRow(row.id, { low: Number(e.target.value) })} />
+                            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>–</span>
+                            <input type="number" value={row.high} onChange={e => updateMarketRow(row.id, { high: Number(e.target.value) })} />
+                          </div>
+                          <button className="ccn-market-del" onClick={() => removeMarketRow(row.id)} aria-label="Xóa">✕</button>
+                        </div>
+                        <div className="ccn-market-bar-wrap">
+                          <div className="ccn-market-bar" style={{ left: `${barLeft}%`, width: `${barWidth}%` }} />
+                          {markerLeft !== null && <div className="ccn-market-marker" style={{ left: `${markerLeft}%` }} />}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <button className="ccn-btn" onClick={addMarketRow}>+ Thêm dự án so sánh</button>
+                  <div className="ccn-note">Vạch đỏ trên thanh so sánh = giá đề xuất hiện tại của dự án bạn (${fmtUsd(r.unitOneTimeAfterDiscUsd)}/m²).</div>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
       </div></div>
     </>
   )
