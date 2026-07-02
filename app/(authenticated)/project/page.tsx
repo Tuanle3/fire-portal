@@ -68,9 +68,6 @@ export default function ProjectPage() {
   const [unit,     setUnit]     = useState<ProjectUnit>('ty')
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string|null>(null)
-  const [editInfo, setEditInfo] = useState(false)
-  const [savingInfo, setSavingInfo] = useState(false)
-  const [infoForm, setInfoForm] = useState<ProjectInfo>(DEFAULT_INFO)
   const [syncing,   setSyncing]  = useState(false)
   const [syncLog,   setSyncLog]  = useState<string[]>([])
   const [lastSync,  setLastSync] = useState<string|null>(null)
@@ -120,7 +117,6 @@ export default function ProjectPage() {
       const merged: ProjectInfo = { ...infoVal, progress: avgPct, soldUnits, thucThu, giaiNgan }
 
       setInfo(merged)
-      setInfoForm(infoVal)
       setThiCong(tc)
       setLienDanh(ld)
       setPhapLy(fbArr<PhapLyDoc>(plSnap.exists()   ? plSnap.val()   : null))
@@ -136,12 +132,6 @@ export default function ProjectPage() {
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
-
-  async function saveInfo() {
-    setSavingInfo(true)
-    await set(ref(getDb(), `${PREFIX}_Info`), infoForm)
-    setSavingInfo(false); setEditInfo(false); loadAll()
-  }
 
   async function syncFromSheet() {
     if (!confirm('Đồng bộ sẽ XÓA toàn bộ dữ liệu Firebase và nhập lại từ Google Sheet. Tiếp tục?')) return
@@ -242,7 +232,6 @@ export default function ProjectPage() {
         .prj-unit-btn { padding:5px 12px; border:1.5px solid rgba(255,255,255,.25); background:transparent; color:rgba(255,255,255,.65); border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; }
         .prj-unit-btn.active { background:rgba(255,255,255,.18); color:#fff; border-color:rgba(255,255,255,.5); }
         .prj-btn-export { padding:7px 16px; background:#D4A64A; color:#1C3557; border:none; border-radius:8px; font-size:11.5px; font-weight:800; cursor:pointer; font-family:inherit; }
-        .prj-btn-edit { padding:5px 12px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); color:#fff; border-radius:7px; font-size:11px; cursor:pointer; font-family:inherit; }
         @media(max-width:900px){ .prj-body{ padding:16px 12px; } }
       `}</style>
 
@@ -258,7 +247,6 @@ export default function ProjectPage() {
                   </button>
                 ))}
               </div>
-              {canEdit && <button className="prj-btn-edit" onClick={()=>setEditInfo(e=>!e)}>⚙️ Cài đặt</button>}
               {canEdit && (
                 <button className="prj-btn-export"
                   style={{ background: syncing ? '#9ca3af' : '#22C55E', color:'#fff', display:'flex', alignItems:'center', gap:6 }}
@@ -270,30 +258,6 @@ export default function ProjectPage() {
             </div>
           </div>
         </div>
-
-        {/* Settings panel */}
-        {editInfo && canEdit && (
-          <div style={{ background:'#FAFCFF', borderBottom:'1px solid #D0DCE8', padding:'16px 28px' }}>
-            <div style={{ fontSize:13, fontWeight:700, color:'#1C3557', marginBottom:12 }}>⚙️ Thông tin dự án</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10 }}>
-              {([
-                ['Diện tích','area','text'],['VĐT (tỷ)','totalCap','number'],['Hạn mức vay (tỷ)','loan','number'],
-                ['Tổng căn hộ','totalUnits','number'],['Ngày khởi công','startDate','date'],['Ngày dự kiến HT','estEnd','date'],
-              ] as [string, keyof ProjectInfo, string][]).map(([label, key, type]) => (
-                <div key={key}>
-                  <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>{label}</label>
-                  <input style={{ width:'100%', padding:'7px 10px', border:'1px solid #D1D5DB', borderRadius:7, fontSize:12, fontFamily:'inherit', color:'#1F2430', boxSizing:'border-box' as const }}
-                    type={type} value={String(infoForm[key] ?? '')}
-                    onChange={e => setInfoForm(p => ({ ...p, [key]: type === 'number' ? parseFloat(e.target.value)||0 : e.target.value }))} />
-                </div>
-              ))}
-            </div>
-            <div style={{ display:'flex', gap:8, marginTop:12 }}>
-              <button style={{ padding:'8px 18px', background:'#1C3557', color:'#fff', border:'none', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }} onClick={saveInfo} disabled={savingInfo}>{savingInfo?'Đang lưu...':'💾 Lưu'}</button>
-              <button style={{ padding:'8px 14px', background:'transparent', color:'#6B7280', border:'1px solid #D1D5DB', borderRadius:8, fontSize:12, cursor:'pointer', fontFamily:'inherit' }} onClick={()=>setEditInfo(false)}>Hủy</button>
-            </div>
-          </div>
-        )}
 
         {/* Sync log */}
         {syncLog.length > 0 && (
