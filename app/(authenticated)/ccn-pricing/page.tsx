@@ -322,10 +322,14 @@ export default function CcnPricingPage() {
 
         /* ── sensitivity tables ─────────────────────── */
         .ccn-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--border3); border-radius:10px; }
-        table.ccn-table { border-collapse:collapse; width:100%; min-width:420px; font-size:11.5px; }
-        table.ccn-table th, table.ccn-table td { padding:7px 9px; text-align:center; white-space:nowrap; border-bottom:1px solid var(--border); }
-        table.ccn-table thead th { background:var(--surf2); color:#4B6A8A; font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; }
-        table.ccn-table td:first-child, table.ccn-table th:first-child { position:sticky; left:0; background:var(--surf2); font-weight:700; color:var(--navy); z-index:1; }
+        table.ccn-table { border-collapse:collapse; width:100%; min-width:320px; table-layout:fixed; font-size:11px; }
+        table.ccn-table th, table.ccn-table td { padding:6px 4px; text-align:center; white-space:nowrap; border-bottom:1px solid var(--border); }
+        table.ccn-table thead th { background:var(--surf2); color:#4B6A8A; font-weight:700; font-size:9.5px; text-transform:uppercase; letter-spacing:.02em; }
+        table.ccn-table td:first-child, table.ccn-table th:first-child {
+          position:sticky; left:0; background:var(--surf2); font-weight:700; color:var(--navy); z-index:1;
+          width:56px; white-space:normal; word-break:break-word; font-size:9.5px; line-height:1.2; padding:6px 3px;
+        }
+        table.ccn-table th:first-child { font-size:8.5px; text-transform:none; letter-spacing:0; }
         table.ccn-table td.hit { background:var(--gold); color:var(--navy-dark); font-weight:800; border-radius:4px; }
         .ccn-table-note { font-size:10.5px; color:var(--muted); padding:8px 10px; }
         .ccn-market-cols { display:grid; grid-template-columns:1fr; column-gap:24px; }
