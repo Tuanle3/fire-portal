@@ -7,6 +7,7 @@ const NAV = [
   { section: 'TỔNG QUAN',    mod: 'm:dashboard', href: '/dashboard',  icon: '⊞',  label: 'Tổng quan CEO' },
   { section: 'MODULE CHÍNH', mod: 'm:dashboard', href: '/ecosystem',  icon: '🌐', label: 'Hệ sinh thái' },
   { section: 'MODULE CHÍNH', mod: 'm:ccn-pricing', href: '/ccn-pricing', icon: '🏭', label: 'Tính giá cho thuê CCN' },
+  { section: 'MODULE CHÍNH', mod: 'm:noxh', href: '/noxh-nguyen-trai', icon: '🏗', label: 'NOXH Nguyễn Trãi' },
   { section: 'VẬN HÀNH',     mod: 'm:tasks',     href: '/tasks',      icon: '✓',  label: 'Công việc' },
   { section: 'HỆ THỐNG',     mod: 'm:users',     href: '/users',      icon: '👤', label: 'Quản lý User' },
 ]

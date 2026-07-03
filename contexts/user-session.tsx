@@ -1,7 +1,7 @@
 'use client'
 import { createContext, useContext, useEffect, useState } from 'react'
 
-const ALL_MODULES = ['m:dashboard', 'm:tasks', 'm:finance', 'm:assets', 'm:data', 'm:users', 'm:ccn-pricing']
+const ALL_MODULES = ['m:dashboard', 'm:tasks', 'm:finance', 'm:assets', 'm:data', 'm:users', 'm:ccn-pricing', 'm:noxh']
 
 const DEFAULT_PERMS: Record<string, string[]> = {
   ceo:    ALL_MODULES,
@@ -59,6 +59,7 @@ export const PATH_MODULE: Record<string, string> = {
   '/tasks':     'm:tasks',
   '/users':     'm:users',
   '/ccn-pricing': 'm:ccn-pricing',
+  '/noxh-nguyen-trai': 'm:noxh',
 }
 
 // First accessible path for a user given their perms
