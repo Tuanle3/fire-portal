@@ -310,7 +310,7 @@ export default function CcnPricingPage() {
         .ccn-field-input:focus-within { border-color:var(--navy2); }
 
         /* ── result cards ───────────────────────────── */
-        .ccn-sc-title { font-size:10.5px; font-weight:700; letter-spacing:.07em; color:#4B6A8A; text-transform:uppercase; margin-bottom:10px; }
+        .ccn-sc-title { display:block; font-size:10.5px; font-weight:700; letter-spacing:.05em; color:var(--navy); text-transform:uppercase; margin-bottom:10px; background:var(--surf2); padding:7px 10px; border-radius:6px; border-left:3px solid var(--gold); }
         .ccn-result-row { display:flex; align-items:baseline; justify-content:space-between; padding:7px 0; border-bottom:1px dashed var(--border); gap:10px; }
         .ccn-result-row:last-child { border-bottom:none; }
         .ccn-result-label { font-size:12px; color:var(--txt2); }
@@ -332,6 +332,8 @@ export default function CcnPricingPage() {
         table.ccn-table th:first-child { font-size:8.5px; text-transform:none; letter-spacing:0; }
         table.ccn-table td.hit { background:var(--gold); color:var(--navy-dark); font-weight:800; border-radius:4px; }
         .ccn-table-note { font-size:10.5px; color:var(--muted); padding:8px 10px; }
+        .ccn-sens-grid { display:flex; flex-direction:column; }
+        @media(min-width:768px) { .ccn-sens-grid { display:grid; grid-template-columns:1fr 1fr; align-items:start; gap:16px; } }
         .ccn-market-cols { display:grid; grid-template-columns:1fr; column-gap:24px; }
         @media(min-width:900px) { .ccn-market-cols { grid-template-columns:1fr 1fr; } }
 
@@ -531,6 +533,7 @@ export default function CcnPricingPage() {
             <div className="ccn-section-hint">So sánh kịch bản để cân nhắc rủi ro</div>
           </div>
 
+          <div className="ccn-sens-grid">
           <details className="ccn-acc card" open>
             <summary>Bảng 1 · Lấp đầy × Lợi nhuận mục tiêu</summary>
             <div className="ccn-acc-body">
@@ -586,6 +589,7 @@ export default function CcnPricingPage() {
               <div className="ccn-table-note">Đơn giá USD/m²/chu kỳ (trước chiết khấu), tại lợi nhuận mục tiêu hiện tại ({inp.targetProfitRatePct}%). Ô vàng = kịch bản gốc.</div>
             </div>
           </details>
+          </div>
 
           <details className="ccn-acc card" open>
             <summary>Bảng 3 · So sánh với đơn giá thị trường</summary>
