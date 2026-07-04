@@ -11,6 +11,7 @@ import { subscribeToTasks, saveTask as fsSave, deleteTask as fsDelete, seedMockT
 import { subscribeToUsers, StaffUser } from '@/lib/users-store'
 import { subscribeToDepartments, Department } from '@/lib/departments-store'
 import { subscribeToProjects, Project } from '@/lib/projects-store'
+import { getWeekRange, getMonthRange } from '@/lib/report-ranges'
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 const PRIORITY_COLOR: Record<TaskPriority, string> = {
@@ -187,12 +188,13 @@ function ListView({ tasks, allTasks, onSelect, onAddSubTask }: {
             <th>Tiến độ</th>
             <th>Ngày tạo</th>
             <th>Deadline</th>
+            <th>Gia hạn</th>
             <th style={{ width: 60 }}></th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
-            <tr><td colSpan={10} className="tk2-empty">Không có công việc nào phù hợp</td></tr>
+            <tr><td colSpan={11} className="tk2-empty">Không có công việc nào phù hợp</td></tr>
           )}
           {rows.map(({ task: t, level }) => (
             <tr key={t.id} className={`tk2-row${hoverId === t.id ? ' hov' : ''}${level > 0 ? ' tk2-row-sub' : ''}`}
@@ -227,6 +229,13 @@ function ListView({ tasks, allTasks, onSelect, onAddSubTask }: {
               <td><MiniBar value={t.progress} /></td>
               <td><span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{t.createdAt || '—'}</span></td>
               <td><DeadlineBadge deadline={t.deadline} status={t.status} extCount={t.extensions?.length} /></td>
+              <td>
+                {t.extensions?.length ? (
+                  <span style={{ fontSize: 11, color: '#D97706', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                    {t.extensions[t.extensions.length - 1].toDeadline} <span style={{ color: 'var(--muted)' }}>({t.extensions.length} lần)</span>
+                  </span>
+                ) : <span style={{ color: '#D1D5DB', fontSize: 12 }}>—</span>}
+              </td>
               <td>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <button className="tk2-row-action" title="Chia đầu việc" onClick={e => { e.stopPropagation(); onAddSubTask(t) }}>
@@ -1307,6 +1316,29 @@ function ExportModal({ tasks, filters, onClose }: {
     custom: { icon: '✏️', label: 'Tùy chọn (theo bộ lọc)', desc: 'Sử dụng bộ lọc deadline + phòng ban + trạng thái đang chọn' },
   }
 
+  // Xem trước đúng những công việc sẽ nằm trong báo cáo, khớp logic bên server (lib/report-ranges)
+  const previewGroups = useMemo(() => {
+    if (mode === 'week') {
+      const cur = getWeekRange(0), next = getWeekRange(1)
+      return [
+        { label: `Tuần này (${cur.label})`, tasks: tasks.filter(t => t.deadline >= cur.from && t.deadline <= cur.to) },
+        { label: `Tuần tới (${next.label})`, tasks: tasks.filter(t => t.deadline >= next.from && t.deadline <= next.to) },
+      ]
+    }
+    if (mode === 'month') {
+      const cur = getMonthRange(0), next = getMonthRange(1)
+      return [
+        { label: cur.label,  tasks: tasks.filter(t => t.deadline >= cur.from && t.deadline <= cur.to) },
+        { label: next.label, tasks: tasks.filter(t => t.deadline >= next.from && t.deadline <= next.to) },
+      ]
+    }
+    let t = tasks
+    if (filters.dateFrom) t = t.filter(x => x.deadline >= filters.dateFrom)
+    if (filters.dateTo)   t = t.filter(x => x.deadline && x.deadline <= filters.dateTo)
+    return [{ label: 'Theo bộ lọc hiện tại', tasks: t }]
+  }, [mode, tasks, filters])
+  const previewTotal = previewGroups.reduce((s, g) => s + g.tasks.length, 0)
+
   const payload = () => ({
     tasks,
     reportMode: mode,
@@ -1384,15 +1416,46 @@ function ExportModal({ tasks, filters, onClose }: {
             <label className="so-label">Ghi chú / kỳ báo cáo (tuỳ chọn)</label>
             <input className="so-input" placeholder="VD: Tháng 6/2026 — Phòng TC-KT" value={subtitle} onChange={e => setSub(e.target.value)} />
           </div>
+
+          {/* Review: xem trước đúng nội dung sẽ xuất, trước khi tải file */}
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div className="so-label" style={{ margin: 0 }}>👁 Xem trước nội dung báo cáo</div>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: previewTotal === 0 ? '#DC2626' : 'var(--navy)' }}>{previewTotal} công việc</span>
+            </div>
+            {previewTotal === 0 ? (
+              <div style={{ fontSize: 12, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 12px' }}>
+                ⚠ Không có công việc nào khớp — báo cáo sẽ trống. Hãy đổi loại báo cáo hoặc bộ lọc trước khi xuất.
+              </div>
+            ) : (
+              <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+                {previewGroups.map((g, gi) => g.tasks.length > 0 && (
+                  <div key={gi}>
+                    <div style={{ padding: '6px 12px', background: 'var(--surf2)', fontSize: 11, fontWeight: 700, color: 'var(--navy)', position: 'sticky', top: 0 }}>
+                      {g.label} · {g.tasks.length} việc
+                    </div>
+                    {g.tasks.map(t => (
+                      <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.title}</div>
+                        <span style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>{t.assignedTo || '—'}</span>
+                        <span style={{ flexShrink: 0 }}><StatusChip s={t.status} /></span>
+                        <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{t.deadline || '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="so-footer">
           <button className="so-cancel" style={{ marginLeft: 'auto' }} onClick={onClose}>Hủy</button>
-          <button className="so-cancel" onClick={doExportXlsx} disabled={loading}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#16A34A', borderColor: '#86EFAC', background: loadingXlsx ? '#F0FDF4' : undefined }}>
+          <button className="so-cancel" onClick={doExportXlsx} disabled={loading || previewTotal === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#16A34A', borderColor: '#86EFAC', background: loadingXlsx ? '#F0FDF4' : undefined, opacity: previewTotal === 0 ? .5 : 1 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
             {loadingXlsx ? 'Đang xuất…' : '⬇ Xuất .xlsx'}
           </button>
-          <button className="so-save" onClick={doExportDocx} disabled={loading}>
+          <button className="so-save" onClick={doExportDocx} disabled={loading || previewTotal === 0} style={{ opacity: previewTotal === 0 ? .5 : 1 }}>
             {loadingDocx ? 'Đang xuất…' : '⬇ Xuất .docx'}
           </button>
         </div>

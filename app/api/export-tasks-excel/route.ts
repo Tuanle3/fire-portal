@@ -2,27 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 import * as XLSX from 'xlsx'
 import { Task, TaskStatus, TaskPriority, PRIORITY_LABEL } from '@/lib/tasks-mock'
+import { getWeekRange, getMonthRange } from '@/lib/report-ranges'
 
 const STATUS_LABEL_V: Record<TaskStatus, string> = {
   chua_bat_dau: 'Chưa bắt đầu',
   dang_lam:     'Đang làm',
   hoan_thanh:   'Hoàn thành',
   tre:          'Trễ hạn',
-}
-
-function getWeekRange(offsetWeeks = 0) {
-  const now = new Date(); const day = now.getDay() || 7
-  const mon = new Date(now); mon.setDate(now.getDate() - day + 1 + offsetWeeks * 7)
-  const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
-  return { from: mon.toISOString().slice(0, 10), to: sun.toISOString().slice(0, 10) }
-}
-
-function getMonthRange(offsetMonths = 0) {
-  const now = new Date(); const y = now.getFullYear(); const m = now.getMonth() + offsetMonths
-  return {
-    from: new Date(y, m, 1).toISOString().slice(0, 10),
-    to:   new Date(y, m + 1, 0).toISOString().slice(0, 10),
-  }
 }
 
 function tasksToRows(tasks: Task[]) {
