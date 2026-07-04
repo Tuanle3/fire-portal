@@ -35,6 +35,7 @@ function fromFirestore(id: string, data: Record<string, unknown>): Task {
     parentId:    (data.parentId    as string)  || undefined,
     sharedWith:  (data.sharedWith  as string[]) || undefined,
     evaluation:  (data.evaluation  as Task['evaluation']) || undefined,
+    extensions:  (data.extensions  as Task['extensions']) || undefined,
     createdAt:   (data.createdAt   as string)  ?? '',
     updatedAt:   (data.updatedAt   as string)  ?? '',
   }

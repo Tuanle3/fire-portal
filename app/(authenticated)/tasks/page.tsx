@@ -45,16 +45,20 @@ const EMPTY_TASK: Omit<Task,'id'|'createdAt'|'updatedAt'> = {
 type View = 'list' | 'kanban' | 'analytics' | 'dept' | 'gantt' | 'timeline'
 
 // ── Hierarchy helpers ────────────────────────────────────────────────────────
+// Việc hoàn thành luôn xuống dưới cùng; trong nhóm chưa hoàn thành, việc khẩn lên trên.
+function taskSortRank(t: Task): number {
+  return (t.status === 'hoan_thanh' ? 10 : 0) + PRIORITY_ORDER[t.priority]
+}
 function buildHierarchy(tasks: Task[]): { task: Task; level: number }[] {
   const result: { task: Task; level: number }[] = []
   function add(t: Task, level: number) {
     result.push({ task: t, level })
     tasks.filter(c => c.parentId === t.id)
-      .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
+      .sort((a, b) => taskSortRank(a) - taskSortRank(b))
       .forEach(c => add(c, level + 1))
   }
   tasks.filter(t => !t.parentId)
-    .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
+    .sort((a, b) => taskSortRank(a) - taskSortRank(b))
     .forEach(t => add(t, 0))
   return result
 }
@@ -135,11 +139,14 @@ function MiniBar({ value }: { value: number }) {
   )
 }
 
-function DeadlineBadge({ deadline, status }: { deadline: string; status: TaskStatus }) {
+function DeadlineBadge({ deadline, status, extCount }: { deadline: string; status: TaskStatus; extCount?: number }) {
   if (!deadline) return <span style={{ color: '#9CA3AF', fontSize: 12 }}>—</span>
   const diff = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000)
   const done = status === 'hoan_thanh'
-  if (done) return <span style={{ fontSize: 11, color: '#16A34A', fontFamily: 'var(--font-mono)' }}>{deadline}</span>
+  const extBadge = !!extCount && (
+    <span title={`Đã gia hạn ${extCount} lần`} style={{ fontSize: 10, color: '#D97706', marginLeft: 4 }}>🕐×{extCount}</span>
+  )
+  if (done) return <span style={{ fontSize: 11, color: '#16A34A', fontFamily: 'var(--font-mono)' }}>{deadline}{extBadge}</span>
   const { text, color, bg } =
     diff < 0  ? { text: `Trễ ${Math.abs(diff)}n`, color: '#991B1B', bg: '#FEF2F2' } :
     diff === 0 ? { text: 'Hôm nay',               color: '#991B1B', bg: '#FEF2F2' } :
@@ -150,7 +157,7 @@ function DeadlineBadge({ deadline, status }: { deadline: string; status: TaskSta
       fontSize: 11, fontWeight: 600, color, background: bg,
       padding: bg !== 'transparent' ? '2px 6px' : 0, borderRadius: 4,
       fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap',
-    }}>{text}</span>
+    }}>{text}{extBadge}</span>
   )
 }
 
@@ -178,13 +185,14 @@ function ListView({ tasks, allTasks, onSelect, onAddSubTask }: {
             <th>Trạng thái</th>
             <th>Đánh giá</th>
             <th>Tiến độ</th>
+            <th>Ngày tạo</th>
             <th>Deadline</th>
             <th style={{ width: 60 }}></th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
-            <tr><td colSpan={9} className="tk2-empty">Không có công việc nào phù hợp</td></tr>
+            <tr><td colSpan={10} className="tk2-empty">Không có công việc nào phù hợp</td></tr>
           )}
           {rows.map(({ task: t, level }) => (
             <tr key={t.id} className={`tk2-row${hoverId === t.id ? ' hov' : ''}${level > 0 ? ' tk2-row-sub' : ''}`}
@@ -217,7 +225,8 @@ function ListView({ tasks, allTasks, onSelect, onAddSubTask }: {
               <td><StatusChip s={t.status} /></td>
               <td>{t.evaluation ? <EvalBadge result={t.evaluation.result} /> : <span style={{ color: '#D1D5DB', fontSize: 12 }}>—</span>}</td>
               <td><MiniBar value={t.progress} /></td>
-              <td><DeadlineBadge deadline={t.deadline} status={t.status} /></td>
+              <td><span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{t.createdAt || '—'}</span></td>
+              <td><DeadlineBadge deadline={t.deadline} status={t.status} extCount={t.extensions?.length} /></td>
               <td>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <button className="tk2-row-action" title="Chia đầu việc" onClick={e => { e.stopPropagation(); onAddSubTask(t) }}>
@@ -257,7 +266,7 @@ function KanbanCard({ task, onClick }: { task: Task; onClick: () => void }) {
           <Avatar name={task.assignedTo} size={20} />
           <span style={{ fontSize: 10.5, color: '#6B7280' }}>{task.assignedTo}</span>
         </div>
-        <DeadlineBadge deadline={task.deadline} status={task.status} />
+        <DeadlineBadge deadline={task.deadline} status={task.status} extCount={task.extensions?.length} />
       </div>
       {late && <div style={{ position: 'absolute', top: 8, right: 8, width: 6, height: 6, borderRadius: '50%', background: '#DC2626' }} />}
     </div>
@@ -484,7 +493,7 @@ function DeptCard({ d, tasks, onOpenTask }: { d: DeptStats; tasks: Task[]; onOpe
             Danh sách công việc ({tasks.length})
           </div>
           <div className="dept-task-list">
-            {tasks.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]).map(t => {
+            {tasks.slice().sort((a, b) => taskSortRank(a) - taskSortRank(b)).map(t => {
               const today  = new Date().toISOString().slice(0, 10)
               const isLate = t.deadline && t.deadline < today && t.status !== 'hoan_thanh'
               const s      = STATUS_CFG[t.status]
@@ -502,7 +511,7 @@ function DeptCard({ d, tasks, onOpenTask }: { d: DeptStats; tasks: Task[]; onOpe
                     <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.color, border: `1px solid ${s.border}`, whiteSpace: 'nowrap', flexShrink: 0 }}>{s.label}</span>
                     <div style={{ width: 80, flexShrink: 0 }}><MiniBar value={t.progress} /></div>
                     <div style={{ flexShrink: 0, minWidth: 70, textAlign: 'right' }}>
-                      <DeadlineBadge deadline={t.deadline} status={t.status} />
+                      <DeadlineBadge deadline={t.deadline} status={t.status} extCount={t.extensions?.length} />
                       {isLate && <div style={{ fontSize: 10, color: '#DC2626', fontWeight: 700, marginTop: 1 }}>⚠ Quá hạn</div>}
                     </div>
                   </div>
@@ -894,6 +903,9 @@ function SlideOver({ task, allTasks, currentUser, currentStaff, staffUsers, depa
   const [err, setErr]           = useState('')
   const [evalNote, setEvalNote] = useState(task?.evaluation?.note ?? '')
   const [showShare, setShowShare] = useState(false)
+  const [showExtend, setShowExtend]   = useState(false)
+  const [extDeadline, setExtDeadline] = useState('')
+  const [extReason, setExtReason]     = useState('')
   const ref = useRef<HTMLDivElement>(null)
 
   const subTasks    = allTasks.filter(t => t.parentId === task?.id)
@@ -903,11 +915,18 @@ function SlideOver({ task, allTasks, currentUser, currentStaff, staffUsers, depa
   // RBAC: can this user edit/create tasks?
   const canEdit = !currentStaff || currentStaff.level !== 'nhan_vien'
   // truong_phong can only assign within own department; giam_doc can assign all
+  // dedupe: staff_users hiện có vài bản ghi trùng email (do seed lỗi) — chỉ giữ 1 bản/email cho dropdown
+  const seenEmail = new Set<string>()
   const assignableUsers = staffUsers.filter(u => u.active && (
     !currentStaff ||
     currentStaff.level === 'giam_doc' ||
     u.department === currentStaff.department
-  ))
+  )).filter(u => {
+    const key = u.email || u.name
+    if (seenEmail.has(key)) return false
+    seenEmail.add(key)
+    return true
+  })
   // can share: truong_phong/giam_doc of the task's department (or admin)
   const canShare = !isNew && canEdit && (
     !currentStaff ||
@@ -944,6 +963,23 @@ function SlideOver({ task, allTasks, currentUser, currentStaff, staffUsers, depa
     if (!task) return
     const now = new Date().toISOString().slice(0, 10)
     onSave({ ...task, ...form, evaluation: { result, note: evalNote, evaluatedAt: now, evaluatedBy: currentUser }, updatedAt: now })
+    onClose()
+  }
+
+  const extendDeadline = () => {
+    if (!task) return
+    if (!extDeadline)      { setErr('Vui lòng chọn hạn mới'); return }
+    if (!extReason.trim()) { setErr('Vui lòng nêu lý do gia hạn'); return }
+    const now = new Date().toISOString().slice(0, 10)
+    const record = { fromDeadline: form.deadline, toDeadline: extDeadline, reason: extReason.trim(), extendedBy: currentUser, extendedAt: now }
+    onSave({
+      ...task, ...form,
+      deadline: extDeadline,
+      status: task.status === 'tre' ? 'dang_lam' : form.status,
+      extensions: [...(task.extensions ?? []), record],
+      updatedAt: now,
+    })
+    setShowExtend(false); setExtReason(''); setExtDeadline('')
     onClose()
   }
 
@@ -1029,8 +1065,36 @@ function SlideOver({ task, allTasks, currentUser, currentStaff, staffUsers, depa
           {sel('Dự án', 'project', projects.length ? projects.map(p => p.name) : PROJECTS)}
 
           <div className="so-field">
-            <label className="so-label">Deadline</label>
+            <label className="so-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Deadline</span>
+              {!isNew && (
+                <button type="button" onClick={() => { setShowExtend(v => !v); setExtDeadline(form.deadline); setErr('') }}
+                  style={{ fontSize: 10.5, fontWeight: 700, color: '#D97706', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}>
+                  🕐 Gia hạn
+                </button>
+              )}
+            </label>
             <input type="date" className="so-input" value={form.deadline} onChange={e => set('deadline', e.target.value)} />
+            {!isNew && !!task?.extensions?.length && (
+              <div style={{ marginTop: 6 }}>
+                {task.extensions.map((ex, i) => (
+                  <div key={i} style={{ fontSize: 10.5, color: 'var(--muted)', marginBottom: 2 }}>
+                    🕐 {ex.fromDeadline} → <b style={{ color: 'var(--txt2)' }}>{ex.toDeadline}</b> · {ex.reason} <span style={{ color: 'var(--muted2)' }}>({ex.extendedBy}, {ex.extendedAt})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {showExtend && (
+              <div style={{ marginTop: 8, padding: 10, borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 6 }}>Gia hạn deadline</div>
+                <input type="date" className="so-input" value={extDeadline} min={form.deadline} onChange={e => setExtDeadline(e.target.value)} style={{ marginBottom: 6 }} />
+                <textarea className="so-input so-textarea" rows={2} placeholder="Lý do gia hạn (bắt buộc)…" value={extReason} onChange={e => setExtReason(e.target.value)} style={{ marginBottom: 6 }} />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" onClick={extendDeadline} style={{ flex: 1, padding: '6px 0', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', background: '#D97706', color: '#fff', border: 'none' }}>Xác nhận</button>
+                  <button type="button" onClick={() => { setShowExtend(false); setExtReason('') }} style={{ padding: '6px 12px', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border2)' }}>Hủy</button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="so-field so-field--full">

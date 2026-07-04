@@ -27,6 +27,15 @@ export interface Task {
     evaluatedAt: string
     evaluatedBy: string
   }
+  extensions?: TaskExtension[] // lịch sử gia hạn deadline
+}
+
+export interface TaskExtension {
+  fromDeadline: string
+  toDeadline: string
+  reason: string
+  extendedBy: string
+  extendedAt: string   // YYYY-MM-DD
 }
 
 export const DEPARTMENTS = ['Ban Giám Đốc', 'Tài chính', 'Pháp lý', 'Kỹ thuật', 'Kinh doanh', 'Hành chính']
