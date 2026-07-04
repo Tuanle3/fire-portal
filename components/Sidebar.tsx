@@ -8,6 +8,7 @@ const NAV = [
   { section: 'MODULE CHÍNH', mod: 'm:dashboard', href: '/ecosystem',  icon: '🌐', label: 'Hệ sinh thái' },
   { section: 'MODULE CHÍNH', mod: 'm:ccn-pricing', href: '/ccn-pricing', icon: '🏭', label: 'Tính giá cho thuê CCN' },
   { section: 'MODULE CHÍNH', mod: 'm:noxh', href: '/noxh-nguyen-trai', icon: '🏗', label: 'NOXH Nguyễn Trãi' },
+  { section: 'MODULE CHÍNH', mod: 'm:dien-nuoc', href: '/dien-nuoc-sadt', icon: '⚡', label: 'Điện nước SA.ĐT' },
   { section: 'VẬN HÀNH',     mod: 'm:tasks',     href: '/tasks',      icon: '✓',  label: 'Công việc' },
   { section: 'HỆ THỐNG',     mod: 'm:users',     href: '/users',      icon: '👤', label: 'Quản lý User' },
 ]

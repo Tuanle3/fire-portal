@@ -53,6 +53,7 @@ const MODULES: PermModule[] = [
   { id: 'm:finance',   label: 'Tài chính',             icon: '💰' },
   { id: 'm:assets',    label: 'Tài sản đảm bảo',      icon: '🏦' },
   { id: 'm:data',      label: 'Nhật ký dòng tiền',    icon: '📊' },
+  { id: 'm:dien-nuoc', label: 'Điện nước SA.ĐT',       icon: '⚡' },
   { id: 'm:users',     label: 'Quản lý User',          icon: '👥' },
 ]
 
