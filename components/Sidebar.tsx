@@ -31,8 +31,8 @@ export default function Sidebar({ open, onClose }: { open?: boolean; onClose?: (
     <nav className={`sidebar${open ? ' open' : ''}`}>
       <div className="sb-brand">
         <button className="sb-close" onClick={onClose} aria-label="Đóng menu">✕</button>
-        <div className="sb-logo">F</div>
-        <div className="sb-name">Fire Portal</div>
+        <div className="sb-logo">S</div>
+        <div className="sb-name">Sơn An Group</div>
         <div className="sb-sub">MANAGEMENT SYSTEM</div>
       </div>
 
