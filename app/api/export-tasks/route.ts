@@ -5,19 +5,28 @@ import {
   AlignmentType, BorderStyle, WidthType, ShadingType, HeadingLevel,
   Header, Footer, PageNumber, VerticalAlign, PageBreak,
 } from 'docx'
-import { PRIORITY_LABEL, STATUS_LABEL, Task, TaskStatus, TaskPriority } from '@/lib/tasks-mock'
-import { getWeekRange, getMonthRange } from '@/lib/report-ranges'
+import { Task, TaskStatus, TaskPriority } from '@/lib/tasks-mock'
+import { getWeekRange, getMonthRange, taskOverlapsRange } from '@/lib/report-ranges'
+import { taskSortRank } from '@/lib/task-sort'
+
+// ── Font & màu thương hiệu (khớp mẫu "Báo cáo hiệu quả công việc") ─────────────
+const FONT_BODY  = 'Be Vietnam Pro'
+const FONT_TITLE = 'Playfair Display'
+const NAVY = '1C3557'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const BORDER    = { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' }
-const BORDERS   = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER }
+const BORDER  = { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' }
+const BORDERS = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER }
+const NO_BORDER  = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
+const NO_BORDERS = { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER }
 
-const PRIORITY_SHADE: Record<TaskPriority, string> = { thấp: 'F3F4F6', trung: 'EFF6FF', cao: 'FFFBEB', khẩn: 'FEF2F2' }
-const STATUS_SHADE:   Record<TaskStatus,   string> = { chua_bat_dau: 'F3F4F6', dang_lam: 'EFF6FF', hoan_thanh: 'F0FDF4', tre: 'FEF2F2' }
+const STATUS_SHADE:   Record<TaskStatus,   string> = { chua_bat_dau: 'F3F4F6', dang_lam: 'DAE9F7', hoan_thanh: 'D9F2D0', tre: 'F8D7D7' }
 const STATUS_LABEL_V: Record<TaskStatus,   string> = { chua_bat_dau: 'Chưa bắt đầu', dang_lam: 'Đang làm', hoan_thanh: 'Hoàn thành', tre: 'Trễ hạn' }
 
-function txt(text: string, opts: { bold?: boolean; size?: number; color?: string; italics?: boolean } = {}) {
-  return new TextRun({ text, font: 'Times New Roman', bold: opts.bold, size: opts.size ?? 20, color: opts.color, italics: opts.italics })
+const CONTENT_WIDTH = 13680 // landscape, lề 1080 mỗi bên trên khổ 15840
+
+function txt(text: string, opts: { bold?: boolean; size?: number; color?: string; italics?: boolean; font?: string } = {}) {
+  return new TextRun({ text, font: opts.font ?? FONT_BODY, bold: opts.bold, size: opts.size ?? 20, color: opts.color, italics: opts.italics })
 }
 
 function para(children: TextRun[], opts: { align?: typeof AlignmentType[keyof typeof AlignmentType]; before?: number; after?: number } = {}) {
@@ -33,21 +42,19 @@ function cell(text: string, width: number, opts: { bold?: boolean; shade?: strin
     verticalAlign: VerticalAlign.CENTER,
     children: [new Paragraph({
       alignment: opts.align ?? AlignmentType.LEFT,
-      children: [txt(text, { bold: opts.bold, size: opts.size ?? 18, color: opts.shade === '1C3557' ? 'FFFFFF' : opts.color })],
+      children: [txt(text, { bold: opts.bold, size: opts.size ?? 18, color: opts.shade === NAVY ? 'FFFFFF' : opts.color })],
     })],
   })
 }
 
-function hdrCell(text: string, width: number) { return cell(text, width, { bold: true, shade: '1C3557', align: AlignmentType.CENTER }) }
+function hdrCell(text: string, width: number) { return cell(text, width, { bold: true, shade: NAVY, align: AlignmentType.CENTER }) }
 
-// Cell with bold title on first line + italic description below
-function cellWithDesc(title: string, desc: string | undefined, width: number) {
+// Ô "Công việc": tên đậm + phòng ban/dự án nhỏ mờ ngay dưới
+function taskCell(t: Task, width: number) {
+  const sub = [t.department, t.project].filter(Boolean).join(' · ')
   const children = [
-    new TextRun({ text: title, font: 'Times New Roman', bold: true, size: 18 }),
-    ...(desc ? [
-      new TextRun({ text: '', break: 1 }),
-      new TextRun({ text: desc, font: 'Times New Roman', size: 16, color: '6B7280', italics: true }),
-    ] : []),
+    new TextRun({ text: t.title, font: FONT_BODY, bold: true, size: 19 }),
+    ...(sub ? [new TextRun({ text: '', break: 1 }), new TextRun({ text: sub, font: FONT_BODY, size: 15, color: '6B7280' })] : []),
   ]
   return new TableCell({
     borders: BORDERS,
@@ -61,202 +68,92 @@ function cellWithDesc(title: string, desc: string | undefined, width: number) {
 function h2(text: string) {
   return new Paragraph({
     heading: HeadingLevel.HEADING_2,
-    children: [txt(text, { bold: true, size: 26, color: '1C3557' })],
-    spacing: { before: 240, after: 120 },
-  })
-}
-
-function h3(text: string) {
-  return new Paragraph({
-    children: [txt(text, { bold: true, size: 22, color: '1C3557' })],
-    spacing: { before: 180, after: 80 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'E5E7EB', space: 1 } },
+    children: [txt(text, { bold: true, size: 24, color: NAVY })],
+    spacing: { before: 200, after: 100 },
   })
 }
 
 function sectionBanner(text: string, color: string) {
   return new Paragraph({
     children: [txt(text, { bold: true, size: 28, color: 'FFFFFF' })],
-    spacing: { before: 200, after: 200 },
+    spacing: { before: 260, after: 160 },
     shading: { fill: color, type: ShadingType.CLEAR },
     indent: { left: 200, right: 200 },
   })
 }
 
-// ── Date helpers ──────────────────────────────────────────────────────────────
-// ── Stats block ───────────────────────────────────────────────────────────────
-interface DeptData { dept: string; total: number; done: number; late: number; inProgress: number; urgent: number; avgProg: number; rate: number; tasks: Task[] }
-interface DeptAccum { total: number; done: number; late: number; inProgress: number; urgent: number; avgProg: number; tasks: Task[] }
-
-function buildStatsRows(tasks: Task[]): (Paragraph | Table)[] {
-  const totalTasks = tasks.length
-  const done       = tasks.filter(t => t.status === 'hoan_thanh').length
-  const inProg     = tasks.filter(t => t.status === 'dang_lam').length
-  const overdue    = tasks.filter(t => t.status === 'tre').length
-  const notStarted = tasks.filter(t => t.status === 'chua_bat_dau').length
-  const avgProg    = totalTasks ? Math.round(tasks.reduce((s, t) => s + t.progress, 0) / totalTasks) : 0
-
-  return [
-    new Table({
-      width: { size: 13680, type: WidthType.DXA },
-      columnWidths: [2280, 2280, 2280, 2280, 2280, 2280],
-      rows: [
-        new TableRow({ children: [hdrCell('Tổng số CV', 2280), hdrCell('Đang làm', 2280), hdrCell('Hoàn thành', 2280), hdrCell('Trễ hạn', 2280), hdrCell('Chưa bắt đầu', 2280), hdrCell('Tiến độ TB', 2280)] }),
-        new TableRow({ children: [
-          cell(String(totalTasks), 2280, { align: AlignmentType.CENTER, bold: true }),
-          cell(String(inProg),     2280, { align: AlignmentType.CENTER, shade: 'EFF6FF' }),
-          cell(String(done),       2280, { align: AlignmentType.CENTER, shade: 'F0FDF4' }),
-          cell(String(overdue),    2280, { align: AlignmentType.CENTER, shade: overdue > 0 ? 'FEF2F2' : undefined }),
-          cell(String(notStarted), 2280, { align: AlignmentType.CENTER, shade: 'F3F4F6' }),
-          cell(`${avgProg}%`,      2280, { align: AlignmentType.CENTER }),
-        ]}),
-      ],
-    }) as unknown as Paragraph,
-    para([], { after: 160 }),
-  ]
+// ── Tổng quan ngắn (1 dòng số liệu, không lập bảng nhiều tầng) ─────────────────
+function buildOverviewLine(tasks: Task[]): Paragraph {
+  const total   = tasks.length
+  const done    = tasks.filter(t => t.status === 'hoan_thanh').length
+  const late    = tasks.filter(t => t.status === 'tre').length
+  const doing   = tasks.filter(t => t.status === 'dang_lam').length
+  const avgProg = total ? Math.round(tasks.reduce((s, t) => s + t.progress, 0) / total) : 0
+  return para([
+    txt(`Tổng: `, { color: '6B7280', size: 19 }), txt(`${total} việc`, { bold: true, size: 19 }),
+    txt(`   ·   Hoàn thành: `, { color: '6B7280', size: 19 }), txt(`${done}`, { bold: true, size: 19, color: '166534' }),
+    txt(`   ·   Đang làm: `, { color: '6B7280', size: 19 }), txt(`${doing}`, { bold: true, size: 19, color: '1D4ED8' }),
+    txt(`   ·   Trễ hạn: `, { color: '6B7280', size: 19 }), txt(`${late}`, { bold: true, size: 19, color: late > 0 ? 'C00000' : '6B7280' }),
+    txt(`   ·   Tiến độ TB: `, { color: '6B7280', size: 19 }), txt(`${avgProg}%`, { bold: true, size: 19, color: NAVY }),
+  ], { before: 40, after: 160 })
 }
 
-function buildDeptRows(tasks: Task[]): DeptData[] {
-  const deptMap = new Map<string, DeptAccum>()
-  for (const t of tasks) {
-    const key = t.department || 'Chưa phân loại'
-    const d = deptMap.get(key) ?? { total: 0, done: 0, late: 0, inProgress: 0, urgent: 0, avgProg: 0, tasks: [] }
-    d.total++; d.tasks.push(t)
-    if (t.status === 'hoan_thanh') d.done++
-    if (t.status === 'tre')        d.late++
-    if (t.status === 'dang_lam')   d.inProgress++
-    if (t.priority === 'khẩn')     d.urgent++
-    d.avgProg += t.progress
-    deptMap.set(key, d)
-  }
-  return [...deptMap.entries()].map(([dept, d]): DeptData => ({
-    dept,
-    total:      d.total,
-    done:       d.done,
-    late:       d.late,
-    inProgress: d.inProgress,
-    urgent:     d.urgent,
-    tasks:      d.tasks,
-    avgProg:    d.total ? Math.round(d.avgProg / d.total) : 0,
-    rate:       d.total ? Math.round((d.done / d.total) * 100) : 0,
-  })).sort((a, b) => b.late - a.late || b.urgent - a.urgent || b.total - a.total)
-}
-
-function buildDeptSummaryTable(depts: DeptData[]): (Paragraph | Table)[] {
-  return [
-    new Table({
-      width: { size: 13680, type: WidthType.DXA },
-      columnWidths: [2736, 1368, 1368, 1368, 1710, 1710, 3420],
-      rows: [
-        new TableRow({ children: [
-          hdrCell('Phòng ban', 2736), hdrCell('Tổng CV', 1368),
-          hdrCell('HT', 1368),        hdrCell('Trễ', 1368),
-          hdrCell('Tỷ lệ HT (%)', 1710), hdrCell('TĐ TB (%)', 1710),
-          hdrCell('Có đề xuất / diễn biến', 3420),
-        ]}),
-        ...depts.map(d => {
-          const hasUpdate = d.tasks.filter(t => t.dienBien || t.deXuat).length
-          const note = hasUpdate > 0 ? `${hasUpdate} / ${d.total} công việc có cập nhật` : '—'
-          return new TableRow({ children: [
-            cell(d.dept,          2736, { bold: d.late > 0 }),
-            cell(String(d.total), 1368, { align: AlignmentType.CENTER }),
-            cell(String(d.done),  1368, { align: AlignmentType.CENTER, shade: 'F0FDF4' }),
-            cell(String(d.late),  1368, { align: AlignmentType.CENTER, shade: d.late > 0 ? 'FEF2F2' : undefined }),
-            cell(`${d.rate}%`,    1710, { align: AlignmentType.CENTER }),
-            cell(`${d.avgProg}%`, 1710, { align: AlignmentType.CENTER }),
-            cell(note,            3420, { size: 16 }),
-          ]})
-        }),
-      ],
-    }) as unknown as Paragraph,
-    para([], { after: 160 }),
-  ]
-}
-
-function buildDeptDetailSections(depts: DeptData[]): Paragraph[] {
-  const out: Paragraph[] = []
-  depts.forEach((d, idx) => {
-    out.push(h3(`${String.fromCharCode(65 + idx)}. ${d.dept.toUpperCase()} — ${d.total} công việc · HT: ${d.rate}% · TĐ TB: ${d.avgProg}%`))
-    out.push(new Table({
-      width: { size: 13680, type: WidthType.DXA },
-      columnWidths: [3420, 2052, 2052, 2052, 2052, 2052],
-      rows: [
-        new TableRow({ children: [hdrCell('Tổng CV', 3420), hdrCell('Đang làm', 2052), hdrCell('Hoàn thành', 2052), hdrCell('Trễ hạn', 2052), hdrCell('Khẩn cấp', 2052), hdrCell('Tiến độ TB', 2052)] }),
-        new TableRow({ children: [
-          cell(String(d.total),      3420, { align: AlignmentType.CENTER, bold: true }),
-          cell(String(d.inProgress), 2052, { align: AlignmentType.CENTER, shade: 'EFF6FF' }),
-          cell(String(d.done),       2052, { align: AlignmentType.CENTER, shade: 'F0FDF4' }),
-          cell(String(d.late),       2052, { align: AlignmentType.CENTER, shade: d.late > 0 ? 'FEF2F2' : undefined }),
-          cell(String(d.urgent),     2052, { align: AlignmentType.CENTER, shade: d.urgent > 0 ? 'FFFBEB' : undefined }),
-          cell(`${d.avgProg}%`,      2052, { align: AlignmentType.CENTER }),
-        ]}),
-      ],
-    }) as unknown as Paragraph)
-    out.push(para([]))
-
-    if (d.tasks.length > 0) {
-      out.push(para([txt('Danh sách công việc:', { bold: true, size: 20, color: '374151' })], { before: 80 }))
-      const sorted = [...d.tasks].sort((a, b) => {
-        const order = { khẩn: 0, cao: 1, trung: 2, thấp: 3 }
-        return order[a.priority] - order[b.priority]
-      })
-      out.push(new Table({
-        width: { size: 13680, type: WidthType.DXA },
-        columnWidths: [2600, 1500, 1320, 1400, 1200, 1080, 2840, 1740],
-        rows: [
-          new TableRow({ tableHeader: true, children: [
-            hdrCell('Tên công việc', 2600), hdrCell('Người phụ trách', 1500),
-            hdrCell('Ưu tiên', 1320),       hdrCell('Trạng thái', 1400),
-            hdrCell('Tiến độ', 1200),        hdrCell('Deadline', 1080),
-            hdrCell('Diễn biến', 2840),      hdrCell('Đề xuất / Hỗ trợ', 1740),
-          ]}),
-          ...sorted.map(t => new TableRow({ children: [
-            cellWithDesc(t.title, t.description, 2600),
-            cell(t.assignedTo || '—',        1500),
-            cell(PRIORITY_LABEL[t.priority], 1320, { shade: PRIORITY_SHADE[t.priority], align: AlignmentType.CENTER }),
-            cell(STATUS_LABEL_V[t.status],   1400, { shade: STATUS_SHADE[t.status],     align: AlignmentType.CENTER }),
-            cell(`${t.progress}%`,           1200, { align: AlignmentType.CENTER }),
-            cell(t.deadline || '—',          1080, { align: AlignmentType.CENTER }),
-            cell(t.dienBien || '—',          2840, { size: 16 }),
-            cell(t.deXuat   || '—',          1740, { size: 16, shade: t.deXuat ? 'FFFBEB' : undefined }),
-          ]})),
-        ],
-      }) as unknown as Paragraph)
-    }
-    out.push(para([], { after: 200 }))
-    if (idx < depts.length - 1) out.push(new Paragraph({ children: [new PageBreak()] }))
+// ── Bảng công việc gộp — 1 bảng duy nhất, sắp khẩn lên trên / hoàn thành xuống dưới ──
+function buildTaskTable(tasks: Task[]): Table {
+  const sorted = [...tasks].sort((a, b) => taskSortRank(a) - taskSortRank(b))
+  return new Table({
+    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+    columnWidths: [3800, 1600, 1200, 1000, 1300, 4780],
+    rows: [
+      new TableRow({ tableHeader: true, children: [
+        hdrCell('Công việc', 3800), hdrCell('Người phụ trách', 1600),
+        hdrCell('Deadline', 1200),  hdrCell('Tiến độ', 1000),
+        hdrCell('Trạng thái', 1300), hdrCell('Diễn biến / Đề xuất', 4780),
+      ]}),
+      ...sorted.map(t => new TableRow({ children: [
+        taskCell(t, 3800),
+        cell(t.assignedTo || '—', 1600),
+        cell(t.deadline || '—',   1200, { align: AlignmentType.CENTER }),
+        cell(`${t.progress}%`,   1000, { align: AlignmentType.CENTER }),
+        cell(STATUS_LABEL_V[t.status], 1300, { shade: STATUS_SHADE[t.status], align: AlignmentType.CENTER }),
+        cell([t.dienBien, t.deXuat].filter(Boolean).join(' — ') || '—', 4780, { size: 16 }),
+      ]})),
+    ],
   })
+}
+
+function buildPart(tasks: Task[], bannerLabel: string, bannerColor: string): (Paragraph | Table)[] {
+  const out: (Paragraph | Table)[] = [sectionBanner(bannerLabel, bannerColor)]
+  if (tasks.length === 0) {
+    out.push(para([txt('Không có công việc nào trong kỳ này.', { size: 20, color: '6B7280', italics: true })], { before: 80, after: 200 }))
+    return out
+  }
+  out.push(buildOverviewLine(tasks))
+  out.push(buildTaskTable(tasks))
+  out.push(para([], { after: 240 }))
   return out
 }
 
-function buildAllTasksTable(tasks: Task[]): (Paragraph | Table)[] {
-  return [
-    new Table({
-      width: { size: 13680, type: WidthType.DXA },
-      columnWidths: [2000, 1300, 1300, 1000, 1100, 1100, 900, 900, 1840, 1240],
-      rows: [
-        new TableRow({ tableHeader: true, children: [
-          hdrCell('Tên công việc', 2400), hdrCell('Người phụ trách', 1400),
-          hdrCell('Phòng ban', 1500),
-          hdrCell('Ưu tiên', 1200),       hdrCell('Trạng thái', 1200),
-          hdrCell('Tiến độ', 900),         hdrCell('Deadline', 900),
-          hdrCell('Diễn biến', 2040),      hdrCell('Đề xuất', 1140),
-        ]}),
-        ...tasks.map(t => new TableRow({ children: [
-          cellWithDesc(t.title, t.description, 2400),
-          cell(t.assignedTo || '—',        1400),
-          cell(t.department || '—',        1500),
-          cell(PRIORITY_LABEL[t.priority], 1200, { shade: PRIORITY_SHADE[t.priority], align: AlignmentType.CENTER }),
-          cell(STATUS_LABEL_V[t.status],   1200, { shade: STATUS_SHADE[t.status],     align: AlignmentType.CENTER }),
-          cell(`${t.progress}%`,            900, { align: AlignmentType.CENTER }),
-          cell(t.deadline || '—',           900, { align: AlignmentType.CENTER }),
-          cell(t.dienBien || '—',          2040, { size: 16 }),
-          cell(t.deXuat   || '—',          1140, { size: 16, shade: t.deXuat ? 'FFFBEB' : undefined }),
-        ]})),
-      ],
-    }) as unknown as Paragraph,
-    para([], { after: 300 }),
-  ]
+// ── Khối chữ ký 3 cột (bảng không viền, chỉ để canh layout) ────────────────────
+function signatureBlock(reportedBy: string): Table {
+  const sigCell = (label: string, name: string) => new TableCell({
+    borders: NO_BORDERS,
+    width: { size: CONTENT_WIDTH / 3, type: WidthType.DXA },
+    children: [
+      para([txt(label, { bold: true, size: 20 })], { align: AlignmentType.CENTER, after: 60 }),
+      para([txt('(Ký, ghi rõ họ tên)', { size: 16, color: '6B7280', italics: true })], { align: AlignmentType.CENTER, after: 600 }),
+      para([txt(name || '', { bold: true, size: 20 })], { align: AlignmentType.CENTER }),
+    ],
+  })
+  return new Table({
+    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+    columnWidths: [CONTENT_WIDTH / 3, CONTENT_WIDTH / 3, CONTENT_WIDTH / 3],
+    rows: [new TableRow({ children: [
+      sigCell('Người lập báo cáo', reportedBy),
+      sigCell('Trưởng phòng xác nhận', ''),
+      sigCell('Ban Giám đốc phê duyệt', ''),
+    ]})],
+  })
 }
 
 // ── Build document ────────────────────────────────────────────────────────────
@@ -267,62 +164,40 @@ function buildDoc(
   subtitle: string,
   currentLabel: string,
   nextLabel: string,
+  reportedBy: string,
 ) {
   const today = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-  const currentDepts = buildDeptRows(currentTasks)
-
   const children: (Paragraph | Table)[] = [
-    // ── Cover ──
-    new Paragraph({ heading: HeadingLevel.HEADING_1, children: [txt(title, { bold: true, size: 44, color: '1C3557' })], spacing: { after: 60 } }),
-    para([txt(subtitle || `Ngày xuất: ${today}`, { size: 20, color: '6B7280' })], { after: 280 }),
-
-    // ── PHẦN A: KỲ HIỆN TẠI ──
-    sectionBanner(`▌ PHẦN A — ${currentLabel.toUpperCase()}`, '1C3557'),
-    h2('I. TỔNG QUAN'),
-    ...buildStatsRows(currentTasks),
-    h2('II. TÓM TẮT THEO PHÒNG BAN'),
-    ...buildDeptSummaryTable(currentDepts),
-    h2('III. CHI TIẾT THEO PHÒNG BAN'),
-    para([txt('Mỗi phòng ban hiển thị danh sách công việc kèm diễn biến và đề xuất.', { size: 18, color: '6B7280', italics: true })], { after: 200 }),
-    ...buildDeptDetailSections(currentDepts),
-    new Paragraph({ children: [new PageBreak()] }),
-    h2('IV. DANH SÁCH TOÀN BỘ CÔNG VIỆC'),
-    ...buildAllTasksTable(currentTasks),
+    // ── Tiêu đề & thông tin báo cáo ──
+    new Paragraph({ heading: HeadingLevel.HEADING_1, children: [txt(title, { bold: true, size: 44, color: NAVY, font: FONT_TITLE })], spacing: { after: 100 } }),
+    para([txt(subtitle || `Ngày xuất: ${today}`, { size: 20, color: '6B7280' })], { after: 40 }),
+    para([txt('Người lập báo cáo: ', { size: 19, color: '374151' }), txt(reportedBy || '—', { bold: true, size: 19 })], { after: 20 }),
+    para([txt('Ngày xuất báo cáo: ', { size: 19, color: '374151' }), txt(today, { bold: true, size: 19 })], { after: 240 }),
   ]
 
-  // ── PHẦN B: KỲ TIẾP THEO (nếu có) ──
-  if (nextTasks && nextTasks.length > 0) {
-    const nextDepts = buildDeptRows(nextTasks)
+  if (nextTasks !== null) {
+    // ── Đúng 2 phần theo yêu cầu: kỳ này / kỳ tới ──
+    children.push(...buildPart(currentTasks, `PHẦN 1: BÁO CÁO CÔNG VIỆC ${currentLabel.toUpperCase()}`, NAVY))
     children.push(new Paragraph({ children: [new PageBreak()] }))
-    children.push(sectionBanner(`▌ PHẦN B — KẾ HOẠCH ${nextLabel.toUpperCase()}`, '0891B2'))
-    children.push(h2('I. TỔNG QUAN KỲ TỚI'))
-    children.push(...buildStatsRows(nextTasks))
-    children.push(h2('II. TÓM TẮT THEO PHÒNG BAN'))
-    children.push(...buildDeptSummaryTable(nextDepts))
-    children.push(h2('III. DANH SÁCH CÔNG VIỆC KẾ HOẠCH'))
-    children.push(...buildAllTasksTable(nextTasks))
-  } else if (nextTasks && nextTasks.length === 0) {
-    children.push(new Paragraph({ children: [new PageBreak()] }))
-    children.push(sectionBanner(`▌ PHẦN B — KẾ HOẠCH ${nextLabel.toUpperCase()}`, '0891B2'))
-    children.push(para([txt('Chưa có công việc nào được lên kế hoạch cho kỳ này.', { size: 20, color: '6B7280', italics: true })], { before: 200 }))
+    children.push(...buildPart(nextTasks, `PHẦN 2: BÁO CÁO CÔNG VIỆC ${nextLabel.toUpperCase()}`, '0891B2'))
+  } else {
+    // ── Chế độ tuỳ chọn: chỉ 1 phần, không đánh số ──
+    children.push(...buildPart(currentTasks, `BÁO CÁO CÔNG VIỆC — ${currentLabel.toUpperCase()}`, NAVY))
   }
 
-  // ── Signature ──
-  children.push(para([txt(`${today}`, { size: 18, color: '6B7280', italics: true })], { before: 300, after: 0 }))
-  children.push(new Paragraph({ alignment: AlignmentType.RIGHT, children: [txt(`${today}`, { size: 18, color: '6B7280', italics: true })] }))
-  children.push(new Paragraph({ alignment: AlignmentType.RIGHT, children: [txt('Người lập báo cáo', { bold: true, size: 22 })], spacing: { after: 600 } }))
+  children.push(signatureBlock(reportedBy))
 
   return new Document({
     styles: {
-      default: { document: { run: { font: 'Times New Roman', size: 22 } } },
+      default: { document: { run: { font: FONT_BODY, size: 20 } } },
       paragraphStyles: [
         { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
-          run: { size: 36, bold: true, font: 'Times New Roman', color: '1C3557' },
+          run: { size: 36, bold: true, font: FONT_TITLE, color: NAVY },
           paragraph: { spacing: { before: 240, after: 120 }, outlineLevel: 0 } },
         { id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true,
-          run: { size: 28, bold: true, font: 'Times New Roman', color: '1C3557' },
-          paragraph: { spacing: { before: 240, after: 120 }, outlineLevel: 1 } },
+          run: { size: 24, bold: true, font: FONT_BODY, color: NAVY },
+          paragraph: { spacing: { before: 200, after: 100 }, outlineLevel: 1 } },
       ],
     },
     sections: [{
@@ -331,12 +206,12 @@ function buildDoc(
       },
       headers: {
         default: new Header({ children: [new Paragraph({
-          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '1C3557', space: 1 } },
+          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: NAVY, space: 1 } },
           children: [
-            txt('BÁO CÁO TÌNH TRẠNG CÔNG VIỆC', { bold: true, size: 20, color: '1C3557' }),
+            txt('BÁO CÁO TÌNH TRẠNG CÔNG VIỆC', { bold: true, size: 20, color: NAVY }),
             txt(`\t${today}`, { size: 18, color: '6B7280' }),
           ],
-          tabStops: [{ type: 'right' as never, position: 13680 }],
+          tabStops: [{ type: 'right' as never, position: CONTENT_WIDTH }],
         })] }),
       },
       footers: {
@@ -345,9 +220,9 @@ function buildDoc(
           alignment: AlignmentType.CENTER,
           children: [
             txt('Trang ', { size: 18, color: '9CA3AF' }),
-            new TextRun({ children: [PageNumber.CURRENT], size: 18, font: 'Times New Roman', color: '9CA3AF' }),
+            new TextRun({ children: [PageNumber.CURRENT], size: 18, font: FONT_BODY, color: '9CA3AF' }),
             txt(' / ', { size: 18, color: '9CA3AF' }),
-            new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, font: 'Times New Roman', color: '9CA3AF' }),
+            new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, font: FONT_BODY, color: '9CA3AF' }),
           ],
         })] }),
       },
@@ -365,12 +240,12 @@ export async function POST(req: NextRequest) {
       reportMode = 'custom',
       status, priority, department, project,
       dateFrom, dateTo,
-      title, subtitle,
+      title, subtitle, reportedBy,
     } = body as {
       tasks?: Task[]
       reportMode?: 'week' | 'month' | 'custom'
       status?: string; priority?: string; department?: string; project?: string
-      dateFrom?: string; dateTo?: string; title?: string; subtitle?: string
+      dateFrom?: string; dateTo?: string; title?: string; subtitle?: string; reportedBy?: string
     }
 
     // Apply common filters
@@ -390,8 +265,8 @@ export async function POST(req: NextRequest) {
     if (reportMode === 'week') {
       const cur  = getWeekRange(0)
       const next = getWeekRange(1)
-      currentTasks = allTasks.filter(t => t.deadline >= cur.from && t.deadline <= cur.to)
-      nextTasks    = allTasks.filter(t => t.deadline >= next.from && t.deadline <= next.to)
+      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to))
+      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to))
       currentLabel = `Tuần này (${cur.label})`
       nextLabel    = `Tuần tới (${next.label})`
       docTitle    = title || 'BÁO CÁO CÔNG VIỆC TUẦN'
@@ -399,20 +274,19 @@ export async function POST(req: NextRequest) {
     } else if (reportMode === 'month') {
       const cur  = getMonthRange(0)
       const next = getMonthRange(1)
-      currentTasks = allTasks.filter(t => t.deadline >= cur.from && t.deadline <= cur.to)
-      nextTasks    = allTasks.filter(t => t.deadline >= next.from && t.deadline <= next.to)
+      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to))
+      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to))
       currentLabel = cur.label
       nextLabel    = next.label
       docTitle    = title || 'BÁO CÁO CÔNG VIỆC THÁNG'
       docSubtitle  = `${cur.label} · Xuất ngày ${new Date().toLocaleDateString('vi-VN')}`
     } else {
       // custom range
-      if (dateFrom) currentTasks = currentTasks.filter(t => t.deadline >= dateFrom)
-      if (dateTo)   currentTasks = currentTasks.filter(t => t.deadline && t.deadline <= dateTo)
+      if (dateFrom || dateTo) currentTasks = currentTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, dateFrom, dateTo))
       currentLabel = subtitle || 'Toàn bộ công việc'
     }
 
-    const doc    = buildDoc(currentTasks, nextTasks, docTitle, docSubtitle, currentLabel, nextLabel)
+    const doc    = buildDoc(currentTasks, nextTasks, docTitle, docSubtitle, currentLabel, nextLabel, reportedBy || '')
     const buffer = await Packer.toBuffer(doc)
     const uint8  = new Uint8Array(buffer)
 

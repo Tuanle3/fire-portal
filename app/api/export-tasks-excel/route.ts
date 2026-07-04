@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 import * as XLSX from 'xlsx'
 import { Task, TaskStatus, TaskPriority, PRIORITY_LABEL } from '@/lib/tasks-mock'
-import { getWeekRange, getMonthRange } from '@/lib/report-ranges'
+import { getWeekRange, getMonthRange, taskOverlapsRange } from '@/lib/report-ranges'
 
 const STATUS_LABEL_V: Record<TaskStatus, string> = {
   chua_bat_dau: 'Chưa bắt đầu',
@@ -179,15 +179,14 @@ export async function POST(req: NextRequest) {
 
     if (reportMode === 'week') {
       const cur = getWeekRange(0); const nxt = getWeekRange(1)
-      currentTasks = allTasks.filter(t => t.deadline >= cur.from && t.deadline <= cur.to)
-      nextTasks    = allTasks.filter(t => t.deadline >= nxt.from && t.deadline <= nxt.to)
+      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to))
+      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, nxt.from, nxt.to))
     } else if (reportMode === 'month') {
       const cur = getMonthRange(0); const nxt = getMonthRange(1)
-      currentTasks = allTasks.filter(t => t.deadline >= cur.from && t.deadline <= cur.to)
-      nextTasks    = allTasks.filter(t => t.deadline >= nxt.from && t.deadline <= nxt.to)
+      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to))
+      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, nxt.from, nxt.to))
     } else {
-      if (dateFrom) currentTasks = currentTasks.filter(t => t.deadline >= dateFrom)
-      if (dateTo)   currentTasks = currentTasks.filter(t => t.deadline && t.deadline <= dateTo)
+      if (dateFrom || dateTo) currentTasks = currentTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, dateFrom, dateTo))
     }
 
     const wb = XLSX.utils.book_new()

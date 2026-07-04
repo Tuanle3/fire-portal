@@ -11,13 +11,13 @@ import { subscribeToTasks, saveTask as fsSave, deleteTask as fsDelete, seedMockT
 import { subscribeToUsers, StaffUser } from '@/lib/users-store'
 import { subscribeToDepartments, Department } from '@/lib/departments-store'
 import { subscribeToProjects, Project } from '@/lib/projects-store'
-import { getWeekRange, getMonthRange } from '@/lib/report-ranges'
+import { getWeekRange, getMonthRange, taskOverlapsRange } from '@/lib/report-ranges'
+import { PRIORITY_ORDER, taskSortRank } from '@/lib/task-sort'
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 const PRIORITY_COLOR: Record<TaskPriority, string> = {
   khẩn: '#DC2626', cao: '#D97706', trung: '#2563EB', thấp: '#9CA3AF',
 }
-const PRIORITY_ORDER: Record<TaskPriority, number> = { khẩn: 0, cao: 1, trung: 2, thấp: 3 }
 
 const STATUS_CFG: Record<TaskStatus, { label: string; color: string; bg: string; border: string }> = {
   chua_bat_dau: { label: 'Chưa bắt đầu', color: '#374151', bg: '#F3F4F6', border: '#D1D5DB' },
@@ -46,10 +46,6 @@ const EMPTY_TASK: Omit<Task,'id'|'createdAt'|'updatedAt'> = {
 type View = 'list' | 'kanban' | 'analytics' | 'dept' | 'gantt' | 'timeline'
 
 // ── Hierarchy helpers ────────────────────────────────────────────────────────
-// Việc hoàn thành luôn xuống dưới cùng; trong nhóm chưa hoàn thành, việc khẩn lên trên.
-function taskSortRank(t: Task): number {
-  return (t.status === 'hoan_thanh' ? 10 : 0) + PRIORITY_ORDER[t.priority]
-}
 function buildHierarchy(tasks: Task[]): { task: Task; level: number }[] {
   const result: { task: Task; level: number }[] = []
   function add(t: Task, level: number) {
@@ -616,13 +612,21 @@ function TimelineView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) 
     }
     const map = new Map<string, { monday: Date; tasks: Task[] }>()
     const noDate: Task[] = []
+    // Việc kéo dài nhiều tuần (createdAt → deadline) được đưa vào MỌI tuần nó còn
+    // chạy, không chỉ tuần trùng deadline — để không bị "mất tích" khi xem tuần sau.
     for (const t of tasks) {
       if (!t.deadline) { noDate.push(t); continue }
-      const d = new Date(t.deadline)
-      const mon = getMonday(d)
-      const key = mon.toISOString().slice(0,10)
-      if (!map.has(key)) map.set(key, { monday: mon, tasks: [] })
-      map.get(key)!.tasks.push(t)
+      const startMon = getMonday(t.createdAt ? new Date(t.createdAt) : new Date(t.deadline))
+      const endMon   = getMonday(new Date(t.deadline))
+      let cursor = startMon
+      let guard = 0
+      while (cursor.getTime() <= endMon.getTime() && guard < 260) { // giới hạn ~5 năm để tránh vòng lặp bất thường
+        const key = cursor.toISOString().slice(0,10)
+        if (!map.has(key)) map.set(key, { monday: new Date(cursor), tasks: [] })
+        map.get(key)!.tasks.push(t)
+        cursor = new Date(cursor); cursor.setDate(cursor.getDate() + 7)
+        guard++
+      }
     }
     const sorted = [...map.entries()]
       .sort(([a],[b]) => a.localeCompare(b))
@@ -1298,9 +1302,10 @@ function SlideOver({ task, allTasks, currentUser, currentStaff, staffUsers, depa
 }
 
 // ── Export modal ──────────────────────────────────────────────────────────────
-function ExportModal({ tasks, filters, onClose }: {
+function ExportModal({ tasks, filters, reportedBy, onClose }: {
   tasks: Task[]
   filters: { status: string; priority: string; department: string; project: string; dateFrom: string; dateTo: string }
+  reportedBy: string
   onClose: () => void
 }) {
   const [loadingDocx, setLoadingDocx] = useState(false)
@@ -1321,20 +1326,19 @@ function ExportModal({ tasks, filters, onClose }: {
     if (mode === 'week') {
       const cur = getWeekRange(0), next = getWeekRange(1)
       return [
-        { label: `Tuần này (${cur.label})`, tasks: tasks.filter(t => t.deadline >= cur.from && t.deadline <= cur.to) },
-        { label: `Tuần tới (${next.label})`, tasks: tasks.filter(t => t.deadline >= next.from && t.deadline <= next.to) },
+        { label: `Tuần này (${cur.label})`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to)) },
+        { label: `Tuần tới (${next.label})`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to)) },
       ]
     }
     if (mode === 'month') {
       const cur = getMonthRange(0), next = getMonthRange(1)
       return [
-        { label: cur.label,  tasks: tasks.filter(t => t.deadline >= cur.from && t.deadline <= cur.to) },
-        { label: next.label, tasks: tasks.filter(t => t.deadline >= next.from && t.deadline <= next.to) },
+        { label: cur.label,  tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to)) },
+        { label: next.label, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to)) },
       ]
     }
     let t = tasks
-    if (filters.dateFrom) t = t.filter(x => x.deadline >= filters.dateFrom)
-    if (filters.dateTo)   t = t.filter(x => x.deadline && x.deadline <= filters.dateTo)
+    if (filters.dateFrom || filters.dateTo) t = t.filter(x => taskOverlapsRange(x.deadline, x.createdAt, filters.dateFrom, filters.dateTo))
     return [{ label: 'Theo bộ lọc hiện tại', tasks: t }]
   }, [mode, tasks, filters])
   const previewTotal = previewGroups.reduce((s, g) => s + g.tasks.length, 0)
@@ -1345,6 +1349,7 @@ function ExportModal({ tasks, filters, onClose }: {
     ...(mode === 'custom' ? filters : {}),
     title,
     subtitle,
+    reportedBy,
   })
 
   const doDownload = async (url: string, filename: string, setLoad: (v: boolean) => void) => {
@@ -1534,18 +1539,12 @@ function TasksPageInner() {
 
   // quick preset helpers
   const applyWeek = (offset: number) => {
-    const now = new Date(); const day = now.getDay() || 7
-    const mon = new Date(now); mon.setDate(now.getDate() - day + 1 + offset * 7)
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
-    setFDateFrom(mon.toISOString().slice(0, 10))
-    setFDateTo(sun.toISOString().slice(0, 10))
+    const r = getWeekRange(offset)
+    setFDateFrom(r.from); setFDateTo(r.to)
   }
   const applyMonth = (offset: number) => {
-    const now = new Date()
-    const y = now.getFullYear(); const m = now.getMonth() + offset
-    const from = new Date(y, m, 1).toISOString().slice(0, 10)
-    const to   = new Date(y, m + 1, 0).toISOString().slice(0, 10)
-    setFDateFrom(from); setFDateTo(to)
+    const r = getMonthRange(offset)
+    setFDateFrom(r.from); setFDateTo(r.to)
   }
 
   // ── RBAC ─────────────────────────────────────────────────────────────────────
@@ -1575,8 +1574,7 @@ function TasksPageInner() {
     if (fPriority) t = t.filter(x => x.priority === fPriority)
     if (fDept)     t = t.filter(x => x.department === fDept)
     if (fProject)  t = t.filter(x => x.project === fProject)
-    if (fDateFrom) t = t.filter(x => x.deadline >= fDateFrom)
-    if (fDateTo)   t = t.filter(x => x.deadline && x.deadline <= fDateTo)
+    if (fDateFrom || fDateTo) t = t.filter(x => taskOverlapsRange(x.deadline, x.createdAt, fDateFrom, fDateTo))
     return t
   }, [visibleTasks, search, fStatus, fPriority, fDept, fProject, fDateFrom, fDateTo])
 
@@ -1819,6 +1817,7 @@ function TasksPageInner() {
         <ExportModal
           tasks={tasks}
           filters={{ status: fStatus, priority: fPriority, department: fDept, project: fProject, dateFrom: fDateFrom, dateTo: fDateTo }}
+          reportedBy={currentUser}
           onClose={() => setShowExport(false)}
         />
       )}
