@@ -59,6 +59,28 @@ function buildHierarchy(tasks: Task[]): { task: Task; level: number }[] {
   return result
 }
 
+// Khi 1 đầu việc con được lưu, tính lại progress của cha = trung bình progress các con,
+// rồi lan tiếp lên ông/tổ tiên xa hơn nếu có (dừng khi giá trị không đổi).
+function rollupParentProgress(tasks: Task[], changed: Task): Task[] {
+  const byId = new Map(tasks.map(t => [t.id, t]))
+  byId.set(changed.id, changed)
+  const updates: Task[] = []
+  let current = changed
+  while (current.parentId) {
+    const parent = byId.get(current.parentId)
+    if (!parent) break
+    const children = tasks.filter(s => s.parentId === parent.id && s.id !== current.id)
+    children.push(current)
+    const avg = Math.round(children.reduce((sum, c) => sum + c.progress, 0) / children.length)
+    if (avg === parent.progress) break
+    const updatedParent: Task = { ...parent, progress: avg, updatedAt: new Date().toISOString().slice(0, 10) }
+    updates.push(updatedParent)
+    byId.set(parent.id, updatedParent)
+    current = updatedParent
+  }
+  return updates
+}
+
 // ── Evaluation badge ─────────────────────────────────────────────────────────
 function EvalBadge({ result }: { result: TaskEval }) {
   const cfg = result === 'dat'
@@ -1440,7 +1462,10 @@ function TasksPageInner() {
     hasDateFilter && { label: `${fDateFrom || '…'} → ${fDateTo || '…'}`, clear: () => { setFDateFrom(''); setFDateTo('') } },
   ].filter(Boolean) as { label: string; clear: () => void }[]
 
-  const saveTask   = (t: Task) => { fsSave(t).catch(console.error) }
+  const saveTask   = (t: Task) => {
+    fsSave(t).catch(console.error)
+    if (t.parentId) rollupParentProgress(tasks, t).forEach(p => fsSave(p).catch(console.error))
+  }
   const deleteTask = (id: string) => { fsDelete(id).catch(console.error) }
   const duplicateTask = (original: Task) => {
     const now    = new Date().toISOString().slice(0, 10)
