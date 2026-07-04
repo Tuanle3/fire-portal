@@ -6,11 +6,12 @@ import { Project } from '../_lib/types'
 export function TabPhapLy({ p, donVi='ty' }: { p: Project; donVi?: 'ty'|'trieu'|'dong' }) {
   const [docs, setDocs]       = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string|null>(null)
   const [phong, setPhong]     = useState('Tất cả phòng ban')
 
   const load = () => {
     setLoading(true)
-    fetchNoxhTable(`${p.prefix}_Phap_Ly`).then(({data})=>{ setDocs(data??[]); setLoading(false) })
+    fetchNoxhTable(`${p.prefix}_Phap_Ly`).then(({data,error})=>{ setDocs(data??[]); setError(error?String(error):null); setLoading(false) })
   }
   useEffect(()=>{ load() },[])
 
@@ -57,6 +58,11 @@ export function TabPhapLy({ p, donVi='ty' }: { p: Project; donVi?: 'ty'|'trieu'|
 
   return (
     <div>
+      {error && (
+        <div style={{background:'#FDECEC',color:'#DC2626',border:'1px solid #DC2626',borderRadius:8,padding:'10px 14px',fontSize:12.5,fontWeight:600,marginBottom:12}}>
+          ⚠ Lỗi tải dữ liệu pháp lý: {error}
+        </div>
+      )}
       {/* Toolbar */}
       <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',marginBottom:14}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
