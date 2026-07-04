@@ -2,6 +2,7 @@ import type { Project } from './types'
 
 export const noxhNguyenTrai: Project = {
   id:0, name:'NOXH Nguyễn Trãi', type:'NOXH', loc:'P. Sơn Qui, Đồng Tháp', prefix:'NOXH_NT',
+  sheetId:'15shx_icL1B07iVP-Ho7U8Ixu3fyotMTynKhkevmFk7I',
   status:'active', statusLabel:'Đang triển khai',
   area:'1.2 ha', totalCap:'285 tỷ', totalCapNum:285, loan:'85 tỷ',
   progress:45, startDate:'15/01/2025', estEnd:'31/12/2026', lastUpdated:'10/06/2026',

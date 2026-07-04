@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchSheetCSV, parseCSV, writeToGAS } from '@/lib/gasClient'
+import { writeToGAS } from '@/lib/gasClient'
+import { fetchChungTu } from '@/lib/sheets-chung-tu'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const sheet = searchParams.get('sheet') ?? 'Chung_Tu'
+  const sheetId = searchParams.get('sheetId')
+  if (!sheetId) return NextResponse.json({ error: 'missing sheetId' }, { status: 400 })
   try {
-    const csv  = await fetchSheetCSV(sheet)
-    const rows = parseCSV(csv)
-    return NextResponse.json({ rows })
+    const { thu, chi } = await fetchChungTu(sheetId)
+    return NextResponse.json({ thu, chi })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
