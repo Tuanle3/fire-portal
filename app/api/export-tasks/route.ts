@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   AlignmentType, BorderStyle, WidthType, ShadingType, HeadingLevel,
-  Header, Footer, PageNumber, VerticalAlign, PageBreak,
+  Header, Footer, PageNumber, VerticalAlign,
 } from 'docx'
 import { Task, TaskStatus, TaskPriority } from '@/lib/tasks-mock'
 import { getWeekRange, getMonthRange, taskOverlapsRange } from '@/lib/report-ranges'
@@ -49,12 +49,11 @@ function cell(text: string, width: number, opts: { bold?: boolean; shade?: strin
 
 function hdrCell(text: string, width: number) { return cell(text, width, { bold: true, shade: NAVY, align: AlignmentType.CENTER }) }
 
-// Ô "Công việc": tên đậm + phòng ban/dự án nhỏ mờ ngay dưới
+// Ô "Công việc": tên đậm + mô tả công việc nhỏ mờ ngay dưới (wrap nhiều dòng nếu dài)
 function taskCell(t: Task, width: number) {
-  const sub = [t.department, t.project].filter(Boolean).join(' · ')
   const children = [
     new TextRun({ text: t.title, font: FONT_BODY, bold: true, size: 19 }),
-    ...(sub ? [new TextRun({ text: '', break: 1 }), new TextRun({ text: sub, font: FONT_BODY, size: 15, color: '6B7280' })] : []),
+    ...(t.description ? [new TextRun({ text: '', break: 1 }), new TextRun({ text: t.description, font: FONT_BODY, size: 15, color: '6B7280' })] : []),
   ]
   return new TableCell({
     borders: BORDERS,
@@ -73,12 +72,12 @@ function h2(text: string) {
   })
 }
 
-function sectionBanner(text: string, color: string) {
+// Tiêu đề phần: chữ đậm màu navy + gạch chân vàng đồng, không tô nền (khớp mẫu "I. Mục đích")
+function sectionBanner(text: string, color: string = NAVY) {
   return new Paragraph({
-    children: [txt(text, { bold: true, size: 28, color: 'FFFFFF' })],
-    spacing: { before: 260, after: 160 },
-    shading: { fill: color, type: ShadingType.CLEAR },
-    indent: { left: 200, right: 200 },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'D4A64A', space: 4 } },
+    spacing: { before: 320, after: 140 },
+    children: [txt(text, { bold: true, size: 28, color })],
   })
 }
 
@@ -103,20 +102,20 @@ function buildTaskTable(tasks: Task[]): Table {
   const sorted = [...tasks].sort((a, b) => taskSortRank(a) - taskSortRank(b))
   return new Table({
     width: { size: CONTENT_WIDTH, type: WidthType.DXA },
-    columnWidths: [3800, 1600, 1200, 1000, 1300, 4780],
+    columnWidths: [5000, 1500, 1100, 900, 1200, 3980],
     rows: [
       new TableRow({ tableHeader: true, children: [
-        hdrCell('Công việc', 3800), hdrCell('Người phụ trách', 1600),
-        hdrCell('Deadline', 1200),  hdrCell('Tiến độ', 1000),
-        hdrCell('Trạng thái', 1300), hdrCell('Diễn biến / Đề xuất', 4780),
+        hdrCell('Công việc', 5000), hdrCell('Người phụ trách', 1500),
+        hdrCell('Deadline', 1100),  hdrCell('Tiến độ', 900),
+        hdrCell('Trạng thái', 1200), hdrCell('Diễn biến / Đề xuất', 3980),
       ]}),
       ...sorted.map(t => new TableRow({ children: [
-        taskCell(t, 3800),
-        cell(t.assignedTo || '—', 1600),
-        cell(t.deadline || '—',   1200, { align: AlignmentType.CENTER }),
-        cell(`${t.progress}%`,   1000, { align: AlignmentType.CENTER }),
-        cell(STATUS_LABEL_V[t.status], 1300, { shade: STATUS_SHADE[t.status], align: AlignmentType.CENTER }),
-        cell([t.dienBien, t.deXuat].filter(Boolean).join(' — ') || '—', 4780, { size: 16 }),
+        taskCell(t, 5000),
+        cell(t.assignedTo || '—', 1500),
+        cell(t.deadline || '—',   1100, { align: AlignmentType.CENTER }),
+        cell(`${t.progress}%`,    900, { align: AlignmentType.CENTER }),
+        cell(STATUS_LABEL_V[t.status], 1200, { shade: STATUS_SHADE[t.status], align: AlignmentType.CENTER }),
+        cell([t.dienBien, t.deXuat].filter(Boolean).join(' — ') || '—', 3980, { size: 16 }),
       ]})),
     ],
   })
@@ -177,9 +176,8 @@ function buildDoc(
   ]
 
   if (nextTasks !== null) {
-    // ── Đúng 2 phần theo yêu cầu: kỳ này / kỳ tới ──
+    // ── Đúng 2 phần theo yêu cầu: kỳ này / kỳ tới — nối liền, không ngắt trang cứng ──
     children.push(...buildPart(currentTasks, `PHẦN 1: BÁO CÁO CÔNG VIỆC ${currentLabel.toUpperCase()}`, NAVY))
-    children.push(new Paragraph({ children: [new PageBreak()] }))
     children.push(...buildPart(nextTasks, `PHẦN 2: BÁO CÁO CÔNG VIỆC ${nextLabel.toUpperCase()}`, '0891B2'))
   } else {
     // ── Chế độ tuỳ chọn: chỉ 1 phần, không đánh số ──
@@ -265,8 +263,8 @@ export async function POST(req: NextRequest) {
     if (reportMode === 'week') {
       const cur  = getWeekRange(0)
       const next = getWeekRange(1)
-      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to))
-      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to))
+      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status))
+      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to, t.status))
       currentLabel = `Tuần này (${cur.label})`
       nextLabel    = `Tuần tới (${next.label})`
       docTitle    = title || 'BÁO CÁO CÔNG VIỆC TUẦN'
@@ -274,15 +272,15 @@ export async function POST(req: NextRequest) {
     } else if (reportMode === 'month') {
       const cur  = getMonthRange(0)
       const next = getMonthRange(1)
-      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to))
-      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to))
+      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status))
+      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to, t.status))
       currentLabel = cur.label
       nextLabel    = next.label
       docTitle    = title || 'BÁO CÁO CÔNG VIỆC THÁNG'
       docSubtitle  = `${cur.label} · Xuất ngày ${new Date().toLocaleDateString('vi-VN')}`
     } else {
       // custom range
-      if (dateFrom || dateTo) currentTasks = currentTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, dateFrom, dateTo))
+      if (dateFrom || dateTo) currentTasks = currentTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, dateFrom, dateTo, t.status))
       currentLabel = subtitle || 'Toàn bộ công việc'
     }
 

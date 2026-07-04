@@ -179,14 +179,14 @@ export async function POST(req: NextRequest) {
 
     if (reportMode === 'week') {
       const cur = getWeekRange(0); const nxt = getWeekRange(1)
-      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to))
-      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, nxt.from, nxt.to))
+      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status))
+      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, nxt.from, nxt.to, t.status))
     } else if (reportMode === 'month') {
       const cur = getMonthRange(0); const nxt = getMonthRange(1)
-      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to))
-      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, nxt.from, nxt.to))
+      currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status))
+      nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, nxt.from, nxt.to, t.status))
     } else {
-      if (dateFrom || dateTo) currentTasks = currentTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, dateFrom, dateTo))
+      if (dateFrom || dateTo) currentTasks = currentTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, dateFrom, dateTo, t.status))
     }
 
     const wb = XLSX.utils.book_new()

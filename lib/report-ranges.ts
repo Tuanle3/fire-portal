@@ -1,10 +1,14 @@
 export function isoDate(d: Date) { return d.toISOString().slice(0, 10) }
 
-// Việc kéo dài nhiều tuần/tháng (createdAt → deadline) phải xuất hiện ở MỌI kỳ báo
-// cáo mà nó còn đang chạy, không chỉ đúng kỳ trùng deadline. So khoảng [createdAt,
-// deadline] của việc có giao với khoảng [from, to] của kỳ báo cáo hay không.
-export function taskOverlapsRange(deadline: string, createdAt: string | undefined, from?: string, to?: string): boolean {
+// Việc đến hạn đúng trong kỳ [from,to] luôn được tính, bất kể trạng thái.
+// Việc đang làm/trễ hạn (đang active thật, chưa xong) thì được tính thêm ở MỌI kỳ
+// nó còn "sống" (createdAt → deadline), để không mất dấu khi theo dõi xuyên tuần/tháng.
+// Việc "chưa bắt đầu" hoặc "hoàn thành" thì chỉ hiện đúng kỳ có deadline, không lan ra.
+export function taskOverlapsRange(deadline: string, createdAt: string | undefined, from: string | undefined, to: string | undefined, status?: string): boolean {
   if (!deadline) return false
+  const dueInRange = (!from || deadline >= from) && (!to || deadline <= to)
+  if (dueInRange) return true
+  if (status !== 'dang_lam' && status !== 'tre') return false
   const start = createdAt || deadline
   if (to   && start    > to)   return false
   if (from && deadline < from) return false

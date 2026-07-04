@@ -612,11 +612,13 @@ function TimelineView({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) 
     }
     const map = new Map<string, { monday: Date; tasks: Task[] }>()
     const noDate: Task[] = []
-    // Việc kéo dài nhiều tuần (createdAt → deadline) được đưa vào MỌI tuần nó còn
-    // chạy, không chỉ tuần trùng deadline — để không bị "mất tích" khi xem tuần sau.
+    // Việc đang làm/trễ hạn (đang active thật) được đưa vào MỌI tuần nó còn chạy
+    // (createdAt → deadline), để không bị "mất tích" khi xem tuần sau. Việc chưa
+    // bắt đầu/đã xong thì chỉ hiện đúng tuần trùng deadline, không lan ra.
     for (const t of tasks) {
       if (!t.deadline) { noDate.push(t); continue }
-      const startMon = getMonday(t.createdAt ? new Date(t.createdAt) : new Date(t.deadline))
+      const isOngoing = t.status === 'dang_lam' || t.status === 'tre'
+      const startMon = isOngoing ? getMonday(t.createdAt ? new Date(t.createdAt) : new Date(t.deadline)) : getMonday(new Date(t.deadline))
       const endMon   = getMonday(new Date(t.deadline))
       let cursor = startMon
       let guard = 0
@@ -1326,19 +1328,19 @@ function ExportModal({ tasks, filters, reportedBy, onClose }: {
     if (mode === 'week') {
       const cur = getWeekRange(0), next = getWeekRange(1)
       return [
-        { label: `Tuần này (${cur.label})`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to)) },
-        { label: `Tuần tới (${next.label})`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to)) },
+        { label: `Tuần này (${cur.label})`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status)) },
+        { label: `Tuần tới (${next.label})`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to, t.status)) },
       ]
     }
     if (mode === 'month') {
       const cur = getMonthRange(0), next = getMonthRange(1)
       return [
-        { label: cur.label,  tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to)) },
-        { label: next.label, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to)) },
+        { label: cur.label,  tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status)) },
+        { label: next.label, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to, t.status)) },
       ]
     }
     let t = tasks
-    if (filters.dateFrom || filters.dateTo) t = t.filter(x => taskOverlapsRange(x.deadline, x.createdAt, filters.dateFrom, filters.dateTo))
+    if (filters.dateFrom || filters.dateTo) t = t.filter(x => taskOverlapsRange(x.deadline, x.createdAt, filters.dateFrom, filters.dateTo, x.status))
     return [{ label: 'Theo bộ lọc hiện tại', tasks: t }]
   }, [mode, tasks, filters])
   const previewTotal = previewGroups.reduce((s, g) => s + g.tasks.length, 0)
@@ -1552,16 +1554,30 @@ function TasksPageInner() {
     () => staffUsers.find(u => u.name === currentUser) ?? null,
     [staffUsers, currentUser]
   )
-  // giam_doc sees all; others see only own dept + shared tasks
-  // if user not in staff_users (admin/system), fallback to all
+  // giam_doc: xem tất cả mọi phòng. truong_phong: xem hết công việc của phòng mình
+  // (+ được chia sẻ). nhan_vien: chỉ xem đầu việc liên quan trực tiếp đến mình
+  // (được giao hoặc tự giao), kèm các việc cha để không vỡ cây phân cấp.
+  // Nếu user không có trong staff_users (admin/system) → fallback xem tất cả.
   const visibleTasks = useMemo(() => {
-    if (!currentStaff) return tasks  // admin fallback
+    if (!currentStaff) return tasks
     if (currentStaff.level === 'giam_doc') return tasks
-    return tasks.filter(t =>
-      t.department === currentStaff.department ||
-      (t.sharedWith && t.sharedWith.includes(currentStaff.department))
-    )
-  }, [tasks, currentStaff])
+    if (currentStaff.level === 'truong_phong') {
+      return tasks.filter(t =>
+        t.department === currentStaff.department ||
+        (t.sharedWith && t.sharedWith.includes(currentStaff.department))
+      )
+    }
+    // nhan_vien
+    const own = tasks.filter(t => t.assignedTo === currentUser || t.assignedBy === currentUser)
+    const byId = new Map(tasks.map(t => [t.id, t]))
+    const ids  = new Set(own.map(t => t.id))
+    const result = [...own]
+    for (let i = 0; i < result.length; i++) {
+      const parent = result[i].parentId ? byId.get(result[i].parentId!) : undefined
+      if (parent && !ids.has(parent.id)) { ids.add(parent.id); result.push(parent) }
+    }
+    return result
+  }, [tasks, currentStaff, currentUser])
 
   // can create/assign tasks: only truong_phong and giam_doc
   const canCreate = !currentStaff || currentStaff.level !== 'nhan_vien'
@@ -1574,7 +1590,7 @@ function TasksPageInner() {
     if (fPriority) t = t.filter(x => x.priority === fPriority)
     if (fDept)     t = t.filter(x => x.department === fDept)
     if (fProject)  t = t.filter(x => x.project === fProject)
-    if (fDateFrom || fDateTo) t = t.filter(x => taskOverlapsRange(x.deadline, x.createdAt, fDateFrom, fDateTo))
+    if (fDateFrom || fDateTo) t = t.filter(x => taskOverlapsRange(x.deadline, x.createdAt, fDateFrom, fDateTo, x.status))
     return t
   }, [visibleTasks, search, fStatus, fPriority, fDept, fProject, fDateFrom, fDateTo])
 
