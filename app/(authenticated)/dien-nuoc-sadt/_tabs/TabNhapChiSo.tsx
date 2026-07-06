@@ -244,17 +244,17 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
        </div>
 
         {meterCustomers.length > 0 && (
-          <>
-            <div style={{ marginTop: 16, padding: '12px 14px', background: '#F8FAFC', border: '1px solid var(--border3)', borderRadius: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#4B6A8A', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Sản lượng sử dụng của khách hàng — tháng {month}</div>
+          <div className="dn-split" style={{ marginTop: 16 }}>
+            <div className="dn-split-left" style={{ padding: '12px 14px', background: '#F8FAFC', border: '1px solid var(--border3)', borderRadius: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#4B6A8A', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Sản lượng khách hàng — tháng {month}</div>
               {meterCustomers.map(c => (
                 <CustomerUsageRow key={c.id} customer={c} month={month} usage={usages.find(u => u.customerId === c.id && u.month === month)} reading={draftReading} allUsages={usages} />
               ))}
             </div>
-            <div style={{ marginTop: 12, padding: '12px 14px', background: '#F8FAFC', border: '1px solid var(--border3)', borderRadius: 10 }}>
+            <div className="dn-split-right" style={{ padding: '12px 14px', background: '#F8FAFC', border: '1px solid var(--border3)', borderRadius: 10 }}>
               <CustomerUsageHistory meterId={meterId} customers={customers} readings={readings} usages={usages} unit={unit} />
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
