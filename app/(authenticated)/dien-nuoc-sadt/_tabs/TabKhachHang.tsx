@@ -166,7 +166,7 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
   const remove = async (id: string) => { if (confirm('Xoá khách hàng này?')) await deleteCustomer(id) }
 
   return (
-    <div className="sc">
+    <div className="sc sc--sticky">
       <div className="sc-head">
         <span className="sc-title">Danh sách khách hàng</span>
         <button className="btn-primary" onClick={() => setEditing('new')}>+ Thêm khách hàng</button>

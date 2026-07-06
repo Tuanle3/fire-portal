@@ -101,6 +101,10 @@ export default function DienNuocSadtPage() {
           .dn-split-left, .dn-split-right { flex:1 1 auto; width:100%; max-width:100%; }
         }
 
+        /* Header của card dính lại khi cuộn (ngay dưới topbar ~92px), tiện bấm "Thêm khách hàng" */
+        .sc--sticky { overflow:visible; }
+        .sc--sticky .sc-head { position:sticky; top:92px; z-index:30; border-radius:12px 12px 0 0; }
+
         .ceo-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
         .ceo-kpi { background:var(--surface); border-radius:var(--rm); box-shadow:var(--sh); overflow:hidden; border:1px solid var(--border3); }
         .ceo-kpi-label { display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; padding:8px 14px; background:#EEF3FA; border-bottom:1px solid #D0DCE8; color:#4B6A8A; }
