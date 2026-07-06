@@ -5,19 +5,14 @@ import { useTopbarInfo } from '@/contexts/topbar-info'
 import {
   subscribeMeterReadings, subscribeCustomers, subscribeUsage, subscribePayments, subscribeMeterNames, saveMeterNames,
 } from '@/lib/dien-nuoc-store'
-import { MeterReading, Customer, CustomerUsage, Payment } from '@/lib/dien-nuoc-types'
+import { MeterReading, Customer, CustomerUsage, Payment, MeterId, meterLabel } from '@/lib/dien-nuoc-types'
 import { TabTongQuan } from './_tabs/TabTongQuan'
 import { TabNhapChiSo } from './_tabs/TabNhapChiSo'
 import { TabKhachHang } from './_tabs/TabKhachHang'
 import { TabCongNo } from './_tabs/TabCongNo'
 
-type TabId = 'tong-quan' | 'nhap-chi-so' | 'khach-hang' | 'cong-no'
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'tong-quan',   label: 'Tổng quan' },
-  { id: 'nhap-chi-so', label: 'Nhập chỉ số điện nước' },
-  { id: 'khach-hang',  label: 'Khách hàng' },
-  { id: 'cong-no',     label: 'Công nợ & Thu tiền' },
-]
+type TabId = 'tong-quan' | 'dh1' | 'dh2' | 'nuoc' | 'khach-hang' | 'cong-no'
+const METER_TAB: Record<string, MeterId> = { dh1: 1, dh2: 2, nuoc: 3 }
 
 function curMonth() { return new Date().toISOString().slice(0, 7) }
 
@@ -161,7 +156,14 @@ export default function DienNuocSadtPage() {
         <div className="prj-wrap">
           <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'linear-gradient(90deg,#FAF8F3 0%,#FFFFFF 60%)', borderBottom: '1px solid #E5E0D8', boxShadow: '0 2px 8px rgba(13,31,51,.07)' }}>
             <div className="subtab-bar">
-              {TABS.map(t => (
+              {([
+                { id: 'tong-quan' as TabId, label: 'Tổng quan' },
+                { id: 'dh1' as TabId, label: meterLabel(meterNames, 1) },
+                { id: 'dh2' as TabId, label: meterLabel(meterNames, 2) },
+                { id: 'nuoc' as TabId, label: meterLabel(meterNames, 3) },
+                { id: 'khach-hang' as TabId, label: 'Khách hàng' },
+                { id: 'cong-no' as TabId, label: 'Công nợ & Thu tiền' },
+              ]).map(t => (
                 <button key={t.id} className={`subtab${activeTab === t.id ? ' active' : ''}`} onClick={() => setActiveTab(t.id)}>{t.label}</button>
               ))}
             </div>
@@ -172,10 +174,10 @@ export default function DienNuocSadtPage() {
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Đang tải dữ liệu...</div>
             ) : (
               <>
-                {activeTab === 'tong-quan'   && <TabTongQuan readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
-                {activeTab === 'nhap-chi-so' && <TabNhapChiSo readings={readings} customers={customers} usages={usages} month={month} meterNames={meterNames} canEditMeterName={canEditMeterName} onSaveMeterNames={setMeterNamesRemote} />}
-                {activeTab === 'khach-hang'  && <TabKhachHang customers={customers} meterNames={meterNames} />}
-                {activeTab === 'cong-no'     && <TabCongNo readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
+                {activeTab === 'tong-quan' && <TabTongQuan readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
+                {METER_TAB[activeTab] && <TabNhapChiSo meterId={METER_TAB[activeTab]} readings={readings} customers={customers} usages={usages} month={month} meterNames={meterNames} canEditMeterName={canEditMeterName} onSaveMeterNames={setMeterNamesRemote} />}
+                {activeTab === 'khach-hang' && <TabKhachHang customers={customers} meterNames={meterNames} />}
+                {activeTab === 'cong-no' && <TabCongNo readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
               </>
             )}
           </div>

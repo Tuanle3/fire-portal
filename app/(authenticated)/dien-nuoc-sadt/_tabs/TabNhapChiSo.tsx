@@ -415,16 +415,12 @@ function CustomerUsageRow({ customer, month, usage, reading, allUsages }: {
   )
 }
 
-export function TabNhapChiSo({ readings, customers, usages, month, meterNames, canEditMeterName, onSaveMeterNames }: {
+export function TabNhapChiSo({ readings, customers, usages, month, meterNames, canEditMeterName, onSaveMeterNames, meterId }: {
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; month: string
   meterNames: Record<number, string>; canEditMeterName: boolean; onSaveMeterNames: (id: number, name: string) => void
+  meterId: MeterId
 }) {
-  const common = { readings, customers, usages, month, meterNames, canEditMeterName, onSaveMeterNames }
   return (
-    <div>
-      <MeterCard meterId={1} {...common} />
-      <MeterCard meterId={2} {...common} />
-      <MeterCard meterId={3} {...common} />
-    </div>
+    <MeterCard meterId={meterId} readings={readings} customers={customers} usages={usages} month={month} meterNames={meterNames} canEditMeterName={canEditMeterName} onSaveMeterNames={onSaveMeterNames} />
   )
 }
