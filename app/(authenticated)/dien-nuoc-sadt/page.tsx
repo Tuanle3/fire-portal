@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useUserSession } from '@/contexts/user-session'
+import { useTopbarInfo } from '@/contexts/topbar-info'
 import {
   subscribeMeterReadings, subscribeCustomers, subscribeUsage, subscribePayments, subscribeMeterNames, saveMeterNames,
 } from '@/lib/dien-nuoc-store'
@@ -34,6 +35,25 @@ export default function DienNuocSadtPage() {
 
   const canEditMeterName = role === 'admin'
   const setMeterNamesRemote = (id: number, name: string) => saveMeterNames({ ...meterNames, [id]: name })
+
+  // Đưa breadcrumb + tiêu đề (trái) và ô chọn tháng (phải) lên thanh trên cùng chung với Admin/Đăng xuất.
+  const { setLeft, setRight } = useTopbarInfo()
+  useEffect(() => {
+    setLeft(
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', lineHeight: 1.15 }}>
+        <div style={{ fontSize: 11, color: '#6B7280' }}>Module › Điện nước SA.ĐT</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1C3557' }}>⚡ Điện nước SA.ĐT</div>
+      </div>
+    )
+    setRight(
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', letterSpacing: '.03em', textTransform: 'uppercase' }}>Tháng:</span>
+        <input type="month" value={month} onChange={e => setMonth(e.target.value)}
+          style={{ fontFamily: 'inherit', fontSize: 12.5, color: '#1F2430', background: '#fff', border: '1px solid #D0CCC4', borderRadius: 7, padding: '5px 8px', width: 140 }} />
+      </span>
+    )
+  }, [month, setLeft, setRight])
+  useEffect(() => () => { setLeft(null); setRight(null) }, [setLeft, setRight])
 
   useEffect(() => {
     const u1 = subscribeMeterReadings(setReadings)
@@ -103,7 +123,7 @@ export default function DienNuocSadtPage() {
 
         /* Header của card dính lại khi cuộn (ngay dưới topbar ~92px), tiện bấm "Thêm khách hàng" */
         .sc--sticky { overflow:visible; }
-        .sc--sticky .sc-head { position:sticky; top:92px; z-index:30; border-radius:12px 12px 0 0; }
+        .sc--sticky .sc-head { position:sticky; top:40px; z-index:30; border-radius:12px 12px 0 0; }
 
         .ceo-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
         .ceo-kpi { background:var(--surface); border-radius:var(--rm); box-shadow:var(--sh); overflow:hidden; border:1px solid var(--border3); }
@@ -140,16 +160,6 @@ export default function DienNuocSadtPage() {
       <div className="prj-main">
         <div className="prj-wrap">
           <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'linear-gradient(90deg,#FAF8F3 0%,#FFFFFF 60%)', borderBottom: '1px solid #E5E0D8', boxShadow: '0 2px 8px rgba(13,31,51,.07)' }}>
-            <div className="prj-topbar">
-              <div>
-                <div className="breadcrumb"><span>Module</span><span>›</span><span>Điện nước SA.ĐT</span></div>
-                <div className="prj-page-title">⚡ Điện nước SA.ĐT</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label className="dn-label" style={{ margin: 0 }}>Tháng:</label>
-                <input type="month" className="dn-input" style={{ width: 140 }} value={month} onChange={e => setMonth(e.target.value)} />
-              </div>
-            </div>
             <div className="subtab-bar">
               {TABS.map(t => (
                 <button key={t.id} className={`subtab${activeTab === t.id ? ' active' : ''}`} onClick={() => setActiveTab(t.id)}>{t.label}</button>

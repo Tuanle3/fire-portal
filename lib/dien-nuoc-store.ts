@@ -94,6 +94,10 @@ function parseUsage(id: string, d: Record<string, unknown>): CustomerUsage {
     month:      (d.month as string) ?? '',
     totalUnit:  Number(d.totalUnit ?? 0),
     bandsKwh:   (d.bandsKwh as CustomerUsage['bandsKwh']) ?? {},
+    indexOld:   d.indexOld != null ? Number(d.indexOld) : undefined,
+    indexNew:   d.indexNew != null ? Number(d.indexNew) : undefined,
+    bandsIndexOld: (d.bandsIndexOld as CustomerUsage['bandsIndexOld']) ?? undefined,
+    bandsIndexNew: (d.bandsIndexNew as CustomerUsage['bandsIndexNew']) ?? undefined,
     createdAt:  (d.createdAt as string) ?? '',
     updatedAt:  (d.updatedAt as string) ?? '',
   }

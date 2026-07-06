@@ -104,8 +104,13 @@ export interface CustomerUsage {
   id: string              // `${customerId}_${month}`
   customerId: string
   month: string
-  totalUnit: number                          // dùng cho flat_vat_incl (tổng kWh/m³ trong tháng)
-  bandsKwh: Partial<Record<BandKey, number>>  // dùng cho timeband_excl_vat
+  totalUnit: number                          // dùng cho flat_vat_incl (tổng kWh/m³ trong tháng) = chỉ số mới − cũ
+  bandsKwh: Partial<Record<BandKey, number>>  // dùng cho timeband_excl_vat = chỉ số mới − cũ từng khung
+  // Chỉ số công tơ của khách (để tự tính sản lượng). Chỉ số cũ tháng này = chỉ số mới tháng trước.
+  indexOld?: number                                 // flat_vat_incl: chỉ số cũ
+  indexNew?: number                                 // flat_vat_incl: chỉ số mới
+  bandsIndexOld?: Partial<Record<BandKey, number>>  // timeband: chỉ số cũ từng khung
+  bandsIndexNew?: Partial<Record<BandKey, number>>  // timeband: chỉ số mới từng khung
   createdAt: string
   updatedAt: string
 }

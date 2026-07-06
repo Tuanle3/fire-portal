@@ -9,7 +9,7 @@ const ROLE_LABEL: Record<string, string> = { ceo: 'CEO', finance: 'CFO', admin: 
 
 export default function Topbar({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const router   = useRouter()
-  const { info } = useTopbarInfo()
+  const { info, left, right } = useTopbarInfo()
   const { name, role } = useUserSession()
   const user = { name: name || 'Admin', role: ROLE_LABEL[role] ?? (role || '').toUpperCase() }
   const [showChpw, setShowChpw] = useState(false)
@@ -23,7 +23,10 @@ export default function Topbar({ onMenuToggle }: { onMenuToggle?: () => void }) 
     <header className="topbar">
       <button className="menu-toggle" onClick={onMenuToggle} aria-label="Mở menu">☰</button>
 
+      {left && <div className="topbar-left">{left}</div>}
+
       <div className="topbar-right">
+        {right}
         {info && (
           <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
             {info}
