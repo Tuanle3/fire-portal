@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useUserSession } from '@/contexts/user-session'
 import {
-  subscribeMeterReadings, subscribeCustomers, subscribeUsage, subscribePayments,
+  subscribeMeterReadings, subscribeCustomers, subscribeUsage, subscribePayments, subscribeMeterNames, saveMeterNames,
 } from '@/lib/dien-nuoc-store'
 import { MeterReading, Customer, CustomerUsage, Payment } from '@/lib/dien-nuoc-types'
 import { TabTongQuan } from './_tabs/TabTongQuan'
@@ -21,22 +21,27 @@ const TABS: { id: TabId; label: string }[] = [
 function curMonth() { return new Date().toISOString().slice(0, 7) }
 
 export default function DienNuocSadtPage() {
-  const { loading: sessLoading, can } = useUserSession()
+  const { loading: sessLoading, can, role } = useUserSession()
   const [activeTab, setActiveTab] = useState<TabId>('tong-quan')
   const [month, setMonth]         = useState(curMonth())
 
-  const [readings, setReadings]   = useState<MeterReading[]>([])
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [usages, setUsages]       = useState<CustomerUsage[]>([])
-  const [payments, setPayments]   = useState<Payment[]>([])
+  const [readings, setReadings]     = useState<MeterReading[]>([])
+  const [customers, setCustomers]   = useState<Customer[]>([])
+  const [usages, setUsages]         = useState<CustomerUsage[]>([])
+  const [payments, setPayments]     = useState<Payment[]>([])
+  const [meterNames, setMeterNames] = useState<Record<number, string>>({})
   const [dataLoading, setDataLoading] = useState(true)
+
+  const canEditMeterName = role === 'admin'
+  const setMeterNamesRemote = (id: number, name: string) => saveMeterNames({ ...meterNames, [id]: name })
 
   useEffect(() => {
     const u1 = subscribeMeterReadings(setReadings)
     const u2 = subscribeCustomers(rows => { setCustomers(rows); setDataLoading(false) })
     const u3 = subscribeUsage(setUsages)
     const u4 = subscribePayments(setPayments)
-    return () => { u1(); u2(); u3(); u4() }
+    const u5 = subscribeMeterNames(setMeterNames)
+    return () => { u1(); u2(); u3(); u4(); u5() }
   }, [])
 
   if (sessLoading) {
@@ -142,10 +147,10 @@ export default function DienNuocSadtPage() {
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Đang tải dữ liệu...</div>
             ) : (
               <>
-                {activeTab === 'tong-quan'   && <TabTongQuan readings={readings} customers={customers} usages={usages} payments={payments} month={month} />}
-                {activeTab === 'nhap-chi-so' && <TabNhapChiSo readings={readings} customers={customers} usages={usages} month={month} />}
-                {activeTab === 'khach-hang'  && <TabKhachHang customers={customers} />}
-                {activeTab === 'cong-no'     && <TabCongNo readings={readings} customers={customers} usages={usages} payments={payments} month={month} />}
+                {activeTab === 'tong-quan'   && <TabTongQuan readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
+                {activeTab === 'nhap-chi-so' && <TabNhapChiSo readings={readings} customers={customers} usages={usages} month={month} meterNames={meterNames} canEditMeterName={canEditMeterName} onSaveMeterNames={setMeterNamesRemote} />}
+                {activeTab === 'khach-hang'  && <TabKhachHang customers={customers} meterNames={meterNames} />}
+                {activeTab === 'cong-no'     && <TabCongNo readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
               </>
             )}
           </div>

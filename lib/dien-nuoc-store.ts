@@ -11,6 +11,8 @@ const COL_METERS   = 'dn_meters'
 const COL_CUSTOMERS= 'dn_customers'
 const COL_USAGE    = 'dn_usage'
 const COL_PAYMENTS = 'dn_payments'
+const COL_CONFIG   = 'dn_config'
+const DOC_METER_NAMES = 'meter_names'
 
 function clean(o: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -59,6 +61,12 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
     flatUnitPrice: Number(d.flatUnitPrice ?? 0),
     areaM2:        Number(d.areaM2 ?? 0),
     pricePerM2:    Number(d.pricePerM2 ?? 0),
+    flatPriceHistory: (d.flatPriceHistory as Customer['flatPriceHistory']) ?? undefined,
+    areaPriceHistory: (d.areaPriceHistory as Customer['areaPriceHistory']) ?? undefined,
+    floor:      (d.floor as string) ?? '',
+    kioskCode:  (d.kioskCode as string) ?? '',
+    kioskOwner: (d.kioskOwner as string) ?? '',
+    tenantName: (d.tenantName as string) ?? '',
     active:     d.active !== false,
     note:       (d.note as string) ?? '',
     createdAt:  (d.createdAt as string) ?? '',
@@ -124,5 +132,15 @@ export async function deletePayment(id: string): Promise<void> {
 export function subscribePayments(cb: (rows: Payment[]) => void): Unsubscribe {
   return onSnapshot(collection(diennuocDb, COL_PAYMENTS), snap => {
     cb(snap.docs.map(d => parsePayment(d.id, d.data() as Record<string, unknown>)))
+  })
+}
+
+// ── Tên đồng hồ tùy chỉnh (chỉ admin được sửa) ───────────────────────────────
+export async function saveMeterNames(names: Record<number, string>): Promise<void> {
+  await setDoc(doc(diennuocDb, COL_CONFIG, DOC_METER_NAMES), clean(names as Record<string, unknown>))
+}
+export function subscribeMeterNames(cb: (names: Record<number, string>) => void): Unsubscribe {
+  return onSnapshot(doc(diennuocDb, COL_CONFIG, DOC_METER_NAMES), snap => {
+    cb((snap.data() as Record<number, string>) ?? {})
   })
 }

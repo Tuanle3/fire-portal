@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId,
-  METER_LABELS, meterAllocation, remainderByBand, BAND_KEYS, BAND_LABELS,
+  meterLabel, meterAllocation, remainderByBand, BAND_KEYS, BAND_LABELS,
 } from '@/lib/dien-nuoc-types'
 import { savePayment } from '@/lib/dien-nuoc-store'
 
@@ -55,14 +55,14 @@ function PaymentModal({ customerId, month, due, paid, onClose }: {
   )
 }
 
-function MeterAllocationCard({ meterId, reading, customers, usages, payments, month, onCollect }: {
+function MeterAllocationCard({ meterId, reading, customers, usages, payments, month, meterNames, onCollect }: {
   meterId: MeterId; reading: MeterReading | undefined; customers: Customer[]; usages: CustomerUsage[]
-  payments: Payment[]; month: string; onCollect: (customerId: string, due: number, paid: number) => void
+  payments: Payment[]; month: string; meterNames: Record<number, string>; onCollect: (customerId: string, due: number, paid: number) => void
 }) {
   if (!reading) {
     return (
       <div className="sc">
-        <div className="sc-head"><span className="sc-title">{METER_LABELS[meterId]}</span></div>
+        <div className="sc-head"><span className="sc-title">{meterLabel(meterNames, meterId)}</span></div>
         <div className="sc-body"><div style={{ color: 'var(--muted)', fontStyle: 'italic', padding: 10 }}>Chưa nhập chỉ số tháng {month}.</div></div>
       </div>
     )
@@ -76,7 +76,7 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
   return (
     <div className="sc">
       <div className="sc-head">
-        <span className="sc-title">{METER_LABELS[meterId]}</span>
+        <span className="sc-title">{meterLabel(meterNames, meterId)}</span>
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>Tổng tiền: <b style={{ color: 'var(--navy)' }}>{fmt(alloc.total)} đ</b></span>
       </div>
       <div className="sc-body">
@@ -120,8 +120,9 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
   )
 }
 
-export function TabCongNo({ readings, customers, usages, payments, month }: {
+export function TabCongNo({ readings, customers, usages, payments, month, meterNames }: {
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]; month: string
+  meterNames: Record<number, string>
 }) {
   const [collecting, setCollecting] = useState<{ customerId: string; due: number; paid: number } | null>(null)
   const byMeter = (id: MeterId) => readings.find(r => r.meterId === id && r.month === month)
@@ -129,7 +130,7 @@ export function TabCongNo({ readings, customers, usages, payments, month }: {
   return (
     <div>
       {([1, 2, 3] as MeterId[]).map(id => (
-        <MeterAllocationCard key={id} meterId={id} reading={byMeter(id)} customers={customers} usages={usages} payments={payments} month={month}
+        <MeterAllocationCard key={id} meterId={id} reading={byMeter(id)} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames}
           onCollect={(customerId, due, paid) => setCollecting({ customerId, due, paid })} />
       ))}
       {collecting && (

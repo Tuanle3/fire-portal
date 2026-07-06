@@ -1,13 +1,14 @@
 'use client'
 import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId,
-  METER_LABELS, meterAllocation, meterTotal,
+  meterLabel, meterAllocation, meterTotal,
 } from '@/lib/dien-nuoc-types'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
-export function TabTongQuan({ readings, customers, usages, payments, month }: {
+export function TabTongQuan({ readings, customers, usages, payments, month, meterNames }: {
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]; month: string
+  meterNames: Record<number, string>
 }) {
   const monthReadings = readings.filter(r => r.month === month)
   const totalBill = monthReadings.reduce((s, r) => s + meterTotal(r.bands, r.vatPercent), 0)
@@ -58,12 +59,12 @@ export function TabTongQuan({ readings, customers, usages, payments, month }: {
               {([1, 2, 3] as MeterId[]).map(id => {
                 const r = monthReadings.find(x => x.meterId === id)
                 if (!r) return (
-                  <tr key={id}><td style={{ fontWeight: 600 }}>{METER_LABELS[id]}</td><td colSpan={3} style={{ color: 'var(--muted)', fontStyle: 'italic' }}>Chưa nhập chỉ số</td></tr>
+                  <tr key={id}><td style={{ fontWeight: 600 }}>{meterLabel(meterNames, id)}</td><td colSpan={3} style={{ color: 'var(--muted)', fontStyle: 'italic' }}>Chưa nhập chỉ số</td></tr>
                 )
                 const alloc = meterAllocation(r, customers, usages)
                 return (
                   <tr key={id}>
-                    <td style={{ fontWeight: 600 }}>{METER_LABELS[id]}</td>
+                    <td style={{ fontWeight: 600 }}>{meterLabel(meterNames, id)}</td>
                     <td style={{ textAlign: 'right' }}>{fmt(alloc.total)} đ</td>
                     <td style={{ textAlign: 'right' }}>{fmt(alloc.allocated)} đ</td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)' }}>{fmt(alloc.remainderTotal)} đ</td>

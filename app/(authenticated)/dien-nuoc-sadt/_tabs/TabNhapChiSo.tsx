@@ -1,30 +1,119 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
-  MeterReading, Customer, CustomerUsage, MeterId,
-  BAND_KEYS, BandKey, BAND_LABELS, METER_LABELS, METER_UNIT, EMPTY_BANDS,
-  meterSubtotal, meterVat, meterTotal, customerCharge,
+  MeterReading, Customer, CustomerUsage, MeterId, Bands,
+  BAND_KEYS, BandKey, BAND_LABELS, meterLabel, METER_UNIT, EMPTY_BANDS,
+  bandMoney, meterSubtotal, meterVat, meterTotal, customerCharge, resolvePrice,
+  lastReadingBefore, bandsWithPriceChange, isAmountAnomalous,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
-function MeterCard({ meterId, month, reading, customers, usages }: {
-  meterId: MeterId; month: string; reading: MeterReading | undefined
-  customers: Customer[]; usages: CustomerUsage[]
+function prefillBands(prev: MeterReading | null): Bands {
+  if (!prev) return EMPTY_BANDS
+  const out = { ...EMPTY_BANDS }
+  for (const k of BAND_KEYS) out[k] = { kwh: 0, donGia: prev.bands[k].donGia }
+  return out
+}
+
+function EditableMeterTitle({ meterId, meterNames, canEdit, onSave }: {
+  meterId: MeterId; meterNames: Record<number, string>; canEdit: boolean; onSave: (id: number, name: string) => void
 }) {
-  const [bands, setBands] = useState(reading?.bands ?? EMPTY_BANDS)
-  const [vatPercent, setVatPercent] = useState(reading?.vatPercent ?? 8)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(meterLabel(meterNames, meterId))
+
+  useEffect(() => { setDraft(meterLabel(meterNames, meterId)) }, [meterNames, meterId])
+
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input className="dn-input" style={{ width: 260 }} value={draft} onChange={e => setDraft(e.target.value)} autoFocus />
+        <button className="btn-ghost" onClick={() => { onSave(meterId, draft); setEditing(false) }}>Lưu</button>
+        <button className="btn-ghost" onClick={() => { setDraft(meterLabel(meterNames, meterId)); setEditing(false) }}>Hủy</button>
+      </div>
+    )
+  }
+  return (
+    <span className="sc-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      {meterLabel(meterNames, meterId)}
+      {canEdit && (
+        <button onClick={() => setEditing(true)} title="Sửa tên đồng hồ" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--muted)', fontSize: 12 }}>✏️</button>
+      )}
+    </span>
+  )
+}
+
+// ── Bảng 2: chi tiết thông số theo tháng (12 tháng gần nhất), cảnh báo sai lệch ──
+function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
+  meterId: MeterId; readings: MeterReading[]; visibleBands: BandKey[]; isWater: boolean; unit: string
+}) {
+  const rows = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
+  if (rows.length === 0) return null
+  const ascByMonth = [...rows].sort((a, b) => a.month.localeCompare(b.month))
+
+  return (
+    <div style={{ marginTop: 16, marginBottom: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+        Bảng 2 — Chi tiết thông số theo tháng (12 tháng gần nhất)
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="dn-table">
+          <thead><tr>
+            <th>Tháng</th>
+            {visibleBands.map(k => <th key={`${k}-kwh`} style={{ textAlign: 'right' }}>{isWater ? unit : `${BAND_LABELS[k]} (${unit})`}</th>)}
+            {visibleBands.map(k => <th key={`${k}-gia`} style={{ textAlign: 'right' }}>{isWater ? 'Đơn giá' : `${BAND_LABELS[k]} (giá)`}</th>)}
+            <th style={{ textAlign: 'right' }}>Chưa VAT</th><th style={{ textAlign: 'right' }}>VAT</th><th style={{ textAlign: 'right' }}>Tổng tiền</th>
+          </tr></thead>
+          <tbody>
+            {rows.map(r => {
+              const idx = ascByMonth.findIndex(x => x.id === r.id)
+              const prev = idx > 0 ? ascByMonth[idx - 1] : null
+              const priceChanged = bandsWithPriceChange(r.bands, prev).length > 0
+              const priorSlice = ascByMonth.slice(Math.max(0, idx - 3), idx)
+              const anomalous = isAmountAnomalous(meterTotal(r.bands, r.vatPercent), priorSlice)
+              return (
+                <tr key={r.id} style={{ background: anomalous ? '#FDECEC' : priceChanged ? '#FFF4E0' : undefined }}>
+                  <td style={{ fontWeight: 600 }}>
+                    {r.month}
+                    {anomalous && <span title="Tổng tiền lệch bất thường (>30%) so với trung bình các tháng trước" style={{ marginLeft: 4 }}>⚠️</span>}
+                    {!anomalous && priceChanged && <span title="Đơn giá thay đổi so với tháng trước" style={{ marginLeft: 4 }}>⚠</span>}
+                  </td>
+                  {visibleBands.map(k => <td key={`${k}-kwh`} style={{ textAlign: 'right' }}>{fmt(r.bands[k].kwh)}</td>)}
+                  {visibleBands.map(k => <td key={`${k}-gia`} style={{ textAlign: 'right' }}>{fmt(r.bands[k].donGia)}</td>)}
+                  <td style={{ textAlign: 'right' }}>{fmt(meterSubtotal(r.bands))}</td>
+                  <td style={{ textAlign: 'right' }}>{fmt(meterVat(r.bands, r.vatPercent))}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterTotal(r.bands, r.vatPercent))}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function MeterCard({ meterId, month, readings, customers, usages, meterNames, canEditMeterName, onSaveMeterNames }: {
+  meterId: MeterId; month: string; readings: MeterReading[]
+  customers: Customer[]; usages: CustomerUsage[]
+  meterNames: Record<number, string>; canEditMeterName: boolean; onSaveMeterNames: (id: number, name: string) => void
+}) {
+  const reading = readings.find(r => r.meterId === meterId && r.month === month)
+  const prevReading = useMemo(() => lastReadingBefore(readings, meterId, month), [readings, meterId, month])
+
+  const [bands, setBands] = useState<Bands>(reading?.bands ?? prefillBands(prevReading))
+  const [vatPercent, setVatPercent] = useState(reading?.vatPercent ?? prevReading?.vatPercent ?? 8)
   const [note, setNote] = useState(reading?.note ?? '')
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
 
   useEffect(() => {
-    setBands(reading?.bands ?? EMPTY_BANDS)
-    setVatPercent(reading?.vatPercent ?? 8)
+    setBands(reading?.bands ?? prefillBands(prevReading))
+    setVatPercent(reading?.vatPercent ?? prevReading?.vatPercent ?? 8)
     setNote(reading?.note ?? '')
     setSavedAt(null)
-  }, [reading, month])
+  }, [reading, month, prevReading])
 
   const isWater = meterId === 3
   const visibleBands: BandKey[] = isWater ? ['toanThoiGian'] : BAND_KEYS
@@ -49,38 +138,75 @@ function MeterCard({ meterId, month, reading, customers, usages }: {
   const meterCustomers = customers.filter(c => c.meterId === meterId && c.active)
   const draftReading: MeterReading = { id: '', meterId, month, bands, vatPercent, note, createdAt: '', updatedAt: '' }
 
+  // Cảnh báo sai lệch ngay khi đang nhập (trước khi lưu)
+  const priceChangedBands = bandsWithPriceChange(bands, prevReading)
+  const priorForAnomaly = readings.filter(r => r.meterId === meterId && r.month < month).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 3)
+  const anomalous = isAmountAnomalous(meterTotal(bands, vatPercent), priorForAnomaly)
+
   return (
     <div className="sc">
       <div className="sc-head">
-        <span className="sc-title">{METER_LABELS[meterId]}</span>
+        <EditableMeterTitle meterId={meterId} meterNames={meterNames} canEdit={canEditMeterName} onSave={onSaveMeterNames} />
         <span style={{ fontSize: 11, color: 'var(--muted)' }}>Đơn vị: {unit}</span>
       </div>
       <div className="sc-body">
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleBands.length}, 1fr)`, gap: 10, marginBottom: 12 }}>
-          {visibleBands.map(k => (
-            <div key={k}>
-              <label className="dn-label">{isWater ? 'Sử dụng trong tháng' : BAND_LABELS[k]}</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input type="number" className="dn-input" placeholder={unit} value={bands[k].kwh || ''} onChange={e => setBand(k, 'kwh', Number(e.target.value))} />
-                <input type="number" className="dn-input" placeholder="Đơn giá" value={bands[k].donGia || ''} onChange={e => setBand(k, 'donGia', Number(e.target.value))} />
-              </div>
-            </div>
-          ))}
-          <div>
-            <label className="dn-label">% VAT</label>
-            <input type="number" className="dn-input" value={vatPercent || ''} onChange={e => setVatPercent(Number(e.target.value))} />
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Bảng 1 — Nhập chỉ số tháng {month}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, textTransform: 'none', fontWeight: 400 }}>
+            <label className="dn-label" style={{ margin: 0 }}>VAT %:</label>
+            <input type="number" className="dn-input" style={{ width: 60 }} value={vatPercent || ''} onChange={e => setVatPercent(Number(e.target.value))} />
+          </span>
+        </div>
+
+        <table className="dn-table" style={{ marginBottom: 10 }}>
+          <thead><tr>
+            <th>Khung giờ</th>
+            <th style={{ textAlign: 'right' }}>Sản lượng ({unit})</th>
+            <th style={{ textAlign: 'right' }}>Đơn giá (đ)</th>
+            <th style={{ textAlign: 'right' }}>Thành tiền</th>
+          </tr></thead>
+          <tbody>
+            {visibleBands.map(k => {
+              const changed = priceChangedBands.includes(k)
+              return (
+                <tr key={k}>
+                  <td>{isWater ? 'Sử dụng trong tháng' : BAND_LABELS[k]}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <input type="number" className="dn-input" style={{ textAlign: 'right' }} placeholder="0" value={bands[k].kwh || ''} onChange={e => setBand(k, 'kwh', Number(e.target.value))} />
+                  </td>
+                  <td style={{ textAlign: 'right', background: changed ? '#FFF4E0' : undefined }}>
+                    <input type="number" className="dn-input" style={{ textAlign: 'right' }} placeholder="0" value={bands[k].donGia || ''} onChange={e => setBand(k, 'donGia', Number(e.target.value))} />
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(bandMoney(bands[k]))} đ</td>
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot>
+            <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Tổng tiền chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterSubtotal(bands))} đ</td></tr>
+            <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Thuế VAT ({vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterVat(bands, vatPercent))} đ</td></tr>
+            <tr><td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)' }}>Tổng thanh toán</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmt(meterTotal(bands, vatPercent))} đ</td></tr>
+          </tfoot>
+        </table>
+
+        {priceChangedBands.length > 0 && (
+          <div style={{ background: '#FFF4E0', color: '#8A5A12', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+            ⚠ Đơn giá thay đổi so với tháng trước ở: {priceChangedBands.map(k => isWater ? 'sử dụng' : BAND_LABELS[k]).join(', ')}. Kiểm tra lại nếu không cố ý sửa.
           </div>
-        </div>
+        )}
+        {anomalous && (
+          <div style={{ background: '#FDECEC', color: '#8C1F1F', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+            ⚠️ Tổng thanh toán tháng này lệch hơn 30% so với trung bình 3 tháng trước — có thể ghi sai số, kiểm tra lại trước khi lưu.
+          </div>
+        )}
 
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '10px 14px', background: 'var(--surf2)', borderRadius: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-          <div><span style={{ fontSize: 11, color: 'var(--muted)' }}>Tiền chưa thuế: </span><b>{fmt(meterSubtotal(bands))} đ</b></div>
-          <div><span style={{ fontSize: 11, color: 'var(--muted)' }}>Thuế VAT: </span><b>{fmt(meterVat(bands, vatPercent))} đ</b></div>
-          <div><span style={{ fontSize: 11, color: 'var(--muted)' }}>Tổng tiền: </span><b style={{ color: 'var(--navy)', fontSize: 14 }}>{fmt(meterTotal(bands, vatPercent))} đ</b></div>
-          <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={save} disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu chỉ số'}</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+          <button className="btn-primary" onClick={save} disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu chỉ số'}</button>
           {savedAt && <span style={{ fontSize: 11, color: 'var(--green)' }}>✓ Đã lưu</span>}
+          <input className="dn-input" placeholder="Ghi chú (tuỳ chọn)" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1 }} />
         </div>
 
-        <input className="dn-input" placeholder="Ghi chú (tuỳ chọn)" value={note} onChange={e => setNote(e.target.value)} style={{ marginBottom: 12 }} />
+        <MeterHistoryTable meterId={meterId} readings={readings} visibleBands={visibleBands} isWater={isWater} unit={unit} />
 
         {meterCustomers.length > 0 && (
           <>
@@ -119,10 +245,11 @@ function CustomerUsageRow({ customer, month, usage, reading }: {
   const charge = customerCharge(customer, draftUsage, reading)
 
   if (customer.chargeType === 'fixed_area') {
+    const priceThisMonth = resolvePrice(customer.areaPriceHistory, customer.pricePerM2, month)
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
         <span style={{ flex: 1, fontWeight: 600 }}>{customer.name}</span>
-        <span style={{ color: 'var(--muted)' }}>{customer.areaM2} m² × {fmt(customer.pricePerM2)} đ/m²</span>
+        <span style={{ color: 'var(--muted)' }}>{customer.areaM2} m² × {fmt(priceThisMonth)} đ/m²</span>
         <b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b>
       </div>
     )
@@ -136,11 +263,15 @@ function CustomerUsageRow({ customer, month, usage, reading }: {
     )
   }
 
+  const flatPriceThisMonth = resolvePrice(customer.flatPriceHistory, customer.flatUnitPrice, month)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
       <span style={{ minWidth: 140, fontWeight: 600, fontSize: 12.5 }}>{customer.name}</span>
       {customer.chargeType === 'flat_vat_incl' ? (
-        <input type="number" className="dn-input" style={{ width: 120 }} placeholder="Tổng dùng" value={totalUnit || ''} onChange={e => setTotalUnit(Number(e.target.value))} />
+        <>
+          <input type="number" className="dn-input" style={{ width: 120 }} placeholder="Tổng dùng" value={totalUnit || ''} onChange={e => setTotalUnit(Number(e.target.value))} />
+          <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>× {fmt(flatPriceThisMonth)} đ</span>
+        </>
       ) : (
         (['caoDiem', 'thapDiem', 'binhThuong'] as BandKey[]).map(k => (
           <input key={k} type="number" className="dn-input" style={{ width: 110 }} placeholder={BAND_LABELS[k]} value={bandsKwh[k] || ''}
@@ -153,15 +284,16 @@ function CustomerUsageRow({ customer, month, usage, reading }: {
   )
 }
 
-export function TabNhapChiSo({ readings, customers, usages, month }: {
+export function TabNhapChiSo({ readings, customers, usages, month, meterNames, canEditMeterName, onSaveMeterNames }: {
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; month: string
+  meterNames: Record<number, string>; canEditMeterName: boolean; onSaveMeterNames: (id: number, name: string) => void
 }) {
-  const byMeter = (id: MeterId) => readings.find(r => r.meterId === id && r.month === month)
+  const common = { readings, customers, usages, month, meterNames, canEditMeterName, onSaveMeterNames }
   return (
     <div>
-      <MeterCard meterId={1} month={month} reading={byMeter(1)} customers={customers} usages={usages} />
-      <MeterCard meterId={2} month={month} reading={byMeter(2)} customers={customers} usages={usages} />
-      <MeterCard meterId={3} month={month} reading={byMeter(3)} customers={customers} usages={usages} />
+      <MeterCard meterId={1} {...common} />
+      <MeterCard meterId={2} {...common} />
+      <MeterCard meterId={3} {...common} />
     </div>
   )
 }

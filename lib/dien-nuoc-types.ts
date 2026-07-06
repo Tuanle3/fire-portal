@@ -25,6 +25,11 @@ export const METER_LABELS: Record<MeterId, string> = {
 }
 export const METER_UNIT: Record<MeterId, string> = { 1: 'kWh', 2: 'kWh', 3: 'm³' }
 
+// Tên đồng hồ hiển thị: dùng tên tùy chỉnh (do admin sửa) nếu có, không thì dùng mặc định.
+export function meterLabel(customNames: Partial<Record<number, string>> | undefined, id: MeterId): string {
+  return customNames?.[id]?.trim() || METER_LABELS[id]
+}
+
 export interface MeterReading {
   id: string          // `${meterId}_${month}`
   meterId: MeterId
@@ -49,17 +54,37 @@ export const CHARGE_TYPE_LABELS: Record<ChargeType, string> = {
   remainder:        'Gánh phần còn lại',
 }
 
+// Một mốc giá có hiệu lực từ tháng `fromMonth` (YYYY-MM). fromMonth rỗng = áp dụng từ đầu.
+export interface PricePoint { fromMonth: string; price: number }
+
 export interface Customer {
   id: string
   name: string
   meterId: MeterId
   chargeType: ChargeType
-  flatUnitPrice: number   // dùng cho flat_vat_incl (đ/đơn vị, đã gồm VAT)
+  flatUnitPrice: number   // (cũ, giữ để tương thích) đơn giá gồm VAT cho flat_vat_incl
   areaM2: number          // dùng cho fixed_area
-  pricePerM2: number      // dùng cho fixed_area (đ/m²/tháng)
+  pricePerM2: number      // (cũ, giữ để tương thích) đơn giá/m²/tháng cho fixed_area
+  flatPriceHistory?: PricePoint[]  // bảng giá theo thời điểm cho flat_vat_incl (đ/đơn vị, đã gồm VAT)
+  areaPriceHistory?: PricePoint[]  // bảng giá theo thời điểm cho fixed_area (đ/m²/tháng)
+  floor: string           // Tầng
+  kioskCode: string       // Mã ki-ốt
+  kioskOwner: string      // Chủ ki-ốt
+  tenantName: string      // Khách hàng thuê (người đang thuê/vận hành thực tế)
   active: boolean
   note: string
   createdAt: string
+}
+
+// Giá có hiệu lực cho tháng `month`: lấy mốc mới nhất có fromMonth <= month.
+// Nếu month đứng trước mọi mốc thì dùng mốc sớm nhất. Không có history thì dùng fallback (giá tĩnh cũ).
+export function resolvePrice(history: PricePoint[] | undefined, fallback: number, month: string): number {
+  const valid = (history ?? []).filter(p => Number(p.price) > 0)
+  if (valid.length === 0) return fallback
+  const applicable = valid.filter(p => (p.fromMonth || '') <= month).sort((a, b) => (b.fromMonth || '').localeCompare(a.fromMonth || ''))
+  if (applicable.length > 0) return applicable[0].price
+  const earliest = [...valid].sort((a, b) => (a.fromMonth || '').localeCompare(b.fromMonth || ''))[0]
+  return earliest.price
 }
 
 export interface CustomerUsage {
@@ -96,8 +121,10 @@ export function meterTotal(bands: Bands, vatPercent: number): number {
 }
 
 export function customerCharge(customer: Customer, usage: CustomerUsage | undefined, reading: MeterReading | undefined): number {
+  const month = usage?.month || reading?.month || ''
   if (customer.chargeType === 'flat_vat_incl') {
-    return (usage?.totalUnit ?? 0) * customer.flatUnitPrice
+    const price = resolvePrice(customer.flatPriceHistory, customer.flatUnitPrice, month)
+    return (usage?.totalUnit ?? 0) * price
   }
   if (customer.chargeType === 'timeband_excl_vat') {
     if (!reading) return 0
@@ -106,7 +133,8 @@ export function customerCharge(customer: Customer, usage: CustomerUsage | undefi
     return subtotal * (1 + reading.vatPercent / 100)
   }
   if (customer.chargeType === 'fixed_area') {
-    return customer.areaM2 * customer.pricePerM2
+    const price = resolvePrice(customer.areaPriceHistory, customer.pricePerM2, month)
+    return customer.areaM2 * price
   }
   return 0 // remainder tính ở meterAllocation
 }
@@ -146,4 +174,26 @@ export function remainderByBand(reading: MeterReading, customers: Customer[], us
     out[k] = Math.max(0, bandMoney(reading.bands[k]) - usedByCustomers * reading.bands[k].donGia)
   }
   return out
+}
+
+// ── Đơn giá tháng gần nhất & phát hiện sai lệch ──────────────────────────────
+
+// Tìm reading gần nhất TRƯỚC tháng `beforeMonth` của 1 đồng hồ (readings đã sort theo month tăng dần hay không đều được).
+export function lastReadingBefore(readings: MeterReading[], meterId: MeterId, beforeMonth: string): MeterReading | null {
+  const candidates = readings.filter(r => r.meterId === meterId && r.month < beforeMonth).sort((a, b) => b.month.localeCompare(a.month))
+  return candidates[0] ?? null
+}
+
+// Danh sách band mà đơn giá tháng này khác đơn giá tháng trước đó (đơn giá đổi bất thường, vì mặc định đã tự điền theo tháng trước).
+export function bandsWithPriceChange(current: Bands, prevReading: MeterReading | null): BandKey[] {
+  if (!prevReading) return []
+  return BAND_KEYS.filter(k => current[k].donGia !== prevReading.bands[k].donGia && (current[k].donGia > 0 || prevReading.bands[k].donGia > 0))
+}
+
+// So sản lượng/tổng tiền tháng này với trung bình N tháng gần nhất trước đó — lệch quá `thresholdPct` (mặc định 30%) coi là bất thường.
+export function isAmountAnomalous(currentTotal: number, priorReadings: MeterReading[], thresholdPct = 0.3): boolean {
+  if (priorReadings.length === 0 || currentTotal === 0) return false
+  const avg = priorReadings.reduce((s, r) => s + meterTotal(r.bands, r.vatPercent), 0) / priorReadings.length
+  if (avg === 0) return false
+  return Math.abs(currentTotal - avg) / avg > thresholdPct
 }
