@@ -110,10 +110,10 @@ export default function DienNuocSadtPage() {
         .sc-title { font-size:11px; font-weight:700; letter-spacing:.07em; color:#4B6A8A; text-transform:uppercase; }
         .sc-body { padding:14px 16px; }
 
-        /* Bảng 1 (nhập chỉ số) bên trái 40% + Bảng 2 (theo tháng) bên phải 60% */
+        /* Bảng 1 (nhập chỉ số) bên trái 30% + Bảng 2 (theo tháng) bên phải 70% */
         .dn-split { display:flex; gap:18px; align-items:flex-start; }
-        .dn-split-left  { flex:0 0 40%; max-width:40%; min-width:0; }
-        .dn-split-right { flex:1 1 60%; min-width:0; overflow-x:auto; }
+        .dn-split-left  { flex:0 0 30%; max-width:30%; min-width:0; }
+        .dn-split-right { flex:1 1 70%; min-width:0; overflow-x:auto; }
         .dn-col-title { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; min-height:26px; }
         .dn-empty { font-size:12px; color:var(--muted2); font-style:italic; padding:16px 4px; }
         @media (max-width: 1100px) {
