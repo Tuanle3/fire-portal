@@ -121,6 +121,16 @@ function buildTaskTable(tasks: Task[]): Table {
   })
 }
 
+// Tiêu đề phòng ban (nhỏ hơn banner phần, có gạch nền nhẹ để tách khối)
+function deptHeading(text: string): Paragraph {
+  return new Paragraph({
+    children: [txt(text, { bold: true, size: 22, color: 'FFFFFF' })],
+    spacing: { before: 180, after: 100 },
+    shading: { fill: NAVY, type: ShadingType.CLEAR },
+    indent: { left: 140, right: 140 },
+  })
+}
+
 function buildPart(tasks: Task[], bannerLabel: string, bannerColor: string): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [sectionBanner(bannerLabel, bannerColor)]
   if (tasks.length === 0) {
@@ -128,7 +138,26 @@ function buildPart(tasks: Task[], bannerLabel: string, bannerColor: string): (Pa
     return out
   }
   out.push(buildOverviewLine(tasks))
-  out.push(buildTaskTable(tasks))
+
+  // Nhóm theo phòng ban; nhóm chưa phân loại xếp cuối, các phòng còn lại theo alphabet.
+  const byDept = new Map<string, Task[]>()
+  for (const t of tasks) {
+    const dept = (t.department || '').trim() || 'Chưa phân loại'
+    byDept.set(dept, [...(byDept.get(dept) ?? []), t])
+  }
+  const depts = [...byDept.keys()].sort((a, b) => {
+    if (a === 'Chưa phân loại') return 1
+    if (b === 'Chưa phân loại') return -1
+    return a.localeCompare(b, 'vi')
+  })
+
+  for (const dept of depts) {
+    const dTasks = byDept.get(dept)!
+    const done = dTasks.filter(t => t.status === 'hoan_thanh').length
+    const late = dTasks.filter(t => t.status === 'tre').length
+    out.push(deptHeading(`${dept}  ·  ${dTasks.length} việc${late > 0 ? ` · ${late} trễ hạn` : ''}${done > 0 ? ` · ${done} hoàn thành` : ''}`))
+    out.push(buildTaskTable(dTasks))
+  }
   out.push(para([], { after: 240 }))
   return out
 }

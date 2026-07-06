@@ -48,13 +48,16 @@ type View = 'list' | 'kanban' | 'analytics' | 'dept' | 'gantt' | 'timeline'
 // ── Hierarchy helpers ────────────────────────────────────────────────────────
 function buildHierarchy(tasks: Task[]): { task: Task; level: number }[] {
   const result: { task: Task; level: number }[] = []
+  const ids = new Set(tasks.map(t => t.id))
   function add(t: Task, level: number) {
     result.push({ task: t, level })
     tasks.filter(c => c.parentId === t.id)
       .sort((a, b) => taskSortRank(a) - taskSortRank(b))
       .forEach(c => add(c, level + 1))
   }
-  tasks.filter(t => !t.parentId)
+  // Việc gốc = không có cha, HOẶC cha không nằm trong tập hiện tại (mồ côi do lọc/tìm kiếm)
+  // → vẫn hiển thị như dòng cấp cao nhất thay vì bị ẩn mất.
+  tasks.filter(t => !t.parentId || !ids.has(t.parentId))
     .sort((a, b) => taskSortRank(a) - taskSortRank(b))
     .forEach(t => add(t, 0))
   return result
