@@ -128,6 +128,7 @@ export default function DienNuocSadtPage() {
         .dn-sticky-input { left:120px; min-width:320px; }
         .dn-sticky-amt { left:440px; min-width:90px; }
         .dn-sticky-btn { left:530px; min-width:44px; border-right:2px solid var(--border3) !important; }
+        .dn-section-hdr th { background:#DDE6F0 !important; color:var(--navy) !important; font-weight:800 !important; text-transform:uppercase; border-bottom:2px solid var(--border3) !important; }
 
         .ceo-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
         .ceo-kpi { background:var(--surface); border-radius:var(--rm); box-shadow:var(--sh); overflow:hidden; border:1px solid var(--border3); }

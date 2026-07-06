@@ -276,15 +276,21 @@ function CustomerUsageTable({ meterId, month, customers, readings, usages, readi
       <div className="dn-col-title"><span>Sản lượng khách hàng — tháng {month}</span></div>
       <div className="dn-usage-wrap">
         <table className="dn-table">
-          <thead><tr>
-            <th className="dn-sticky-col">Khách hàng</th>
-            <th className="dn-sticky-col dn-sticky-input">Nhập chỉ số</th>
-            <th className="dn-sticky-col dn-sticky-amt">Thành tiền</th>
-            <th className="dn-sticky-col dn-sticky-btn"></th>
-            {months.map(r => (
-              <th key={r.month} style={{ textAlign: 'right', whiteSpace: 'nowrap', background: r.month === month ? '#E0EDFA' : undefined }}>{r.month}{r.month === month ? ' ★' : ''}</th>
-            ))}
-          </tr></thead>
+          <thead>
+            <tr className="dn-section-hdr">
+              <th className="dn-sticky-col" style={{ left: 0, minWidth: 574, textAlign: 'left', fontSize: 11, letterSpacing: '.05em', borderRight: '2px solid var(--border3)' }} colSpan={4}>Nhập thông tin sản lượng</th>
+              <th colSpan={months.length} style={{ textAlign: 'center', fontSize: 11, letterSpacing: '.05em' }}>Đối chiếu theo tháng — sản lượng {"&"} thành tiền</th>
+            </tr>
+            <tr>
+              <th className="dn-sticky-col">Khách hàng</th>
+              <th className="dn-sticky-col dn-sticky-input">Nhập chỉ số</th>
+              <th className="dn-sticky-col dn-sticky-amt">Thành tiền</th>
+              <th className="dn-sticky-col dn-sticky-btn"></th>
+              {months.map(r => (
+                <th key={r.month} style={{ textAlign: 'right', whiteSpace: 'nowrap', background: r.month === month ? '#E0EDFA' : undefined }}>{r.month}{r.month === month ? ' ★' : ''}</th>
+              ))}
+            </tr>
+          </thead>
           <tbody>
             {meterCustomers.map(c => (
               <CURow key={c.id} customer={c} month={month}
@@ -347,9 +353,21 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
     const u = isCurrent ? draftUsage : usageOf(r.month)
     const sl = usageUnit(u)
     const tt = isCurrent ? charge : customerCharge(c, u, readingByMonth.get(r.month))
+    const priceLabel = (() => {
+      if (c.chargeType === 'flat_vat_incl') {
+        const p = resolvePrice(c.flatPriceHistory, c.flatUnitPrice, r.month)
+        return `${fmt(sl ?? 0)} × ${fmtDec(p)}`
+      }
+      if (c.chargeType === 'fixed_area') {
+        const p = resolvePrice(c.areaPriceHistory, c.pricePerM2, r.month)
+        return `${c.areaM2} m² × ${fmtDec(p)}`
+      }
+      return null
+    })()
     return (
       <td key={r.month} style={{ textAlign: 'right', verticalAlign: 'top', whiteSpace: 'nowrap', background: isCurrent ? '#E0EDFA' : undefined }}>
         <div style={{ fontWeight: isCurrent ? 700 : undefined }}>{sl == null ? '—' : fmt(sl)}</div>
+        {priceLabel && <div style={{ fontSize: 10, color: 'var(--muted2)' }}>{priceLabel}</div>}
         <div style={{ fontSize: 11, color: isCurrent ? 'var(--navy)' : 'var(--muted)', fontWeight: isCurrent ? 600 : undefined }}>{fmt(tt)} đ</div>
       </td>
     )
