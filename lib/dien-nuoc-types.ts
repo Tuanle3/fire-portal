@@ -57,6 +57,9 @@ export const CHARGE_TYPE_LABELS: Record<ChargeType, string> = {
 // Một mốc giá có hiệu lực từ tháng `fromMonth` (YYYY-MM). fromMonth rỗng = áp dụng từ đầu.
 export interface PricePoint { fromMonth: string; price: number }
 
+// Mốc đơn giá theo khung giờ (chưa VAT) cho khách timeband — 1 mốc gồm giá 3 khung giờ, áp dụng từ `fromMonth`.
+export interface TimebandPricePoint { fromMonth: string; caoDiem: number; thapDiem: number; binhThuong: number }
+
 export interface Customer {
   id: string
   name: string
@@ -67,6 +70,7 @@ export interface Customer {
   pricePerM2: number      // (cũ, giữ để tương thích) đơn giá/m²/tháng cho fixed_area
   flatPriceHistory?: PricePoint[]  // bảng giá theo thời điểm cho flat_vat_incl (đ/đơn vị, đã gồm VAT)
   areaPriceHistory?: PricePoint[]  // bảng giá theo thời điểm cho fixed_area (đ/m²/tháng)
+  timebandPriceHistory?: TimebandPricePoint[]  // bảng đơn giá theo khung giờ & thời điểm cho timeband_excl_vat (chưa VAT)
   floor: string           // Tầng
   kioskCode: string       // Mã ki-ốt
   kioskOwner: string      // Chủ ki-ốt
@@ -85,6 +89,15 @@ export function resolvePrice(history: PricePoint[] | undefined, fallback: number
   if (applicable.length > 0) return applicable[0].price
   const earliest = [...valid].sort((a, b) => (a.fromMonth || '').localeCompare(b.fromMonth || ''))[0]
   return earliest.price
+}
+
+// Mốc đơn giá khung giờ có hiệu lực cho tháng `month`: mốc mới nhất có fromMonth <= month (giống resolvePrice).
+export function resolveTimebandPoint(history: TimebandPricePoint[] | undefined, month: string): TimebandPricePoint | null {
+  const valid = (history ?? []).filter(p => p.caoDiem > 0 || p.thapDiem > 0 || p.binhThuong > 0)
+  if (valid.length === 0) return null
+  const applicable = valid.filter(p => (p.fromMonth || '') <= month).sort((a, b) => (b.fromMonth || '').localeCompare(a.fromMonth || ''))
+  if (applicable.length > 0) return applicable[0]
+  return [...valid].sort((a, b) => (a.fromMonth || '').localeCompare(b.fromMonth || ''))[0]
 }
 
 export interface CustomerUsage {
@@ -129,7 +142,13 @@ export function customerCharge(customer: Customer, usage: CustomerUsage | undefi
   if (customer.chargeType === 'timeband_excl_vat') {
     if (!reading) return 0
     const bandsKwh = usage?.bandsKwh ?? {}
-    const subtotal = BAND_KEYS.reduce((s, k) => s + (bandsKwh[k] ?? 0) * reading.bands[k].donGia, 0)
+    // Đơn giá riêng của khách theo mốc thời điểm; khung nào chưa set thì dùng đơn giá của đồng hồ tháng đó.
+    const pt = resolveTimebandPoint(customer.timebandPriceHistory, month)
+    const subtotal = (['caoDiem', 'thapDiem', 'binhThuong'] as const).reduce((s, k) => {
+      const custPrice = pt?.[k] ?? 0
+      const price = custPrice > 0 ? custPrice : reading.bands[k].donGia
+      return s + (bandsKwh[k] ?? 0) * price
+    }, 0)
     return subtotal * (1 + reading.vatPercent / 100)
   }
   if (customer.chargeType === 'fixed_area') {

@@ -10,6 +10,7 @@ import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
 import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
+const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 20 })  // giữ phần lẻ cho đơn giá
 
 function prefillBands(prev: MeterReading | null): Bands {
   if (!prev) return EMPTY_BANDS
@@ -82,7 +83,7 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
                     {!anomalous && priceChanged && <span title="Đơn giá thay đổi so với tháng trước" style={{ marginLeft: 4 }}>⚠</span>}
                   </td>
                   {visibleBands.map(k => <td key={`${k}-kwh`} style={{ textAlign: 'right' }}>{fmt(r.bands[k].kwh)}</td>)}
-                  {visibleBands.map(k => <td key={`${k}-gia`} style={{ textAlign: 'right' }}>{fmt(r.bands[k].donGia)}</td>)}
+                  {visibleBands.map(k => <td key={`${k}-gia`} style={{ textAlign: 'right' }}>{fmtDec(r.bands[k].donGia)}</td>)}
                   <td style={{ textAlign: 'right' }}>{fmt(meterSubtotal(r.bands))}</td>
                   <td style={{ textAlign: 'right' }}>{fmt(meterVat(r.bands, r.vatPercent))}</td>
                   <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterTotal(r.bands, r.vatPercent))}</td>
@@ -257,7 +258,7 @@ function CustomerUsageRow({ customer, month, usage, reading }: {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
         <span style={{ flex: 1, fontWeight: 600 }}>{customer.name}</span>
-        <span style={{ color: 'var(--muted)' }}>{customer.areaM2} m² × {fmt(priceThisMonth)} đ/m²</span>
+        <span style={{ color: 'var(--muted)' }}>{customer.areaM2} m² × {fmtDec(priceThisMonth)} đ/m²</span>
         <b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b>
       </div>
     )
@@ -278,7 +279,7 @@ function CustomerUsageRow({ customer, month, usage, reading }: {
       {customer.chargeType === 'flat_vat_incl' ? (
         <>
           <NumberInput style={{ width: 120 }} placeholder="Tổng dùng" value={totalUnit} onValueChange={setTotalUnit} />
-          <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>× {fmt(flatPriceThisMonth)} đ</span>
+          <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>× {fmtDec(flatPriceThisMonth)} đ</span>
         </>
       ) : (
         (['caoDiem', 'thapDiem', 'binhThuong'] as BandKey[]).map(k => (

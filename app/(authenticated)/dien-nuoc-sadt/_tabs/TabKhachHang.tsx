@@ -1,16 +1,21 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
-  Customer, MeterId, ChargeType, PricePoint, meterLabel, CHARGE_TYPE_LABELS,
+  Customer, MeterId, ChargeType, PricePoint, TimebandPricePoint,
+  meterLabel, CHARGE_TYPE_LABELS, resolveTimebandPoint,
 } from '@/lib/dien-nuoc-types'
 import { saveCustomer, deleteCustomer } from '@/lib/dien-nuoc-store'
 import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
+const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 20 })  // giữ phần lẻ cho đơn giá
+
+const EMPTY_TIMEBAND_ROW: TimebandPricePoint = { fromMonth: '', caoDiem: 0, thapDiem: 0, binhThuong: 0 }
 
 const EMPTY: Omit<Customer, 'id' | 'createdAt'> = {
   name: '', meterId: 1, chargeType: 'flat_vat_incl', flatUnitPrice: 0, areaM2: 0, pricePerM2: 0,
   flatPriceHistory: [{ fromMonth: '', price: 0 }], areaPriceHistory: [{ fromMonth: '', price: 0 }],
+  timebandPriceHistory: [{ ...EMPTY_TIMEBAND_ROW }],
   floor: '', kioskCode: '', kioskOwner: '', tenantName: '', active: true, note: '',
 }
 
@@ -48,12 +53,58 @@ function PriceHistoryEditor({ label, unit, value, onChange }: {
   )
 }
 
+// Bảng đơn giá theo khung giờ (chưa VAT) + theo thời điểm cho khách timeband.
+function TimebandPriceEditor({ value, onChange }: {
+  value: TimebandPricePoint[]; onChange: (v: TimebandPricePoint[]) => void
+}) {
+  const setRow = (i: number, patch: Partial<TimebandPricePoint>) => onChange(value.map((p, idx) => idx === i ? { ...p, ...patch } : p))
+  const addRow = () => onChange([...value, { ...EMPTY_TIMEBAND_ROW }])
+  const removeRow = (i: number) => onChange(value.filter((_, idx) => idx !== i))
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <label className="dn-label">Bảng đơn giá theo khung giờ (chưa VAT) — theo thời điểm</label>
+      <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 6 }}>
+        Đơn giá charge riêng cho khách này theo từng khung giờ. Mỗi mốc áp dụng từ tháng ghi bên trái đến khi có mốc mới — khi Nhà nước tăng giá thì thêm 1 mốc mới. Để trống khung nào thì khung đó dùng đơn giá của đồng hồ tháng đó.
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="dn-table">
+          <thead><tr>
+            <th>Áp dụng từ</th>
+            <th style={{ textAlign: 'right' }}>Cao điểm</th>
+            <th style={{ textAlign: 'right' }}>Thấp điểm</th>
+            <th style={{ textAlign: 'right' }}>Bình thường</th>
+            <th style={{ width: 60 }}></th>
+          </tr></thead>
+          <tbody>
+            {value.map((p, i) => (
+              <tr key={i}>
+                <td><input type="month" className="dn-input" style={{ width: 150 }} value={p.fromMonth} onChange={e => setRow(i, { fromMonth: e.target.value })} /></td>
+                <td><NumberInput style={{ textAlign: 'right' }} placeholder="Giá đồng hồ" value={p.caoDiem} onValueChange={v => setRow(i, { caoDiem: v })} /></td>
+                <td><NumberInput style={{ textAlign: 'right' }} placeholder="Giá đồng hồ" value={p.thapDiem} onValueChange={v => setRow(i, { thapDiem: v })} /></td>
+                <td><NumberInput style={{ textAlign: 'right' }} placeholder="Giá đồng hồ" value={p.binhThuong} onValueChange={v => setRow(i, { binhThuong: v })} /></td>
+                <td>{value.length > 1 && <button className="btn-danger" onClick={() => removeRow(i)}>Xoá</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button className="btn-ghost" style={{ marginTop: 6 }} onClick={addRow}>+ Thêm mốc giá</button>
+    </div>
+  )
+}
+
 function CustomerForm({ initial, meterNames, onSave, onCancel }: {
   initial?: Customer; meterNames: Record<number, string>; onSave: (c: Customer) => void; onCancel: () => void
 }) {
   const [form, setForm] = useState<Omit<Customer, 'id' | 'createdAt'>>(
     initial
-      ? { ...initial, flatPriceHistory: seedHistory(initial.flatPriceHistory, initial.flatUnitPrice), areaPriceHistory: seedHistory(initial.areaPriceHistory, initial.pricePerM2) }
+      ? {
+          ...initial,
+          flatPriceHistory: seedHistory(initial.flatPriceHistory, initial.flatUnitPrice),
+          areaPriceHistory: seedHistory(initial.areaPriceHistory, initial.pricePerM2),
+          timebandPriceHistory: (initial.timebandPriceHistory && initial.timebandPriceHistory.length > 0) ? initial.timebandPriceHistory : [{ ...EMPTY_TIMEBAND_ROW }],
+        }
       : { ...EMPTY }
   )
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) => setForm(f => ({ ...f, [k]: v }))
@@ -65,9 +116,10 @@ function CustomerForm({ initial, meterNames, onSave, onCancel }: {
     const latest = (h: PricePoint[]) => [...h].filter(p => p.price > 0).sort((a, b) => (b.fromMonth || '').localeCompare(a.fromMonth || ''))[0]?.price ?? 0
     const flatH = (form.flatPriceHistory ?? []).filter(p => p.price > 0)
     const areaH = (form.areaPriceHistory ?? []).filter(p => p.price > 0)
+    const tbH = (form.timebandPriceHistory ?? []).filter(p => p.caoDiem > 0 || p.thapDiem > 0 || p.binhThuong > 0)
     onSave({
       ...(initial ?? { id: `c${Date.now()}`, createdAt: now }), ...form,
-      flatPriceHistory: flatH, areaPriceHistory: areaH,
+      flatPriceHistory: flatH, areaPriceHistory: areaH, timebandPriceHistory: tbH,
       flatUnitPrice: flatH.length ? latest(flatH) : form.flatUnitPrice,
       pricePerM2:    areaH.length ? latest(areaH) : form.pricePerM2,
     } as Customer)
@@ -136,9 +188,15 @@ function CustomerForm({ initial, meterNames, onSave, onCancel }: {
         </>
       )}
       {form.chargeType === 'timeband_excl_vat' && (
-        <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 10 }}>
-          Tính theo sản lượng thực tế × đơn giá từng khung giờ của đồng hồ (nhập ở tab "Nhập chỉ số điện nước"), cộng thêm VAT.
-        </div>
+        <>
+          <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 10 }}>
+            Tính theo sản lượng thực tế từng khung giờ (nhập ở tab "Nhập chỉ số điện nước") × đơn giá bên dưới, cộng thêm VAT theo đồng hồ.
+          </div>
+          <TimebandPriceEditor
+            value={form.timebandPriceHistory ?? [{ ...EMPTY_TIMEBAND_ROW }]}
+            onChange={v => set('timebandPriceHistory', v)}
+          />
+        </>
       )}
       {form.chargeType === 'remainder' && (
         <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 10 }}>
@@ -161,12 +219,21 @@ function CustomerForm({ initial, meterNames, onSave, onCancel }: {
 
 export function TabKhachHang({ customers, meterNames }: { customers: Customer[]; meterNames: Record<number, string> }) {
   const [editing, setEditing] = useState<Customer | 'new' | null>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  // Khi mở form (Sửa/Thêm) tự cuộn lên đầu để thấy form ngay
+  useEffect(() => {
+    if (!editing) return
+    const scroller = cardRef.current?.closest('.prj-main') as HTMLElement | null
+    if (scroller) scroller.scrollTo({ top: 0, behavior: 'smooth' })
+    else window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [editing])
 
   const save = async (c: Customer) => { await saveCustomer(c); setEditing(null) }
   const remove = async (id: string) => { if (confirm('Xoá khách hàng này?')) await deleteCustomer(id) }
 
   return (
-    <div className="sc sc--sticky">
+    <div className="sc sc--sticky" ref={cardRef}>
       <div className="sc-head">
         <span className="sc-title">Danh sách khách hàng</span>
         <button className="btn-primary" onClick={() => setEditing('new')}>+ Thêm khách hàng</button>
@@ -195,9 +262,15 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
                   <td>{meterLabel(meterNames, c.meterId)}</td>
                   <td>{CHARGE_TYPE_LABELS[c.chargeType]}</td>
                   <td style={{ color: 'var(--muted)' }}>
-                    {c.chargeType === 'flat_vat_incl' && <>{fmt(c.flatUnitPrice)} đ (gồm VAT){(c.flatPriceHistory?.filter(p => p.price > 0).length ?? 0) > 1 && <span style={{ color: 'var(--gold2)' }}> · {c.flatPriceHistory!.filter(p => p.price > 0).length} mốc giá</span>}</>}
-                    {c.chargeType === 'fixed_area' && <>{c.areaM2} m² × {fmt(c.pricePerM2)} đ{(c.areaPriceHistory?.filter(p => p.price > 0).length ?? 0) > 1 && <span style={{ color: 'var(--gold2)' }}> · {c.areaPriceHistory!.filter(p => p.price > 0).length} mốc giá</span>}</>}
-                    {(c.chargeType === 'timeband_excl_vat' || c.chargeType === 'remainder') && '—'}
+                    {c.chargeType === 'flat_vat_incl' && <>{fmtDec(c.flatUnitPrice)} đ (gồm VAT){(c.flatPriceHistory?.filter(p => p.price > 0).length ?? 0) > 1 && <span style={{ color: 'var(--gold2)' }}> · {c.flatPriceHistory!.filter(p => p.price > 0).length} mốc giá</span>}</>}
+                    {c.chargeType === 'fixed_area' && <>{c.areaM2} m² × {fmtDec(c.pricePerM2)} đ{(c.areaPriceHistory?.filter(p => p.price > 0).length ?? 0) > 1 && <span style={{ color: 'var(--gold2)' }}> · {c.areaPriceHistory!.filter(p => p.price > 0).length} mốc giá</span>}</>}
+                    {c.chargeType === 'timeband_excl_vat' && (() => {
+                      const pt = resolveTimebandPoint(c.timebandPriceHistory, '9999-12')
+                      const n = c.timebandPriceHistory?.filter(p => p.caoDiem > 0 || p.thapDiem > 0 || p.binhThuong > 0).length ?? 0
+                      if (!pt) return 'Theo giá đồng hồ'
+                      return <>CĐ {fmtDec(pt.caoDiem)} · TĐ {fmtDec(pt.thapDiem)} · BT {fmtDec(pt.binhThuong)}{n > 1 && <span style={{ color: 'var(--gold2)' }}> · {n} mốc giá</span>}</>
+                    })()}
+                    {c.chargeType === 'remainder' && '—'}
                   </td>
                   <td><span className={`badge ${c.active ? 'badge-green' : 'badge-red'}`}>{c.active ? 'Hoạt động' : 'Ngừng'}</span></td>
                   <td>

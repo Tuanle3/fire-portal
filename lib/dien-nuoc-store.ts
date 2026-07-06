@@ -63,6 +63,7 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
     pricePerM2:    Number(d.pricePerM2 ?? 0),
     flatPriceHistory: (d.flatPriceHistory as Customer['flatPriceHistory']) ?? undefined,
     areaPriceHistory: (d.areaPriceHistory as Customer['areaPriceHistory']) ?? undefined,
+    timebandPriceHistory: (d.timebandPriceHistory as Customer['timebandPriceHistory']) ?? undefined,
     floor:      (d.floor as string) ?? '',
     kioskCode:  (d.kioskCode as string) ?? '',
     kioskOwner: (d.kioskOwner as string) ?? '',
