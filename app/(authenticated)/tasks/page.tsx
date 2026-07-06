@@ -1317,26 +1317,41 @@ function ExportModal({ tasks, filters, reportedBy, onClose }: {
   const [loadingXlsx, setLoadingXlsx] = useState(false)
   const loading = loadingDocx || loadingXlsx
   const [mode, setMode]         = useState<'week' | 'month' | 'custom'>('week')
+  const [offset, setOffset]     = useState(0)
   const [title, setTitle]       = useState('BÁO CÁO TÌNH TRẠNG CÔNG VIỆC')
   const [subtitle, setSub]      = useState('')
 
   const MODE_INFO = {
-    week:   { icon: '📅', label: 'Tuần này + Tuần tới', desc: 'Phần A: công việc tuần hiện tại · Phần B: kế hoạch tuần tiếp theo' },
-    month:  { icon: '🗓', label: 'Tháng này + Tháng tới', desc: 'Phần A: công việc tháng hiện tại · Phần B: kế hoạch tháng tiếp theo' },
+    week:   { icon: '📅', label: 'Theo tuần (2 tuần liên tiếp)', desc: 'Phần A: tuần được chọn · Phần B: tuần tiếp theo' },
+    month:  { icon: '🗓', label: 'Theo tháng (2 tháng liên tiếp)', desc: 'Phần A: tháng được chọn · Phần B: tháng tiếp theo' },
     custom: { icon: '✏️', label: 'Tùy chọn (theo bộ lọc)', desc: 'Sử dụng bộ lọc deadline + phòng ban + trạng thái đang chọn' },
   }
+
+  const periodLabel = useMemo(() => {
+    if (mode === 'week') {
+      const cur = getWeekRange(offset), next = getWeekRange(offset + 1)
+      return `${cur.label}  +  ${next.label}`
+    }
+    if (mode === 'month') {
+      const cur = getMonthRange(offset), next = getMonthRange(offset + 1)
+      return `${cur.label}  +  ${next.label}`
+    }
+    return ''
+  }, [mode, offset])
 
   // Xem trước đúng những công việc sẽ nằm trong báo cáo, khớp logic bên server (lib/report-ranges)
   const previewGroups = useMemo(() => {
     if (mode === 'week') {
-      const cur = getWeekRange(0), next = getWeekRange(1)
+      const cur = getWeekRange(offset), next = getWeekRange(offset + 1)
+      const curLabel = offset === 0 ? `Tuần này (${cur.label})` : offset === -1 ? `Tuần trước (${cur.label})` : `Tuần ${cur.label}`
+      const nextLabel = offset === -1 ? `Tuần này (${next.label})` : offset === 0 ? `Tuần tới (${next.label})` : `Tuần ${next.label}`
       return [
-        { label: `Tuần này (${cur.label})`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status)) },
-        { label: `Tuần tới (${next.label})`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to, t.status)) },
+        { label: `${curLabel}`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status)) },
+        { label: `${nextLabel}`, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to, t.status)) },
       ]
     }
     if (mode === 'month') {
-      const cur = getMonthRange(0), next = getMonthRange(1)
+      const cur = getMonthRange(offset), next = getMonthRange(offset + 1)
       return [
         { label: cur.label,  tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status)) },
         { label: next.label, tasks: tasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to, t.status)) },
@@ -1345,13 +1360,14 @@ function ExportModal({ tasks, filters, reportedBy, onClose }: {
     let t = tasks
     if (filters.dateFrom || filters.dateTo) t = t.filter(x => taskOverlapsRange(x.deadline, x.createdAt, filters.dateFrom, filters.dateTo, x.status))
     return [{ label: 'Theo bộ lọc hiện tại', tasks: t }]
-  }, [mode, tasks, filters])
+  }, [mode, offset, tasks, filters])
   const previewTotal = previewGroups.reduce((s, g) => s + g.tasks.length, 0)
 
   const payload = () => ({
     tasks,
     reportMode: mode,
     ...(mode === 'custom' ? filters : {}),
+    ...(mode !== 'custom' ? { offset } : {}),
     title,
     subtitle,
     reportedBy,
@@ -1393,7 +1409,7 @@ function ExportModal({ tasks, filters, reportedBy, onClose }: {
                   background: mode === k ? 'var(--surf2)' : 'transparent',
                   border: `1.5px solid ${mode === k ? 'var(--navy)' : 'var(--border2)'}`,
                   borderRadius: 8, padding: '10px 12px', transition: 'all .15s' }}>
-                  <input type="radio" name="mode" value={k} checked={mode === k} onChange={() => setMode(k)} style={{ marginTop: 2, accentColor: 'var(--navy)' }} />
+                  <input type="radio" name="mode" value={k} checked={mode === k} onChange={() => { setMode(k); setOffset(0) }} style={{ marginTop: 2, accentColor: 'var(--navy)' }} />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--navy)' }}>{v.icon} {v.label}</div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{v.desc}</div>
@@ -1402,6 +1418,20 @@ function ExportModal({ tasks, filters, reportedBy, onClose }: {
               ))}
             </div>
           </div>
+
+          {mode !== 'custom' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surf2)', border: '1px solid var(--border3)', borderRadius: 8, padding: '8px 12px' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', flexShrink: 0 }}>Kỳ báo cáo:</span>
+              <button onClick={() => setOffset(o => o - 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border2)', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--navy)', fontWeight: 700, flexShrink: 0 }}>◀</button>
+              <div style={{ flex: 1, textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: 'var(--navy)' }}>{periodLabel}</div>
+              <button onClick={() => setOffset(o => o + 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border2)', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--navy)', fontWeight: 700, flexShrink: 0 }}>▶</button>
+              {offset !== 0 && (
+                <button onClick={() => setOffset(0)} style={{ fontSize: 10.5, fontWeight: 600, color: '#2563EB', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  ↺ Hiện tại
+                </button>
+              )}
+            </div>
+          )}
 
           {mode === 'custom' && (
             <div style={{ background: 'var(--surf2)', border: '1px solid var(--border3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--txt2)', lineHeight: 1.7 }}>

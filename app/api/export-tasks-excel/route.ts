@@ -160,13 +160,16 @@ export async function POST(req: NextRequest) {
     const {
       tasks: rawTasks = [],
       reportMode = 'custom',
+      offset: rawOffset,
       status, priority, department, project,
       dateFrom, dateTo,
     } = body as {
       tasks?: Task[]; reportMode?: 'week' | 'month' | 'custom'
+      offset?: number
       status?: string; priority?: string; department?: string; project?: string
       dateFrom?: string; dateTo?: string
     }
+    const offset = typeof rawOffset === 'number' ? rawOffset : 0
 
     let allTasks = [...rawTasks] as Task[]
     if (status)     allTasks = allTasks.filter(t => t.status === status as TaskStatus)
@@ -178,11 +181,11 @@ export async function POST(req: NextRequest) {
     let nextTasks: Task[] = []
 
     if (reportMode === 'week') {
-      const cur = getWeekRange(0); const nxt = getWeekRange(1)
+      const cur = getWeekRange(offset); const nxt = getWeekRange(offset + 1)
       currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status))
       nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, nxt.from, nxt.to, t.status))
     } else if (reportMode === 'month') {
-      const cur = getMonthRange(0); const nxt = getMonthRange(1)
+      const cur = getMonthRange(offset); const nxt = getMonthRange(offset + 1)
       currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status))
       nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, nxt.from, nxt.to, t.status))
     } else {

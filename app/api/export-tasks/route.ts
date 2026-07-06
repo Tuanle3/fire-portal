@@ -265,15 +265,18 @@ export async function POST(req: NextRequest) {
     const {
       tasks: rawTasks = [],
       reportMode = 'custom',
+      offset: rawOffset,
       status, priority, department, project,
       dateFrom, dateTo,
       title, subtitle, reportedBy,
     } = body as {
       tasks?: Task[]
       reportMode?: 'week' | 'month' | 'custom'
+      offset?: number
       status?: string; priority?: string; department?: string; project?: string
       dateFrom?: string; dateTo?: string; title?: string; subtitle?: string; reportedBy?: string
     }
+    const offset = typeof rawOffset === 'number' ? rawOffset : 0
 
     // Apply common filters
     let allTasks = [...rawTasks] as Task[]
@@ -290,17 +293,17 @@ export async function POST(req: NextRequest) {
     let docSubtitle = subtitle || `Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}`
 
     if (reportMode === 'week') {
-      const cur  = getWeekRange(0)
-      const next = getWeekRange(1)
+      const cur  = getWeekRange(offset)
+      const next = getWeekRange(offset + 1)
       currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status))
       nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to, t.status))
-      currentLabel = `Tuần này (${cur.label})`
-      nextLabel    = `Tuần tới (${next.label})`
+      currentLabel = `Tuần ${cur.label}`
+      nextLabel    = `Tuần ${next.label}`
       docTitle    = title || 'BÁO CÁO CÔNG VIỆC TUẦN'
       docSubtitle  = `${cur.label} · Xuất ngày ${new Date().toLocaleDateString('vi-VN')}`
     } else if (reportMode === 'month') {
-      const cur  = getMonthRange(0)
-      const next = getMonthRange(1)
+      const cur  = getMonthRange(offset)
+      const next = getMonthRange(offset + 1)
       currentTasks = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, cur.from, cur.to, t.status))
       nextTasks    = allTasks.filter(t => taskOverlapsRange(t.deadline, t.createdAt, next.from, next.to, t.status))
       currentLabel = cur.label
