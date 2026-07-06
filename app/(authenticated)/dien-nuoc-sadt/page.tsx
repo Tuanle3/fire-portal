@@ -120,6 +120,15 @@ export default function DienNuocSadtPage() {
         .sc--sticky { overflow:visible; }
         .sc--sticky .sc-head { position:sticky; top:40px; z-index:30; border-radius:12px 12px 0 0; }
 
+        /* Bảng sản lượng khách hàng: cuộn ngang, cột nhập liệu dính bên trái */
+        .dn-usage-wrap { overflow-x:auto; background:#F8FAFC; border:1px solid var(--border3); border-radius:10px; }
+        .dn-sticky-col { position:sticky; z-index:2; background:#F8FAFC; }
+        .dn-table th.dn-sticky-col { background:#EEF3FA; }
+        .dn-sticky-col:first-child, .dn-table th.dn-sticky-col:first-child { left:0; min-width:120px; }
+        .dn-sticky-input { left:120px; min-width:320px; }
+        .dn-sticky-amt { left:440px; min-width:90px; }
+        .dn-sticky-btn { left:530px; min-width:44px; border-right:2px solid var(--border3) !important; }
+
         .ceo-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
         .ceo-kpi { background:var(--surface); border-radius:var(--rm); box-shadow:var(--sh); overflow:hidden; border:1px solid var(--border3); }
         .ceo-kpi-label { display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; padding:8px 14px; background:#EEF3FA; border-bottom:1px solid #D0DCE8; color:#4B6A8A; }

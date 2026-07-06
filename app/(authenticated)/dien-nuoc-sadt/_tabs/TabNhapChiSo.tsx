@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   MeterReading, Customer, CustomerUsage, MeterId, Bands,
   BAND_KEYS, BandKey, BAND_LABELS, meterLabel, METER_UNIT, EMPTY_BANDS,
@@ -244,72 +244,8 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
        </div>
 
         {meterCustomers.length > 0 && (
-          <div className="dn-split" style={{ marginTop: 16 }}>
-            <div className="dn-split-left" style={{ padding: '12px 14px', background: '#F8FAFC', border: '1px solid var(--border3)', borderRadius: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#4B6A8A', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Sản lượng khách hàng — tháng {month}</div>
-              {meterCustomers.map(c => (
-                <CustomerUsageRow key={c.id} customer={c} month={month} usage={usages.find(u => u.customerId === c.id && u.month === month)} reading={draftReading} allUsages={usages} />
-              ))}
-            </div>
-            <div className="dn-split-right" style={{ padding: '12px 14px', background: '#F8FAFC', border: '1px solid var(--border3)', borderRadius: 10 }}>
-              <CustomerUsageHistory meterId={meterId} customers={customers} readings={readings} usages={usages} unit={unit} />
-            </div>
-          </div>
+          <CustomerUsageTable meterId={meterId} month={month} customers={customers} readings={readings} usages={usages} reading={draftReading} unit={unit} />
         )}
-      </div>
-    </div>
-  )
-}
-
-// Bảng đối chiếu theo tháng (chỉ để xem): mỗi khách 2 dòng — sản lượng & thành tiền — theo 12 tháng gần nhất (cũ → mới).
-function CustomerUsageHistory({ meterId, customers, readings, usages, unit }: {
-  meterId: MeterId; customers: Customer[]; readings: MeterReading[]; usages: CustomerUsage[]; unit: string
-}) {
-  const months = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
-    .sort((a, b) => a.month.localeCompare(b.month))
-  const meterCustomers = customers.filter(c => c.meterId === meterId && c.active)
-  if (months.length === 0 || meterCustomers.length === 0) return null
-
-  const readingByMonth = new Map(months.map(r => [r.month, r]))
-  const usageOf = (cid: string, m: string) => usages.find(u => u.customerId === cid && u.month === m)
-  // Sản lượng dùng của khách trong tháng: flat = tổng dùng; timeband = tổng 3 khung; fixed/remainder không có sản lượng.
-  const usageUnit = (c: Customer, u: CustomerUsage | undefined): number | null => {
-    if (c.chargeType === 'flat_vat_incl') return u?.totalUnit ?? 0
-    if (c.chargeType === 'timeband_excl_vat') { const b = u?.bandsKwh ?? {}; return (b.caoDiem ?? 0) + (b.thapDiem ?? 0) + (b.binhThuong ?? 0) }
-    return null
-  }
-
-  return (
-    <div>
-      <div className="dn-col-title"><span>Đối chiếu theo tháng — sản lượng &amp; thành tiền</span></div>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="dn-table">
-          <thead><tr>
-            <th>Khách hàng</th>
-            <th></th>
-            {months.map(r => <th key={r.month} style={{ textAlign: 'right' }}>{r.month}</th>)}
-          </tr></thead>
-          <tbody>
-            {meterCustomers.map(c => (
-              <Fragment key={c.id}>
-                <tr>
-                  <td rowSpan={2} style={{ fontWeight: 600, verticalAlign: 'top' }}>{c.name}</td>
-                  <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>Sản lượng ({unit})</td>
-                  {months.map(r => {
-                    const val = usageUnit(c, usageOf(c.id, r.month))
-                    return <td key={r.month} style={{ textAlign: 'right' }}>{val == null ? '—' : fmt(val)}</td>
-                  })}
-                </tr>
-                <tr>
-                  <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>Thành tiền (đ)</td>
-                  {months.map(r => (
-                    <td key={r.month} style={{ textAlign: 'right' }}>{fmt(customerCharge(c, usageOf(c.id, r.month), readingByMonth.get(r.month)))}</td>
-                  ))}
-                </tr>
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   )
@@ -320,11 +256,50 @@ function prevMonthStr(m: string): string {
   return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`
 }
 
-function CustomerUsageRow({ customer, month, usage, reading, allUsages }: {
-  customer: Customer; month: string; usage: CustomerUsage | undefined; reading: MeterReading; allUsages: CustomerUsage[]
+// Bảng thống nhất: nhập chỉ số bên trái (sticky) + đối chiếu theo tháng bên phải (cuộn ngang).
+function CustomerUsageTable({ meterId, month, customers, readings, usages, reading, unit }: {
+  meterId: MeterId; month: string; customers: Customer[]; readings: MeterReading[]
+  usages: CustomerUsage[]; reading: MeterReading; unit: string
 }) {
-  const prevUsage = useMemo(() => allUsages.find(u => u.customerId === customer.id && u.month === prevMonthStr(month)), [allUsages, customer.id, month])
+  const months = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
+    .sort((a, b) => a.month.localeCompare(b.month))
+  const meterCustomers = customers.filter(c => c.meterId === meterId && c.active)
+  if (meterCustomers.length === 0) return null
 
+  const readingByMonth = new Map(months.map(r => [r.month, r]))
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div className="dn-col-title"><span>Sản lượng khách hàng — tháng {month}</span></div>
+      <div className="dn-usage-wrap">
+        <table className="dn-table">
+          <thead><tr>
+            <th className="dn-sticky-col">Khách hàng</th>
+            <th className="dn-sticky-col dn-sticky-input">Nhập chỉ số</th>
+            <th className="dn-sticky-col dn-sticky-amt">Thành tiền</th>
+            <th className="dn-sticky-col dn-sticky-btn"></th>
+            {months.map(r => <th key={r.month} style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{r.month}</th>)}
+          </tr></thead>
+          <tbody>
+            {meterCustomers.map(c => (
+              <CURow key={c.id} customer={c} month={month}
+                usage={usages.find(u => u.customerId === c.id && u.month === month)}
+                allUsages={usages} reading={reading}
+                months={months} readingByMonth={readingByMonth} unit={unit} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function CURow({ customer: c, month, usage, allUsages, reading, months, readingByMonth, unit }: {
+  customer: Customer; month: string; usage: CustomerUsage | undefined
+  allUsages: CustomerUsage[]; reading: MeterReading
+  months: MeterReading[]; readingByMonth: Map<string, MeterReading>; unit: string
+}) {
+  const prevUsage = useMemo(() => allUsages.find(u => u.customerId === c.id && u.month === prevMonthStr(month)), [allUsages, c.id, month])
   const [indexOld, setIndexOld] = useState(usage?.indexOld ?? prevUsage?.indexNew ?? 0)
   const [indexNew, setIndexNew] = useState(usage?.indexNew ?? 0)
   const [bandsIndexOld, setBandsIndexOld] = useState<Partial<Record<BandKey, number>>>(usage?.bandsIndexOld ?? prevUsage?.bandsIndexNew ?? {})
@@ -347,71 +322,99 @@ function CustomerUsageRow({ customer, month, usage, reading, allUsages }: {
   const save = async () => {
     setSaving(true)
     const now = new Date().toISOString().slice(0, 10)
-    const id = `${customer.id}_${month}`
-    await saveUsage({ id, customerId: customer.id, month, totalUnit, bandsKwh, indexOld, indexNew, bandsIndexOld, bandsIndexNew, createdAt: usage?.createdAt || now, updatedAt: now })
+    const id = `${c.id}_${month}`
+    await saveUsage({ id, customerId: c.id, month, totalUnit, bandsKwh, indexOld, indexNew, bandsIndexOld, bandsIndexNew, createdAt: usage?.createdAt || now, updatedAt: now })
     setSaving(false)
   }
 
-  const draftUsage: CustomerUsage = { id: '', customerId: customer.id, month, totalUnit, bandsKwh, indexOld, indexNew, bandsIndexOld, bandsIndexNew, createdAt: '', updatedAt: '' }
-  const charge = customerCharge(customer, draftUsage, reading)
+  const draftUsage: CustomerUsage = { id: '', customerId: c.id, month, totalUnit, bandsKwh, indexOld, indexNew, bandsIndexOld, bandsIndexNew, createdAt: '', updatedAt: '' }
+  const charge = customerCharge(c, draftUsage, reading)
 
-  if (customer.chargeType === 'fixed_area') {
-    const priceThisMonth = resolvePrice(customer.areaPriceHistory, customer.pricePerM2, month)
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
-        <span style={{ flex: 1, fontWeight: 600 }}>{customer.name}</span>
-        <span style={{ color: 'var(--muted)' }}>{customer.areaM2} m² × {fmtDec(priceThisMonth)} đ/m²</span>
-        <b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b>
-      </div>
-    )
-  }
-  if (customer.chargeType === 'remainder') {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
-        <span style={{ flex: 1, fontWeight: 600 }}>{customer.name}</span>
-        <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>Gánh phần còn lại (tự tính ở tab Công nợ)</span>
-      </div>
-    )
+  const usageOf = (m: string) => allUsages.find(u => u.customerId === c.id && u.month === m)
+  const usageUnit = (u: CustomerUsage | undefined): number | null => {
+    if (c.chargeType === 'flat_vat_incl') return u?.totalUnit ?? 0
+    if (c.chargeType === 'timeband_excl_vat') { const b = u?.bandsKwh ?? {}; return (b.caoDiem ?? 0) + (b.thapDiem ?? 0) + (b.binhThuong ?? 0) }
+    return null
   }
 
-  const flatPriceThisMonth = resolvePrice(customer.flatPriceHistory, customer.flatUnitPrice, month)
-
-  if (customer.chargeType === 'flat_vat_incl') {
+  const monthCells = months.map(r => {
+    const u = usageOf(r.month)
+    const sl = usageUnit(u)
+    const tt = customerCharge(c, u, readingByMonth.get(r.month))
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-        <span style={{ minWidth: 140, fontWeight: 600, fontSize: 12.5 }}>{customer.name}</span>
-        <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Cũ:</span>
-        <NumberInput style={{ width: 100 }} placeholder="Chỉ số cũ" value={indexOld} onValueChange={setIndexOld} />
-        <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Mới:</span>
-        <NumberInput style={{ width: 100 }} placeholder="Chỉ số mới" value={indexNew} onValueChange={setIndexNew} />
-        <span style={{ fontSize: 11, color: 'var(--muted)' }}>→ SL: {fmt(totalUnit)} × {fmtDec(flatPriceThisMonth)} đ</span>
-        <b style={{ color: 'var(--navy)', minWidth: 90, textAlign: 'right' }}>{fmt(charge)} đ</b>
-        <button className="btn-ghost" onClick={save} disabled={saving}>{saving ? '…' : 'Lưu'}</button>
-      </div>
+      <td key={r.month} style={{ textAlign: 'right', verticalAlign: 'top', whiteSpace: 'nowrap' }}>
+        <div>{sl == null ? '—' : fmt(sl)}</div>
+        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmt(tt)} đ</div>
+      </td>
+    )
+  })
+
+  if (c.chargeType === 'fixed_area') {
+    const price = resolvePrice(c.areaPriceHistory, c.pricePerM2, month)
+    return (
+      <tr>
+        <td className="dn-sticky-col" style={{ fontWeight: 600 }}>{c.name}</td>
+        <td className="dn-sticky-col dn-sticky-input"><span style={{ color: 'var(--muted)', fontSize: 11.5 }}>{c.areaM2} m² × {fmtDec(price)} đ/m²</span></td>
+        <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right' }}><b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b></td>
+        <td className="dn-sticky-col dn-sticky-btn"></td>
+        {monthCells}
+      </tr>
+    )
+  }
+  if (c.chargeType === 'remainder') {
+    return (
+      <tr>
+        <td className="dn-sticky-col" style={{ fontWeight: 600 }}>{c.name}</td>
+        <td className="dn-sticky-col dn-sticky-input"><span style={{ color: 'var(--muted)', fontStyle: 'italic', fontSize: 11.5 }}>Gánh phần còn lại</span></td>
+        <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right' }}>—</td>
+        <td className="dn-sticky-col dn-sticky-btn"></td>
+        {months.map(r => <td key={r.month} style={{ textAlign: 'right' }}>—</td>)}
+      </tr>
+    )
+  }
+
+  const flatPrice = resolvePrice(c.flatPriceHistory, c.flatUnitPrice, month)
+
+  if (c.chargeType === 'flat_vat_incl') {
+    return (
+      <tr>
+        <td className="dn-sticky-col" style={{ fontWeight: 600 }}>{c.name}</td>
+        <td className="dn-sticky-col dn-sticky-input">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Cũ:</span>
+            <NumberInput style={{ width: 80 }} placeholder="Chỉ số cũ" value={indexOld} onValueChange={setIndexOld} />
+            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Mới:</span>
+            <NumberInput style={{ width: 80 }} placeholder="Chỉ số mới" value={indexNew} onValueChange={setIndexNew} />
+            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ SL: {fmt(totalUnit)} × {fmtDec(flatPrice)}</span>
+          </div>
+        </td>
+        <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right' }}><b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b></td>
+        <td className="dn-sticky-col dn-sticky-btn"><button className="btn-ghost" onClick={save} disabled={saving}>{saving ? '…' : 'Lưu'}</button></td>
+        {monthCells}
+      </tr>
     )
   }
 
   // timeband_excl_vat
   return (
-    <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ fontWeight: 600, fontSize: 12.5 }}>{customer.name}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b>
-          <button className="btn-ghost" onClick={save} disabled={saving}>{saving ? '…' : 'Lưu'}</button>
-        </div>
-      </div>
-      {(['caoDiem', 'thapDiem', 'binhThuong'] as const).map(k => (
-        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, paddingLeft: 8 }}>
-          <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 80 }}>{BAND_LABELS[k]}:</span>
-          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Cũ</span>
-          <NumberInput style={{ width: 90 }} value={bandsIndexOld[k] ?? 0} onValueChange={v => setBandsIndexOld(b => ({ ...b, [k]: v }))} />
-          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Mới</span>
-          <NumberInput style={{ width: 90 }} value={bandsIndexNew[k] ?? 0} onValueChange={v => setBandsIndexNew(b => ({ ...b, [k]: v }))} />
-          <span style={{ fontSize: 11, color: 'var(--muted)' }}>→ SL: {fmt(bandsKwh[k] ?? 0)}</span>
-        </div>
-      ))}
-    </div>
+    <tr>
+      <td className="dn-sticky-col" style={{ fontWeight: 600, verticalAlign: 'top' }}>{c.name}</td>
+      <td className="dn-sticky-col dn-sticky-input" style={{ verticalAlign: 'top' }}>
+        {(['caoDiem', 'thapDiem', 'binhThuong'] as const).map(k => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 10.5, color: 'var(--muted)', minWidth: 70 }}>{BAND_LABELS[k]}:</span>
+            <span style={{ fontSize: 10, color: 'var(--muted)' }}>Cũ</span>
+            <NumberInput style={{ width: 70 }} value={bandsIndexOld[k] ?? 0} onValueChange={v => setBandsIndexOld(b => ({ ...b, [k]: v }))} />
+            <span style={{ fontSize: 10, color: 'var(--muted)' }}>Mới</span>
+            <NumberInput style={{ width: 70 }} value={bandsIndexNew[k] ?? 0} onValueChange={v => setBandsIndexNew(b => ({ ...b, [k]: v }))} />
+            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmt(bandsKwh[k] ?? 0)}</span>
+          </div>
+        ))}
+      </td>
+      <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right', verticalAlign: 'top' }}><b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b></td>
+      <td className="dn-sticky-col dn-sticky-btn" style={{ verticalAlign: 'top' }}><button className="btn-ghost" onClick={save} disabled={saving}>{saving ? '…' : 'Lưu'}</button></td>
+      {monthCells}
+    </tr>
   )
 }
 
