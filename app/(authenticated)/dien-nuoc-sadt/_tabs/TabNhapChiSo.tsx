@@ -261,11 +261,14 @@ function CustomerUsageTable({ meterId, month, customers, readings, usages, readi
   meterId: MeterId; month: string; customers: Customer[]; readings: MeterReading[]
   usages: CustomerUsage[]; reading: MeterReading; unit: string
 }) {
-  const months = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
+  const histMonths = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
     .sort((a, b) => a.month.localeCompare(b.month))
   const meterCustomers = customers.filter(c => c.meterId === meterId && c.active)
   if (meterCustomers.length === 0) return null
 
+  // Luôn bao gồm tháng hiện tại trong cột để đối chiếu ngay khi nhập
+  const hasCurrentMonth = histMonths.some(r => r.month === month)
+  const months = hasCurrentMonth ? histMonths : [...histMonths, reading].sort((a, b) => a.month.localeCompare(b.month))
   const readingByMonth = new Map(months.map(r => [r.month, r]))
 
   return (
@@ -278,7 +281,9 @@ function CustomerUsageTable({ meterId, month, customers, readings, usages, readi
             <th className="dn-sticky-col dn-sticky-input">Nhập chỉ số</th>
             <th className="dn-sticky-col dn-sticky-amt">Thành tiền</th>
             <th className="dn-sticky-col dn-sticky-btn"></th>
-            {months.map(r => <th key={r.month} style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{r.month}</th>)}
+            {months.map(r => (
+              <th key={r.month} style={{ textAlign: 'right', whiteSpace: 'nowrap', background: r.month === month ? '#E0EDFA' : undefined }}>{r.month}{r.month === month ? ' ★' : ''}</th>
+            ))}
           </tr></thead>
           <tbody>
             {meterCustomers.map(c => (
@@ -338,13 +343,14 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
   }
 
   const monthCells = months.map(r => {
-    const u = usageOf(r.month)
+    const isCurrent = r.month === month
+    const u = isCurrent ? draftUsage : usageOf(r.month)
     const sl = usageUnit(u)
-    const tt = customerCharge(c, u, readingByMonth.get(r.month))
+    const tt = isCurrent ? charge : customerCharge(c, u, readingByMonth.get(r.month))
     return (
-      <td key={r.month} style={{ textAlign: 'right', verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-        <div>{sl == null ? '—' : fmt(sl)}</div>
-        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmt(tt)} đ</div>
+      <td key={r.month} style={{ textAlign: 'right', verticalAlign: 'top', whiteSpace: 'nowrap', background: isCurrent ? '#E0EDFA' : undefined }}>
+        <div style={{ fontWeight: isCurrent ? 700 : undefined }}>{sl == null ? '—' : fmt(sl)}</div>
+        <div style={{ fontSize: 11, color: isCurrent ? 'var(--navy)' : 'var(--muted)', fontWeight: isCurrent ? 600 : undefined }}>{fmt(tt)} đ</div>
       </td>
     )
   })
