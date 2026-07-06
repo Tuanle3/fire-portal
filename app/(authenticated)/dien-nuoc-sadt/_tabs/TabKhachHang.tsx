@@ -4,6 +4,7 @@ import {
   Customer, MeterId, ChargeType, PricePoint, meterLabel, CHARGE_TYPE_LABELS,
 } from '@/lib/dien-nuoc-types'
 import { saveCustomer, deleteCustomer } from '@/lib/dien-nuoc-store'
+import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
@@ -37,7 +38,7 @@ function PriceHistoryEditor({ label, unit, value, onChange }: {
         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
           <span style={{ fontSize: 11.5, color: 'var(--muted)', minWidth: 70 }}>Áp dụng từ</span>
           <input type="month" className="dn-input" style={{ width: 150 }} value={p.fromMonth} onChange={e => setRow(i, { fromMonth: e.target.value })} />
-          <input type="number" className="dn-input" style={{ width: 140 }} placeholder="Đơn giá" value={p.price || ''} onChange={e => setRow(i, { price: Number(e.target.value) })} />
+          <NumberInput style={{ width: 140 }} placeholder="Đơn giá" value={p.price} onValueChange={v => setRow(i, { price: v })} />
           <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>{unit}</span>
           {value.length > 1 && <button className="btn-danger" onClick={() => removeRow(i)}>Xoá</button>}
         </div>

@@ -5,6 +5,7 @@ import {
   meterLabel, meterAllocation, remainderByBand, BAND_KEYS, BAND_LABELS,
 } from '@/lib/dien-nuoc-types'
 import { savePayment } from '@/lib/dien-nuoc-store'
+import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
@@ -39,7 +40,7 @@ function PaymentModal({ customerId, month, due, paid, onClose }: {
           <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>Còn nợ tháng {month}: <b style={{ color: '#DC2626' }}>{fmt(remain)} đ</b></div>
           <div className="so-field so-field--full">
             <label className="so-label">Số tiền thu</label>
-            <input type="number" className="so-input" value={amount || ''} onChange={e => setAmount(Number(e.target.value))} />
+            <NumberInput className="so-input" value={amount} onValueChange={setAmount} />
           </div>
           <div className="so-field so-field--full">
             <label className="so-label">Ghi chú (tuỳ chọn)</label>

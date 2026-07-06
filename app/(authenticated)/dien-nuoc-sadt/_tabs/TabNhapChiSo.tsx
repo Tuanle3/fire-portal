@@ -7,6 +7,7 @@ import {
   lastReadingBefore, bandsWithPriceChange, isAmountAnomalous,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
+import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
@@ -49,15 +50,16 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
   meterId: MeterId; readings: MeterReading[]; visibleBands: BandKey[]; isWater: boolean; unit: string
 }) {
   const rows = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
-  if (rows.length === 0) return null
   const ascByMonth = [...rows].sort((a, b) => a.month.localeCompare(b.month))
 
   return (
-    <div style={{ marginTop: 16, marginBottom: 16 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 6 }}>
-        Bảng 2 — Chi tiết thông số theo tháng (12 tháng gần nhất)
+    <div>
+      <div className="dn-col-title">
+        <span>Bảng 2 — Chi tiết thông số theo tháng (12 tháng gần nhất)</span>
       </div>
-      <div style={{ overflowX: 'auto' }}>
+      {rows.length === 0 ? (
+        <div className="dn-empty">Chưa có dữ liệu tháng nào cho đồng hồ này.</div>
+      ) : (
         <table className="dn-table">
           <thead><tr>
             <th>Tháng</th>
@@ -89,7 +91,7 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
             })}
           </tbody>
         </table>
-      </div>
+      )}
     </div>
   )
 }
@@ -150,7 +152,9 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
         <span style={{ fontSize: 11, color: 'var(--muted)' }}>Đơn vị: {unit}</span>
       </div>
       <div className="sc-body">
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+       <div className="dn-split">
+        <div className="dn-split-left">
+        <div className="dn-col-title">
           <span>Bảng 1 — Nhập chỉ số tháng {month}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, textTransform: 'none', fontWeight: 400 }}>
             <label className="dn-label" style={{ margin: 0 }}>VAT %:</label>
@@ -172,10 +176,10 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
                 <tr key={k}>
                   <td>{isWater ? 'Sử dụng trong tháng' : BAND_LABELS[k]}</td>
                   <td style={{ textAlign: 'right' }}>
-                    <input type="number" className="dn-input" style={{ textAlign: 'right' }} placeholder="0" value={bands[k].kwh || ''} onChange={e => setBand(k, 'kwh', Number(e.target.value))} />
+                    <NumberInput style={{ textAlign: 'right' }} placeholder="0" value={bands[k].kwh} onValueChange={v => setBand(k, 'kwh', v)} />
                   </td>
                   <td style={{ textAlign: 'right', background: changed ? '#FFF4E0' : undefined }}>
-                    <input type="number" className="dn-input" style={{ textAlign: 'right' }} placeholder="0" value={bands[k].donGia || ''} onChange={e => setBand(k, 'donGia', Number(e.target.value))} />
+                    <NumberInput style={{ textAlign: 'right' }} placeholder="0" value={bands[k].donGia} onValueChange={v => setBand(k, 'donGia', v)} />
                   </td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(bandMoney(bands[k]))} đ</td>
                 </tr>
@@ -205,8 +209,12 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
           {savedAt && <span style={{ fontSize: 11, color: 'var(--green)' }}>✓ Đã lưu</span>}
           <input className="dn-input" placeholder="Ghi chú (tuỳ chọn)" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1 }} />
         </div>
+        </div>
 
-        <MeterHistoryTable meterId={meterId} readings={readings} visibleBands={visibleBands} isWater={isWater} unit={unit} />
+        <div className="dn-split-right">
+          <MeterHistoryTable meterId={meterId} readings={readings} visibleBands={visibleBands} isWater={isWater} unit={unit} />
+        </div>
+       </div>
 
         {meterCustomers.length > 0 && (
           <>
@@ -269,13 +277,13 @@ function CustomerUsageRow({ customer, month, usage, reading }: {
       <span style={{ minWidth: 140, fontWeight: 600, fontSize: 12.5 }}>{customer.name}</span>
       {customer.chargeType === 'flat_vat_incl' ? (
         <>
-          <input type="number" className="dn-input" style={{ width: 120 }} placeholder="Tổng dùng" value={totalUnit || ''} onChange={e => setTotalUnit(Number(e.target.value))} />
+          <NumberInput style={{ width: 120 }} placeholder="Tổng dùng" value={totalUnit} onValueChange={setTotalUnit} />
           <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>× {fmt(flatPriceThisMonth)} đ</span>
         </>
       ) : (
         (['caoDiem', 'thapDiem', 'binhThuong'] as BandKey[]).map(k => (
-          <input key={k} type="number" className="dn-input" style={{ width: 110 }} placeholder={BAND_LABELS[k]} value={bandsKwh[k] || ''}
-            onChange={e => setBandsKwh(b => ({ ...b, [k]: Number(e.target.value) }))} />
+          <NumberInput key={k} style={{ width: 110 }} placeholder={BAND_LABELS[k]} value={bandsKwh[k] || 0}
+            onValueChange={v => setBandsKwh(b => ({ ...b, [k]: v }))} />
         ))
       )}
       <b style={{ color: 'var(--navy)', minWidth: 90, textAlign: 'right' }}>{fmt(charge)} đ</b>
