@@ -309,9 +309,11 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           <div>③ <b>Tổng kWh BQT</b> chia theo tỷ lệ khung giờ (mặc định BT 50% · CĐ 15% · TĐ 35%), rồi × đơn giá từng khung của đồng hồ 1 + VAT ⇒ tiền BQT phải chịu.</div>
         </div>
 
-        {/* b. Nhập theo tầng — bố cục card lưới tự co */}
+        {/* b + c: 2 cột — trái nhập theo tầng, phải tổng hợp + chia khung giờ; tự xuống dòng ở màn hẹp */}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div style={{ flex: '3 1 540px', minWidth: 0 }}>
         <div className="dn-col-title"><span>b. Nhập số ghi điện từng khu theo khung giờ ⇒ kWh BQT</span></div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
           {floorReadings.map((f, i) => {
             const row = calc.floors[i]
             return (
@@ -346,7 +348,17 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
             )
           })}
 
-          {/* Card 4: tổng hợp kWh — nằm cạnh các card tầng */}
+        </div>
+        <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+          <button className="btn-primary" style={{ background: '#D4A64A' }} onClick={onSave} disabled={saving}>{saving ? 'Đang lưu…' : '💾 Lưu tháng này'}</button>
+          {savedAt && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)' }}>✓ Đã lưu</span>}
+        </div>
+        </div>
+
+        {/* Cột phải: tổng hợp kWh + chia khung giờ */}
+        <div style={{ flex: '2 1 380px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Tổng hợp kWh */}
           <div style={{ border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
             <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tổng hợp kWh</div>
             <div style={{ padding: '9px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -361,51 +373,52 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
               ))}
             </div>
           </div>
+
+          {/* c. Chia kWh BQT theo khung giờ × đơn giá */}
+          <div style={{ border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>c. Chia kWh BQT theo khung giờ × đơn giá</div>
+            <div style={{ padding: '10px' }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+                {([['binhThuong', 'BT'], ['caoDiem', 'CĐ'], ['thapDiem', 'TĐ']] as [keyof BqtRatio, string][]).map(([k, label]) => (
+                  <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <label className="dn-label" style={{ margin: 0 }}>{label} %:</label>
+                    <input type="number" className="dn-input" style={{ width: 60 }} value={bqtRatio[k] || ''} onChange={e => setRatio(k, Number(e.target.value))} />
+                  </span>
+                ))}
+                <span style={{ fontSize: 11, color: calc.ratioSum === 100 ? 'var(--green)' : '#DC2626', fontWeight: 600 }}>Tổng: {calc.ratioSum}%{calc.ratioSum !== 100 ? ' (nên 100%)' : ' ✓'}</span>
+              </div>
+              <div className="dn-scroll">
+                <table className="dn-table" style={{ fontSize: 11.5 }}>
+                  <thead><tr>
+                    <th>Khung giờ</th>
+                    <th style={{ textAlign: 'right' }}>%</th>
+                    <th style={{ textAlign: 'right' }}>kWh BQT</th>
+                    <th style={{ textAlign: 'right' }}>Đơn giá</th>
+                    <th style={{ textAlign: 'right' }}>Thành tiền</th>
+                  </tr></thead>
+                  <tbody>
+                    {calc.bands.map(b => (
+                      <tr key={b.key}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{BAND_LABELS[b.key]}</td>
+                        <td style={{ textAlign: 'right' }}>{b.ratioPct}%</td>
+                        <td style={{ textAlign: 'right' }}>{fmtKwh(b.kwh)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtDec(b.price)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(b.amount)} đ</td>
+                      </tr>
+                    ))}
+                    <tr className="dn-sum-top"><td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(calc.subtotal)} đ</td></tr>
+                    <tr><td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>VAT ({reading.vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(calc.vat)} đ</td></tr>
+                    <tr style={{ background: '#E0EDFA' }}><td colSpan={4} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)', whiteSpace: 'nowrap' }}>Tổng thanh toán BQT</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(calc.total)} đ</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
-        <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <button className="btn-primary" style={{ background: '#D4A64A' }} onClick={onSave} disabled={saving}>{saving ? 'Đang lưu…' : '💾 Lưu tháng này'}</button>
-          {savedAt && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)' }}>✓ Đã lưu</span>}
         </div>
 
-        {/* c. Chia theo khung giờ */}
-        <div className="dn-col-title"><span>c. Chia kWh BQT theo khung giờ × đơn giá</span></div>
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-          {([['binhThuong', 'Bình thường'], ['caoDiem', 'Cao điểm'], ['thapDiem', 'Thấp điểm']] as [keyof BqtRatio, string][]).map(([k, label]) => (
-            <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <label className="dn-label" style={{ margin: 0 }}>{label} %:</label>
-              <input type="number" className="dn-input" style={{ width: 70 }} value={bqtRatio[k] || ''} onChange={e => setRatio(k, Number(e.target.value))} />
-            </span>
-          ))}
-          <span style={{ fontSize: 11.5, color: calc.ratioSum === 100 ? 'var(--green)' : '#DC2626', fontWeight: 600 }}>Tổng tỷ lệ: {calc.ratioSum}%{calc.ratioSum !== 100 ? ' (nên = 100%)' : ' ✓'}</span>
-        </div>
-        <div className="dn-scroll">
-          <table className="dn-table">
-            <thead><tr>
-              <th>Khung giờ</th>
-              <th style={{ textAlign: 'right' }}>Tỷ lệ %</th>
-              <th style={{ textAlign: 'right' }}>kWh BQT</th>
-              <th style={{ textAlign: 'right' }}>Đơn giá (đ)</th>
-              <th style={{ textAlign: 'right' }}>Thành tiền</th>
-            </tr></thead>
-            <tbody>
-              {calc.bands.map(b => (
-                <tr key={b.key}>
-                  <td>{BAND_LABELS[b.key]}</td>
-                  <td style={{ textAlign: 'right' }}>{b.ratioPct}%</td>
-                  <td style={{ textAlign: 'right' }}>{fmtKwh(b.kwh)}</td>
-                  <td style={{ textAlign: 'right' }}>{fmtDec(b.price)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(b.amount)} đ</td>
-                </tr>
-              ))}
-              <tr className="dn-sum-top"><td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Tổng tiền chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(calc.subtotal)} đ</td></tr>
-              <tr><td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Thuế VAT ({reading.vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(calc.vat)} đ</td></tr>
-              <tr style={{ background: '#E0EDFA' }}><td colSpan={4} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)', whiteSpace: 'nowrap' }}>Tổng thanh toán BQT</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', fontSize: 14, whiteSpace: 'nowrap' }}>{fmt(calc.total)} đ</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 6 }}>
-          * Bấm “💾 Lưu tháng này” (góc trên) để lưu số ghi từng tầng &amp; tỷ lệ cho tháng {month}. (Cũng được lưu chung khi bấm “Lưu chỉ số” ở Bảng 1.)
+        <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 4 }}>
+          * Bấm “💾 Lưu tháng này” để lưu số ghi từng tầng &amp; tỷ lệ cho tháng {month}. (Cũng được lưu chung khi bấm “Lưu chỉ số” ở Bảng 1.)
         </div>
 
         {/* d. Thống kê BQT theo tháng — đối chiếu tăng giảm */}
