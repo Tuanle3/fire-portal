@@ -309,60 +309,58 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           <div>③ <b>Tổng kWh BQT</b> chia theo tỷ lệ khung giờ (mặc định BT 50% · CĐ 15% · TĐ 35%), rồi × đơn giá từng khung của đồng hồ 1 + VAT ⇒ tiền BQT phải chịu.</div>
         </div>
 
-        {/* b. Bảng nhập theo tầng (từng khung giờ) */}
+        {/* b. Nhập theo tầng — bố cục card lưới tự co */}
         <div className="dn-col-title"><span>b. Nhập số ghi điện từng khu theo khung giờ ⇒ kWh BQT</span></div>
-        <div className="dn-scroll">
-          <table className="dn-table" style={{ marginBottom: 6 }}>
-            <thead><tr>
-              <th>Khu vực (Nhóm KH)</th>
-              <th>Chỉ số theo khung giờ (cũ → mới)</th>
-              <th style={{ textAlign: 'right' }}>kWh ghi tầng</th>
-              <th style={{ textAlign: 'right' }}>kWh khách dùng</th>
-              <th style={{ textAlign: 'right' }}>kWh BQT</th>
-              <th style={{ width: 44 }}></th>
-            </tr></thead>
-            <tbody>
-              {floorReadings.map((f, i) => {
-                const row = calc.floors[i]
-                return (
-                  <tr key={i}>
-                    <td style={{ verticalAlign: 'top' }}>
-                      <input className="dn-input" list="dn-bqt-groups" style={{ minWidth: 150 }} value={f.group} placeholder="VD: Tầng 1 + hầm" onChange={e => setFloorGroup(i, e.target.value)} />
-                    </td>
-                    <td style={{ verticalAlign: 'top' }}>
-                      {FLOOR_BAND_KEYS.map(k => (
-                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3, whiteSpace: 'nowrap' }}>
-                          <span style={{ fontSize: 10.5, color: 'var(--muted)', minWidth: 70 }}>{BAND_LABELS[k]}:</span>
-                          <span style={{ fontSize: 10, color: 'var(--muted)' }}>Cũ</span>
-                          <NumberInput style={{ textAlign: 'right', width: 92 }} value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
-                          <span style={{ fontSize: 10, color: 'var(--muted)' }}>Mới</span>
-                          <NumberInput style={{ textAlign: 'right', width: 92 }} value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
-                          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmtKwh(floorBandKwh(f.bands[k]))}</span>
-                        </div>
-                      ))}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'top' }}>{fmtKwh(row?.floorKwh ?? floorTotalKwh(f))}</td>
-                    <td style={{ textAlign: 'right', color: '#2563EB', verticalAlign: 'top' }}>{fmtKwh(row?.customerKwh ?? 0)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)', verticalAlign: 'top' }}>{fmtKwh(row?.bqtKwh ?? 0)}</td>
-                    <td style={{ textAlign: 'center', verticalAlign: 'top' }}>{floorReadings.length > 1 && <button className="btn-danger" onClick={() => removeFloor(i)}>×</button>}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 12 }}>
+          {floorReadings.map((f, i) => {
+            const row = calc.floors[i]
+            return (
+              <div key={i} style={{ border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)' }}>
+                  <input className="dn-input" list="dn-bqt-groups" style={{ flex: 1, fontWeight: 600 }} value={f.group} placeholder="Tên khu (Nhóm KH)" onChange={e => setFloorGroup(i, e.target.value)} />
+                  {floorReadings.length > 1 && <button className="btn-danger" style={{ padding: '5px 9px', flexShrink: 0 }} onClick={() => removeFloor(i)} title="Xoá khu">×</button>}
+                </div>
+                <div style={{ padding: '9px 10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '66px 1fr 1fr 52px', gap: 5, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
+                    <span>Khung giờ</span><span style={{ textAlign: 'right' }}>Chỉ số cũ</span><span style={{ textAlign: 'right' }}>Chỉ số mới</span><span style={{ textAlign: 'right' }}>kWh</span>
+                  </div>
+                  {FLOOR_BAND_KEYS.map(k => (
+                    <div key={k} style={{ display: 'grid', gridTemplateColumns: '66px 1fr 1fr 52px', gap: 5, alignItems: 'center', marginBottom: 5 }}>
+                      <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>{BAND_LABELS[k]}</span>
+                      <NumberInput style={{ textAlign: 'right' }} placeholder="0" value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
+                      <NumberInput style={{ textAlign: 'right' }} placeholder="0" value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
+                      <span style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, borderTop: '1px dashed var(--border3)', paddingTop: 8 }}>
+                    {([['Ghi tầng', fmtKwh(row?.floorKwh ?? floorTotalKwh(f)), 'var(--txt)', false],
+                       ['Khách dùng', fmtKwh(row?.customerKwh ?? 0), '#2563EB', false],
+                       ['BQT', fmtKwh(row?.bqtKwh ?? 0), 'var(--navy)', true]] as [string, string, string, boolean][]).map(([lb, v, col, bold]) => (
+                      <div key={lb} style={{ flex: 1, textAlign: 'center', background: bold ? '#E0EDFA' : '#F8FAFC', borderRadius: 7, padding: '5px 4px' }}>
+                        <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>{lb}</div>
+                        <div style={{ fontSize: 13, fontWeight: bold ? 800 : 600, color: col }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
-        <button className="btn-ghost" style={{ marginBottom: 12 }} onClick={addFloor}>+ Thêm khu</button>
+        <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
+        <button className="btn-ghost" style={{ marginBottom: 14 }} onClick={addFloor}>+ Thêm khu</button>
 
-        <div className="dn-scroll">
-          <table className="dn-table" style={{ marginBottom: 16, maxWidth: 520 }}>
-            <tbody>
-              <tr><td>Tổng kWh ghi các tầng</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtKwh(calc.sumFloorKwh)}</td></tr>
-              <tr><td>Tổng kWh đồng hồ chính (cao + thấp + bình)</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtKwh(calc.mainMeterKwh)}</td></tr>
-              <tr><td>Chênh lệch (đồng hồ − tổng tầng) → BQT</td><td style={{ textAlign: 'right', fontWeight: 600, color: calc.discrepancy < 0 ? '#DC2626' : undefined }}>{fmtKwh(calc.discrepancy)}</td></tr>
-              <tr style={{ background: '#E0EDFA' }}><td style={{ fontWeight: 700, color: 'var(--navy)' }}>Tổng kWh BQT phải chịu</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmtKwh(calc.bqtTotalKwh)}</td></tr>
-            </tbody>
-          </table>
+        {/* Tổng hợp kWh — dải chip */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+          {([['Tổng ghi các tầng', fmtKwh(calc.sumFloorKwh), 'var(--navy)', false],
+             ['Đồng hồ chính (C+T+B)', fmtKwh(calc.mainMeterKwh), 'var(--navy)', false],
+             ['Chênh lệch → BQT', fmtKwh(calc.discrepancy), calc.discrepancy < 0 ? '#DC2626' : 'var(--navy)', false],
+             ['Tổng kWh BQT phải chịu', fmtKwh(calc.bqtTotalKwh), 'var(--navy)', true]] as [string, string, string, boolean][]).map(([lb, v, col, hi]) => (
+            <div key={lb} style={{ flex: '1 1 150px', minWidth: 140, border: '1px solid var(--border3)', borderRadius: 10, padding: '8px 12px', background: hi ? '#E0EDFA' : '#fff' }}>
+              <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.03em' }}>{lb}</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: col }}>{v} <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)' }}>kWh</span></div>
+            </div>
+          ))}
         </div>
 
         {/* c. Chia theo khung giờ */}
