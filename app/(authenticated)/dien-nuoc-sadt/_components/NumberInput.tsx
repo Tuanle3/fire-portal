@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, InputHTMLAttributes } from 'react'
+import { useState, useEffect, useRef, InputHTMLAttributes } from 'react'
 
 /** Số → chuỗi vi-VN (chấm ngăn nghìn, phẩy thập phân). 0/rỗng → '' để hiện placeholder. */
 function fromValue(n: number): string {
@@ -37,12 +37,26 @@ type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 
  */
 export function NumberInput({ value, onValueChange, className = 'dn-input', ...rest }: Props) {
   const [text, setText] = useState<string>(() => fromValue(value))
+  const ref = useRef<HTMLInputElement>(null)
 
   // Đồng bộ khi value bên ngoài đổi (vd mở khách hàng khác), nhưng không phá text đang gõ.
   useEffect(() => {
     if (normalize(text).value !== value) setText(fromValue(value))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
+
+  // Tự co cỡ chữ khi số dài hơn bề ngang ô (tránh bị cắt mất chữ số).
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.fontSize = ''
+    if (!el.clientWidth) return
+    let size = parseFloat(getComputedStyle(el).fontSize) || 12.5
+    while (el.scrollWidth > el.clientWidth && size > 8) {
+      size -= 0.5
+      el.style.fontSize = size + 'px'
+    }
+  }, [text])
 
   const apply = (raw: string) => {
     const { display, value: v } = normalize(raw)
@@ -53,6 +67,7 @@ export function NumberInput({ value, onValueChange, className = 'dn-input', ...r
   return (
     <input
       {...rest}
+      ref={ref}
       type="text"
       inputMode="decimal"
       className={className}

@@ -316,20 +316,20 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           {floorReadings.map((f, i) => {
             const row = calc.floors[i]
             return (
-              <div key={i} style={{ flex: '1 1 230px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+              <div key={i} style={{ flex: '1 1 250px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)' }}>
                   <input className="dn-input" list="dn-bqt-groups" style={{ flex: 1, fontWeight: 600 }} value={f.group} placeholder="Tên khu (Nhóm KH)" onChange={e => setFloorGroup(i, e.target.value)} />
                 </div>
                 <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '58px 1fr 1fr 46px', gap: 5, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 1fr 44px', gap: 4, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
                     <span>Khung</span><span style={{ textAlign: 'right' }}>Cũ</span><span style={{ textAlign: 'right' }}>Mới</span><span style={{ textAlign: 'right' }}>kWh</span>
                   </div>
                   {FLOOR_BAND_KEYS.map(k => (
-                    <div key={k} style={{ display: 'grid', gridTemplateColumns: '58px 1fr 1fr 46px', gap: 5, alignItems: 'center', marginBottom: 5 }}>
-                      <span style={{ fontSize: 10, color: 'var(--muted)' }}>{BAND_LABELS[k]}</span>
-                      <NumberInput style={{ textAlign: 'right' }} placeholder="0" value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
-                      <NumberInput style={{ textAlign: 'right' }} placeholder="0" value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
-                      <span style={{ fontSize: 10.5, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>
+                    <div key={k} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 1fr 44px', gap: 4, alignItems: 'center', marginBottom: 5 }}>
+                      <span style={{ fontSize: 9.5, color: 'var(--muted)' }}>{BAND_LABELS[k]}</span>
+                      <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
+                      <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
+                      <span style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>
                     </div>
                   ))}
                   <div style={{ display: 'flex', gap: 6, marginTop: 'auto', borderTop: '1px dashed var(--border3)', paddingTop: 8 }}>
