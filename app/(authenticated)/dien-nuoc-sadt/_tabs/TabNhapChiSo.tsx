@@ -309,37 +309,36 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           <div>③ <b>Tổng kWh BQT</b> chia theo tỷ lệ khung giờ (mặc định BT 50% · CĐ 15% · TĐ 35%), rồi × đơn giá từng khung của đồng hồ 1 + VAT ⇒ tiền BQT phải chịu.</div>
         </div>
 
-        {/* b + c: 2 cột — trái nhập theo tầng, phải tổng hợp + chia khung giờ; tự xuống dòng ở màn hẹp */}
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 16 }}>
-        <div style={{ flex: '3 1 540px', minWidth: 0 }}>
-        <div className="dn-col-title"><span>b. Nhập số ghi điện từng khu theo khung giờ ⇒ kWh BQT</span></div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
+        {/* b + c: 5 card cùng hàng, cao bằng nhau (align-items stretch); tự xuống dòng ở màn hẹp */}
+        <div className="dn-col-title"><span>b. Nhập số ghi điện từng khu ⇒ kWh BQT  ·  c. Chia BQT theo khung giờ × đơn giá</span></div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
+          {/* 3 card khu (tầng) */}
           {floorReadings.map((f, i) => {
             const row = calc.floors[i]
             return (
-              <div key={i} style={{ border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+              <div key={i} style={{ flex: '1 1 230px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)' }}>
                   <input className="dn-input" list="dn-bqt-groups" style={{ flex: 1, fontWeight: 600 }} value={f.group} placeholder="Tên khu (Nhóm KH)" onChange={e => setFloorGroup(i, e.target.value)} />
                 </div>
-                <div style={{ padding: '9px 10px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '66px 1fr 1fr 52px', gap: 5, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
-                    <span>Khung giờ</span><span style={{ textAlign: 'right' }}>Chỉ số cũ</span><span style={{ textAlign: 'right' }}>Chỉ số mới</span><span style={{ textAlign: 'right' }}>kWh</span>
+                <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '58px 1fr 1fr 46px', gap: 5, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
+                    <span>Khung</span><span style={{ textAlign: 'right' }}>Cũ</span><span style={{ textAlign: 'right' }}>Mới</span><span style={{ textAlign: 'right' }}>kWh</span>
                   </div>
                   {FLOOR_BAND_KEYS.map(k => (
-                    <div key={k} style={{ display: 'grid', gridTemplateColumns: '66px 1fr 1fr 52px', gap: 5, alignItems: 'center', marginBottom: 5 }}>
-                      <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>{BAND_LABELS[k]}</span>
+                    <div key={k} style={{ display: 'grid', gridTemplateColumns: '58px 1fr 1fr 46px', gap: 5, alignItems: 'center', marginBottom: 5 }}>
+                      <span style={{ fontSize: 10, color: 'var(--muted)' }}>{BAND_LABELS[k]}</span>
                       <NumberInput style={{ textAlign: 'right' }} placeholder="0" value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
                       <NumberInput style={{ textAlign: 'right' }} placeholder="0" value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
-                      <span style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>
+                      <span style={{ fontSize: 10.5, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>
                     </div>
                   ))}
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8, borderTop: '1px dashed var(--border3)', paddingTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 'auto', borderTop: '1px dashed var(--border3)', paddingTop: 8 }}>
                     {([['Ghi tầng', fmtKwh(row?.floorKwh ?? floorTotalKwh(f)), 'var(--txt)', false],
                        ['Khách dùng', fmtKwh(row?.customerKwh ?? 0), '#2563EB', false],
                        ['BQT', fmtKwh(row?.bqtKwh ?? 0), 'var(--navy)', true]] as [string, string, string, boolean][]).map(([lb, v, col, bold]) => (
                       <div key={lb} style={{ flex: 1, textAlign: 'center', background: bold ? '#E0EDFA' : '#F8FAFC', borderRadius: 7, padding: '5px 4px' }}>
                         <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>{lb}</div>
-                        <div style={{ fontSize: 13, fontWeight: bold ? 800 : 600, color: col }}>{v}</div>
+                        <div style={{ fontSize: 12.5, fontWeight: bold ? 800 : 600, color: col }}>{v}</div>
                       </div>
                     ))}
                   </div>
@@ -348,73 +347,59 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
             )
           })}
 
-        </div>
-        <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-          <button className="btn-primary" style={{ background: '#D4A64A' }} onClick={onSave} disabled={saving}>{saving ? 'Đang lưu…' : '💾 Lưu tháng này'}</button>
-          {savedAt && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)' }}>✓ Đã lưu</span>}
-        </div>
-        </div>
-
-        {/* Cột phải: tổng hợp kWh + chia khung giờ */}
-        <div style={{ flex: '2 1 380px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Tổng hợp kWh */}
-          <div style={{ border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+          {/* Card 4: Tổng hợp kWh */}
+          <div style={{ flex: '1 1 230px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
             <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tổng hợp kWh</div>
-            <div style={{ padding: '9px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {([['Tổng ghi các tầng', fmtKwh(calc.sumFloorKwh), 'var(--navy)', false],
                  ['Đồng hồ chính (C+T+B)', fmtKwh(calc.mainMeterKwh), 'var(--navy)', false],
                  ['Chênh lệch → BQT', fmtKwh(calc.discrepancy), calc.discrepancy < 0 ? '#DC2626' : 'var(--navy)', false],
                  ['Tổng kWh BQT phải chịu', fmtKwh(calc.bqtTotalKwh), 'var(--navy)', true]] as [string, string, string, boolean][]).map(([lb, v, col, hi]) => (
                 <div key={lb} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, background: hi ? '#E0EDFA' : '#F8FAFC', borderRadius: 7, padding: '6px 9px' }}>
-                  <span style={{ fontSize: 10.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>{lb}</span>
-                  <span style={{ fontSize: hi ? 16 : 14, fontWeight: hi ? 800 : 700, color: col, whiteSpace: 'nowrap' }}>{v} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>kWh</span></span>
+                  <span style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>{lb}</span>
+                  <span style={{ fontSize: hi ? 15 : 13.5, fontWeight: hi ? 800 : 700, color: col, whiteSpace: 'nowrap' }}>{v} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>kWh</span></span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* c. Chia kWh BQT theo khung giờ × đơn giá */}
-          <div style={{ border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-            <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>c. Chia kWh BQT theo khung giờ × đơn giá</div>
-            <div style={{ padding: '10px' }}>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+          {/* Card 5: c. Chia kWh BQT theo khung giờ (dạng danh sách gọn) */}
+          <div style={{ flex: '1 1 250px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>c. Chia kWh BQT × đơn giá</div>
+            <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
                 {([['binhThuong', 'BT'], ['caoDiem', 'CĐ'], ['thapDiem', 'TĐ']] as [keyof BqtRatio, string][]).map(([k, label]) => (
-                  <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <label className="dn-label" style={{ margin: 0 }}>{label} %:</label>
-                    <input type="number" className="dn-input" style={{ width: 60 }} value={bqtRatio[k] || ''} onChange={e => setRatio(k, Number(e.target.value))} />
+                  <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <label className="dn-label" style={{ margin: 0 }}>{label}%</label>
+                    <input type="number" className="dn-input" style={{ width: 52, padding: '4px 6px' }} value={bqtRatio[k] || ''} onChange={e => setRatio(k, Number(e.target.value))} />
                   </span>
                 ))}
-                <span style={{ fontSize: 11, color: calc.ratioSum === 100 ? 'var(--green)' : '#DC2626', fontWeight: 600 }}>Tổng: {calc.ratioSum}%{calc.ratioSum !== 100 ? ' (nên 100%)' : ' ✓'}</span>
+                <span style={{ fontSize: 10.5, color: calc.ratioSum === 100 ? 'var(--green)' : '#DC2626', fontWeight: 600 }}>Σ {calc.ratioSum}%{calc.ratioSum === 100 ? ' ✓' : ''}</span>
               </div>
-              <div className="dn-scroll">
-                <table className="dn-table" style={{ fontSize: 11.5 }}>
-                  <thead><tr>
-                    <th>Khung giờ</th>
-                    <th style={{ textAlign: 'right' }}>%</th>
-                    <th style={{ textAlign: 'right' }}>kWh BQT</th>
-                    <th style={{ textAlign: 'right' }}>Đơn giá</th>
-                    <th style={{ textAlign: 'right' }}>Thành tiền</th>
-                  </tr></thead>
-                  <tbody>
-                    {calc.bands.map(b => (
-                      <tr key={b.key}>
-                        <td style={{ whiteSpace: 'nowrap' }}>{BAND_LABELS[b.key]}</td>
-                        <td style={{ textAlign: 'right' }}>{b.ratioPct}%</td>
-                        <td style={{ textAlign: 'right' }}>{fmtKwh(b.kwh)}</td>
-                        <td style={{ textAlign: 'right' }}>{fmtDec(b.price)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(b.amount)} đ</td>
-                      </tr>
-                    ))}
-                    <tr className="dn-sum-top"><td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(calc.subtotal)} đ</td></tr>
-                    <tr><td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>VAT ({reading.vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(calc.vat)} đ</td></tr>
-                    <tr style={{ background: '#E0EDFA' }}><td colSpan={4} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)', whiteSpace: 'nowrap' }}>Tổng thanh toán BQT</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(calc.total)} đ</td></tr>
-                  </tbody>
-                </table>
+              {calc.bands.map(b => (
+                <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 600 }}>{BAND_LABELS[b.key]} <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 400 }}>{b.ratioPct}%</span></div>
+                    <div style={{ fontSize: 10, color: 'var(--muted2)' }}>{fmtKwh(b.kwh)} × {fmtDec(b.price)}</div>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(b.amount)} đ</span>
+                </div>
+              ))}
+              <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border3)', paddingTop: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)' }}><span>Chưa VAT</span><span style={{ fontWeight: 700 }}>{fmt(calc.subtotal)} đ</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)', marginTop: 2 }}><span>VAT ({reading.vatPercent || 0}%)</span><span style={{ fontWeight: 700 }}>{fmt(calc.vat)} đ</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#E0EDFA', borderRadius: 7, padding: '6px 9px', marginTop: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase' }}>Tổng TT BQT</span>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(calc.total)} đ</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
+        <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button className="btn-primary" style={{ background: '#D4A64A' }} onClick={onSave} disabled={saving}>{saving ? 'Đang lưu…' : '💾 Lưu tháng này'}</button>
+          {savedAt && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)' }}>✓ Đã lưu</span>}
         </div>
 
         <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 4 }}>
