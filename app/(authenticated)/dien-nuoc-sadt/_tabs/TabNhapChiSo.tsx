@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   MeterReading, Customer, CustomerUsage, MeterId, Bands,
   BAND_KEYS, BandKey, BAND_LABELS, meterLabel, METER_UNIT, EMPTY_BANDS,
-  bandMoney, meterSubtotal, meterVat, meterTotal, customerCharge, resolvePrice,
+  bandMoney, meterSubtotal, meterVat, meterTotal, customerCharge, resolvePrice, resolveTimebandPoint,
   lastReadingBefore, bandsWithPriceChange, isAmountAnomalous,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
@@ -364,11 +364,44 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
       }
       return null
     })()
+
+    // Chi tiết khung giờ cho timeband
+    const tbDetail = (() => {
+      if (c.chargeType !== 'timeband_excl_vat') return null
+      const mU = isCurrent ? draftUsage : usageOf(r.month)
+      const mBands = mU?.bandsKwh ?? {}
+      const mPt = resolveTimebandPoint(c.timebandPriceHistory, r.month)
+      const mReading = readingByMonth.get(r.month)
+      const lines = (['caoDiem', 'thapDiem', 'binhThuong'] as const).map(k => {
+        const kw = mBands[k] ?? 0
+        const custP = mPt?.[k] ?? 0
+        const price = custP > 0 ? custP : (mReading?.bands[k].donGia ?? 0)
+        return { label: BAND_LABELS[k], kw, price, amt: kw * price }
+      })
+      const sub = lines.reduce((s, l) => s + l.amt, 0)
+      const vp = mReading?.vatPercent ?? 8
+      const vat = sub * vp / 100
+      return { lines, sub, vat, total: sub + vat, vatPercent: vp }
+    })()
+
     return (
       <td key={r.month} style={{ textAlign: 'right', verticalAlign: 'top', whiteSpace: 'nowrap', background: isCurrent ? '#E0EDFA' : undefined }}>
-        <div style={{ fontWeight: isCurrent ? 700 : undefined }}>{sl == null ? '—' : fmt(sl)}</div>
-        {priceLabel && <div style={{ fontSize: 10, color: 'var(--muted2)' }}>{priceLabel}</div>}
-        <div style={{ fontSize: 11, color: isCurrent ? 'var(--navy)' : 'var(--muted)', fontWeight: isCurrent ? 600 : undefined }}>{fmt(tt)} đ</div>
+        {tbDetail ? (
+          <>
+            {tbDetail.lines.map(l => (
+              <div key={l.label} style={{ fontSize: 10, color: 'var(--muted2)' }}>{l.label}: {fmt(l.kw)} × {fmtDec(l.price)}</div>
+            ))}
+            <div style={{ fontSize: 10, color: 'var(--muted2)' }}>Chưa VAT: {fmt(tbDetail.sub)}</div>
+            <div style={{ fontSize: 10, color: 'var(--muted2)' }}>VAT ({tbDetail.vatPercent}%): {fmt(tbDetail.vat)}</div>
+            <div style={{ fontSize: 11, color: isCurrent ? 'var(--navy)' : 'var(--muted)', fontWeight: isCurrent ? 600 : undefined }}>{fmt(tbDetail.total)} đ</div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontWeight: isCurrent ? 700 : undefined }}>{sl == null ? '—' : fmt(sl)}</div>
+            {priceLabel && <div style={{ fontSize: 10, color: 'var(--muted2)' }}>{priceLabel}</div>}
+            <div style={{ fontSize: 11, color: isCurrent ? 'var(--navy)' : 'var(--muted)', fontWeight: isCurrent ? 600 : undefined }}>{fmt(tt)} đ</div>
+          </>
+        )}
       </td>
     )
   })
@@ -420,22 +453,35 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
   }
 
   // timeband_excl_vat
+  const tbPt = resolveTimebandPoint(c.timebandPriceHistory, month)
+  const tbPrices = (['caoDiem', 'thapDiem', 'binhThuong'] as const).map(k => {
+    const custPrice = tbPt?.[k] ?? 0
+    return custPrice > 0 ? custPrice : (reading.bands[k].donGia ?? 0)
+  })
+  const tbSubtotal = (['caoDiem', 'thapDiem', 'binhThuong'] as const).reduce((s, k, i) => s + (bandsKwh[k] ?? 0) * tbPrices[i], 0)
+  const tbVat = tbSubtotal * (reading.vatPercent / 100)
+  const tbTotal = tbSubtotal + tbVat
+
   return (
     <tr>
       <td className="dn-sticky-col" style={{ fontWeight: 600, verticalAlign: 'top' }}>{c.name}</td>
       <td className="dn-sticky-col dn-sticky-input" style={{ verticalAlign: 'top' }}>
-        {(['caoDiem', 'thapDiem', 'binhThuong'] as const).map(k => (
+        {(['caoDiem', 'thapDiem', 'binhThuong'] as const).map((k, i) => (
           <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2, whiteSpace: 'nowrap' }}>
             <span style={{ fontSize: 10.5, color: 'var(--muted)', minWidth: 70 }}>{BAND_LABELS[k]}:</span>
             <span style={{ fontSize: 10, color: 'var(--muted)' }}>Cũ</span>
             <NumberInput style={{ width: 70 }} value={bandsIndexOld[k] ?? 0} onValueChange={v => setBandsIndexOld(b => ({ ...b, [k]: v }))} />
             <span style={{ fontSize: 10, color: 'var(--muted)' }}>Mới</span>
             <NumberInput style={{ width: 70 }} value={bandsIndexNew[k] ?? 0} onValueChange={v => setBandsIndexNew(b => ({ ...b, [k]: v }))} />
-            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmt(bandsKwh[k] ?? 0)}</span>
+            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmt(bandsKwh[k] ?? 0)} × {fmtDec(tbPrices[i])} = {fmt((bandsKwh[k] ?? 0) * tbPrices[i])}</span>
           </div>
         ))}
       </td>
-      <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right', verticalAlign: 'top' }}><b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b></td>
+      <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right', verticalAlign: 'top' }}>
+        <div style={{ fontSize: 10.5, color: 'var(--muted)' }}>Chưa VAT: {fmt(tbSubtotal)} đ</div>
+        <div style={{ fontSize: 10.5, color: 'var(--muted)' }}>VAT ({reading.vatPercent}%): {fmt(tbVat)} đ</div>
+        <div><b style={{ color: 'var(--navy)' }}>{fmt(tbTotal)} đ</b></div>
+      </td>
       <td className="dn-sticky-col dn-sticky-btn" style={{ verticalAlign: 'top' }}><button className="btn-ghost" onClick={save} disabled={saving}>{saving ? '…' : 'Lưu'}</button></td>
       {monthCells}
     </tr>
