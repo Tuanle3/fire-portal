@@ -267,7 +267,8 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
         {isMeter1 && (
           <BqtSection reading={draftReading} readings={readings} month={month} customers={customers} usages={usages}
             floorReadings={floorReadings} setFloorReadings={setFloorReadings}
-            bqtRatio={bqtRatio} setBqtRatio={setBqtRatio} />
+            bqtRatio={bqtRatio} setBqtRatio={setBqtRatio}
+            onSave={save} saving={saving} savedAt={savedAt} />
         )}
 
         {meterCustomers.length > 0 && (
@@ -279,10 +280,11 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
 }
 
 // ── Đồng hồ 1: tính tiền điện BQT theo 3 mục (hướng dẫn · nhập theo tầng · chia khung giờ) ──
-function BqtSection({ reading, readings, month, customers, usages, floorReadings, setFloorReadings, bqtRatio, setBqtRatio }: {
+function BqtSection({ reading, readings, month, customers, usages, floorReadings, setFloorReadings, bqtRatio, setBqtRatio, onSave, saving, savedAt }: {
   reading: MeterReading; readings: MeterReading[]; month: string; customers: Customer[]; usages: CustomerUsage[]
   floorReadings: FloorReading[]; setFloorReadings: (v: FloorReading[]) => void
   bqtRatio: BqtRatio; setBqtRatio: (v: BqtRatio) => void
+  onSave: () => void; saving: boolean; savedAt: string | null
 }) {
   const calc = computeBqt(reading, customers, usages, bqtRatio)
   const groupSuggestions = Array.from(new Set(customers.filter(c => c.meterId === 1 && c.active).map(c => (c.group || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'))
@@ -296,8 +298,12 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
 
   return (
     <div style={{ marginTop: 20, border: '1px solid var(--border3)', borderRadius: 12, overflow: 'hidden' }}>
-      <div style={{ background: '#1C3557', color: '#fff', padding: '9px 14px', fontSize: 12, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase' }}>
-        Tính tiền điện Ban quản trị (BQT) — đồng hồ điện 1
+      <div style={{ background: '#1C3557', color: '#fff', padding: '7px 14px', fontSize: 12, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span>Tính tiền điện Ban quản trị (BQT) — đồng hồ điện 1</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none' }}>
+          {savedAt && <span style={{ fontSize: 11, fontWeight: 600, color: '#8EE4AF' }}>✓ Đã lưu</span>}
+          <button className="btn-primary" style={{ background: '#D4A64A' }} onClick={onSave} disabled={saving}>{saving ? 'Đang lưu…' : '💾 Lưu tháng này'}</button>
+        </span>
       </div>
 
       <div style={{ padding: 14 }}>
@@ -400,7 +406,7 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           </table>
         </div>
         <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 6 }}>
-          * Số ghi từng tầng &amp; tỷ lệ được lưu cùng khi bấm “Lưu chỉ số” ở trên.
+          * Bấm “💾 Lưu tháng này” (góc trên) để lưu số ghi từng tầng &amp; tỷ lệ cho tháng {month}. (Cũng được lưu chung khi bấm “Lưu chỉ số” ở Bảng 1.)
         </div>
 
         {/* d. Thống kê BQT theo tháng — đối chiếu tăng giảm */}
