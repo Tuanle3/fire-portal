@@ -210,14 +210,14 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
                   <td style={{ textAlign: 'right', background: changed ? '#FFF4E0' : undefined }}>
                     <NumberInput style={{ textAlign: 'right' }} placeholder="0" value={bands[k].donGia} onValueChange={v => setBand(k, 'donGia', v)} />
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(bandMoney(bands[k]))} đ</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(bandMoney(bands[k]))} đ</td>
                 </tr>
               )
             })}
             <tr className="dn-spacer" aria-hidden><td colSpan={4}></td></tr>
-            <tr className="dn-sum-top"><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Tổng tiền chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterSubtotal(bands))} đ</td></tr>
-            <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Thuế VAT ({vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterVat(bands, vatPercent))} đ</td></tr>
-            <tr style={{ background: '#E0EDFA' }}><td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)' }}>Tổng thanh toán</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmt(meterTotal(bands, vatPercent))} đ</td></tr>
+            <tr className="dn-sum-top"><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Tổng tiền chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(meterSubtotal(bands))} đ</td></tr>
+            <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Thuế VAT ({vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(meterVat(bands, vatPercent))} đ</td></tr>
+            <tr style={{ background: '#E0EDFA' }}><td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)', whiteSpace: 'nowrap' }}>Tổng thanh toán</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', fontSize: 14, whiteSpace: 'nowrap' }}>{fmt(meterTotal(bands, vatPercent))} đ</td></tr>
           </tbody>
         </table>
         </div>
