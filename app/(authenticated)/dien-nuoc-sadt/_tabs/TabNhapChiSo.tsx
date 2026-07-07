@@ -296,12 +296,8 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
 
   return (
     <div style={{ marginTop: 20, border: '1px solid var(--border3)', borderRadius: 12, overflow: 'hidden' }}>
-      <div style={{ background: '#1C3557', color: '#fff', padding: '7px 14px', fontSize: 12, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <span>Tính tiền điện Ban quản trị (BQT) — đồng hồ điện 1</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none' }}>
-          {savedAt && <span style={{ fontSize: 11, fontWeight: 600, color: '#8EE4AF' }}>✓ Đã lưu</span>}
-          <button className="btn-primary" style={{ background: '#D4A64A' }} onClick={onSave} disabled={saving}>{saving ? 'Đang lưu…' : '💾 Lưu tháng này'}</button>
-        </span>
+      <div style={{ background: '#1C3557', color: '#fff', padding: '9px 14px', fontSize: 12, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase' }}>
+        Tính tiền điện Ban quản trị (BQT) — đồng hồ điện 1
       </div>
 
       <div style={{ padding: 14 }}>
@@ -367,7 +363,10 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           </div>
         </div>
         <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
-        <div style={{ marginBottom: 16 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <button className="btn-primary" style={{ background: '#D4A64A' }} onClick={onSave} disabled={saving}>{saving ? 'Đang lưu…' : '💾 Lưu tháng này'}</button>
+          {savedAt && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)' }}>✓ Đã lưu</span>}
+        </div>
 
         {/* c. Chia theo khung giờ */}
         <div className="dn-col-title"><span>c. Chia kWh BQT theo khung giờ × đơn giá</span></div>
