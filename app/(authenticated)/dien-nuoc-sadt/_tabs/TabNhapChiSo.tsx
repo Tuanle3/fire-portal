@@ -94,8 +94,8 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
           </tr></thead>
           <tbody>
             {visibleBands.map(k => (
-              <tr key={`${k}-kwh`} style={{ fontSize: 10, lineHeight: '14px' }}>
-                <td style={{ fontWeight: 600, padding: '5px 6px' }}>{isWater ? `Sản lượng (${unit})` : `${BAND_LABELS[k]} (${unit})`}</td>
+              <tr key={`${k}-kwh`} style={{ fontSize: 10, lineHeight: '14px', color: '#2563EB' }}>
+                <td style={{ fontWeight: 400, padding: '5px 6px' }}>{isWater ? `Sản lượng (${unit})` : `${BAND_LABELS[k]} (${unit})`}</td>
                 {months.map(r => <td key={r.id} style={{ textAlign: 'right', padding: '5px 6px', background: cellBg(r.id) }}>{fmt(r.bands[k].kwh)}</td>)}
               </tr>
             ))}
