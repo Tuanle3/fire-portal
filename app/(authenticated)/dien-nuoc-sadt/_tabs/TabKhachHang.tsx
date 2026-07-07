@@ -13,7 +13,7 @@ const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits:
 const EMPTY_TIMEBAND_ROW: TimebandPricePoint = { fromMonth: '', caoDiem: 0, thapDiem: 0, binhThuong: 0 }
 
 const EMPTY: Omit<Customer, 'id' | 'createdAt'> = {
-  name: '', meterId: 1, chargeType: 'flat_vat_incl', flatUnitPrice: 0, areaM2: 0, pricePerM2: 0,
+  name: '', group: '', meterId: 1, chargeType: 'flat_vat_incl', flatUnitPrice: 0, areaM2: 0, pricePerM2: 0,
   flatPriceHistory: [{ fromMonth: '', price: 0 }], areaPriceHistory: [{ fromMonth: '', price: 0 }],
   timebandPriceHistory: [{ ...EMPTY_TIMEBAND_ROW }],
   floor: '', kioskCode: '', kioskOwner: '', tenantName: '', active: true, note: '',
@@ -94,8 +94,9 @@ function TimebandPriceEditor({ value, onChange }: {
   )
 }
 
-function CustomerForm({ initial, meterNames, onSave, onCancel }: {
-  initial?: Customer; meterNames: Record<number, string>; onSave: (c: Customer) => void; onCancel: () => void
+function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel }: {
+  initial?: Customer; meterNames: Record<number, string>; groupSuggestions: string[]
+  onSave: (c: Customer) => void; onCancel: () => void
 }) {
   const [form, setForm] = useState<Omit<Customer, 'id' | 'createdAt'>>(
     initial
@@ -127,10 +128,17 @@ function CustomerForm({ initial, meterNames, onSave, onCancel }: {
 
   return (
     <div style={{ background: 'var(--surf2)', border: '1px solid var(--border3)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
         <div>
           <label className="dn-label">Tên khách hàng *</label>
           <input className="dn-input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="VD: Vin, SAG, Ki-ốt A1…" />
+        </div>
+        <div>
+          <label className="dn-label">Nhóm khách hàng</label>
+          <input className="dn-input" list="dn-group-suggestions" value={form.group ?? ''} onChange={e => set('group', e.target.value)} placeholder="VD: Ki-ốt tầng 1, Văn phòng…" />
+          <datalist id="dn-group-suggestions">
+            {groupSuggestions.map(g => <option key={g} value={g} />)}
+          </datalist>
         </div>
         <div>
           <label className="dn-label">Đồng hồ</label>
@@ -232,6 +240,9 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
   const save = async (c: Customer) => { await saveCustomer(c); setEditing(null) }
   const remove = async (id: string) => { if (confirm('Xoá khách hàng này?')) await deleteCustomer(id) }
 
+  // Gợi ý nhóm từ các nhóm đã nhập (bỏ trùng, bỏ rỗng)
+  const groupSuggestions = Array.from(new Set(customers.map(c => c.group?.trim()).filter((g): g is string => !!g))).sort((a, b) => a.localeCompare(b, 'vi'))
+
   return (
     <div className="sc sc--sticky" ref={cardRef}>
       <div className="sc-head">
@@ -239,22 +250,23 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
         <button className="btn-primary" onClick={() => setEditing('new')}>+ Thêm khách hàng</button>
       </div>
       <div className="sc-body">
-        {editing === 'new' && <CustomerForm meterNames={meterNames} onSave={save} onCancel={() => setEditing(null)} />}
-        {editing && editing !== 'new' && <CustomerForm initial={editing} meterNames={meterNames} onSave={save} onCancel={() => setEditing(null)} />}
+        {editing === 'new' && <CustomerForm meterNames={meterNames} groupSuggestions={groupSuggestions} onSave={save} onCancel={() => setEditing(null)} />}
+        {editing && editing !== 'new' && <CustomerForm initial={editing} meterNames={meterNames} groupSuggestions={groupSuggestions} onSave={save} onCancel={() => setEditing(null)} />}
 
         <div style={{ overflowX: 'auto' }}>
           <table className="dn-table">
             <thead><tr>
-              <th>Tên khách hàng</th><th>Tầng</th><th>Mã ki-ốt</th><th>Chủ ki-ốt</th><th>Khách hàng thuê</th>
+              <th>Tên khách hàng</th><th>Nhóm</th><th>Tầng</th><th>Mã ki-ốt</th><th>Chủ ki-ốt</th><th>Khách hàng thuê</th>
               <th>Đồng hồ</th><th>Cách tính tiền</th><th>Thông số</th><th>Trạng thái</th><th style={{ width: 100 }}></th>
             </tr></thead>
             <tbody>
               {customers.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Chưa có khách hàng nào.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Chưa có khách hàng nào.</td></tr>
               )}
               {customers.map(c => (
                 <tr key={c.id}>
                   <td style={{ fontWeight: 600 }}>{c.name}{c.note && <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>{c.note}</div>}</td>
+                  <td>{c.group?.trim() ? <span className="badge" style={{ background: 'var(--surf2)', color: 'var(--navy)', border: '1px solid var(--border3)' }}>{c.group}</span> : '—'}</td>
                   <td>{c.floor || '—'}</td>
                   <td>{c.kioskCode || '—'}</td>
                   <td>{c.kioskOwner || '—'}</td>

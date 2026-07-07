@@ -121,6 +121,70 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
   )
 }
 
+// Bảng tổng hợp phải trả / đã thu / còn nợ theo NHÓM khách hàng (gộp cả 3 đồng hồ).
+function GroupSummaryCard({ readings, customers, usages, payments, month }: {
+  readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]; month: string
+}) {
+  const monthReadings = readings.filter(r => r.month === month)
+  const allRows = monthReadings.flatMap(r => meterAllocation(r, customers, usages).rows)
+  const paidOf = (customerId: string) => payments.filter(p => p.customerId === customerId && p.month === month).reduce((s, p) => s + p.amount, 0)
+
+  const groups = new Map<string, { due: number; paid: number; count: number }>()
+  for (const r of allRows) {
+    const g = r.customer.group?.trim() || 'Chưa phân nhóm'
+    const cur = groups.get(g) ?? { due: 0, paid: 0, count: 0 }
+    cur.due += r.amount
+    cur.paid += paidOf(r.customer.id)
+    cur.count += 1
+    groups.set(g, cur)
+  }
+  const rows = Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0], 'vi'))
+  const totalDue = rows.reduce((s, [, v]) => s + v.due, 0)
+  const totalPaid = rows.reduce((s, [, v]) => s + v.paid, 0)
+
+  return (
+    <div className="sc">
+      <div className="sc-head"><span className="sc-title">Tổng hợp theo nhóm khách hàng — tháng {month}</span></div>
+      <div className="sc-body">
+        <table className="dn-table">
+          <thead><tr>
+            <th>Nhóm</th><th style={{ textAlign: 'right' }}>Số KH</th><th style={{ textAlign: 'right' }}>Phải trả</th>
+            <th style={{ textAlign: 'right' }}>Đã thu</th><th style={{ textAlign: 'right' }}>Còn nợ</th>
+          </tr></thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 16 }}>Chưa có dữ liệu tháng này.</td></tr>
+            )}
+            {rows.map(([g, v]) => {
+              const remain = Math.max(0, v.due - v.paid)
+              return (
+                <tr key={g}>
+                  <td style={{ fontWeight: 600 }}>{g}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{v.count}</td>
+                  <td style={{ textAlign: 'right' }}>{fmt(v.due)} đ</td>
+                  <td style={{ textAlign: 'right', color: 'var(--green)' }}>{fmt(v.paid)} đ</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(remain)} đ</td>
+                </tr>
+              )
+            })}
+          </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr style={{ background: '#E0EDFA' }}>
+                <td style={{ fontWeight: 700 }}>Tổng cộng</td>
+                <td></td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(totalDue)} đ</td>
+                <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--green)' }}>{fmt(totalPaid)} đ</td>
+                <td style={{ textAlign: 'right', fontWeight: 700, color: (totalDue - totalPaid) > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(Math.max(0, totalDue - totalPaid))} đ</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export function TabCongNo({ readings, customers, usages, payments, month, meterNames }: {
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]; month: string
   meterNames: Record<number, string>
@@ -130,6 +194,7 @@ export function TabCongNo({ readings, customers, usages, payments, month, meterN
 
   return (
     <div>
+      <GroupSummaryCard readings={readings} customers={customers} usages={usages} payments={payments} month={month} />
       {([1, 2, 3] as MeterId[]).map(id => (
         <MeterAllocationCard key={id} meterId={id} reading={byMeter(id)} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames}
           onCollect={(customerId, due, paid) => setCollecting({ customerId, due, paid })} />

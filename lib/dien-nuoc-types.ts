@@ -63,6 +63,7 @@ export interface TimebandPricePoint { fromMonth: string; caoDiem: number; thapDi
 export interface Customer {
   id: string
   name: string
+  group?: string          // Nhóm khách hàng (tự do) — dùng để tổng hợp/gom nhóm
   meterId: MeterId
   chargeType: ChargeType
   flatUnitPrice: number   // (cũ, giữ để tương thích) đơn giá gồm VAT cho flat_vat_incl

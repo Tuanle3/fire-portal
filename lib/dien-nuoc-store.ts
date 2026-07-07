@@ -56,6 +56,7 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
   return {
     id,
     name:       (d.name as string) ?? '',
+    group:      (d.group as string) ?? '',
     meterId:    Number(d.meterId) as Customer['meterId'],
     chargeType: (d.chargeType as Customer['chargeType']) ?? 'flat_vat_incl',
     flatUnitPrice: Number(d.flatUnitPrice ?? 0),
