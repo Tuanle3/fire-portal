@@ -94,14 +94,14 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
           <tbody>
             {visibleBands.map(k => (
               <tr key={`${k}-kwh`} style={{ fontSize: 10, lineHeight: '14px' }}>
-                <td style={{ fontWeight: 600, padding: '2px 6px' }}>{isWater ? `Sản lượng (${unit})` : `${BAND_LABELS[k]} (${unit})`}</td>
-                {months.map(r => <td key={r.id} style={{ textAlign: 'right', padding: '2px 6px', background: cellBg(r.id) }}>{fmt(r.bands[k].kwh)}</td>)}
+                <td style={{ fontWeight: 600, padding: '5px 6px' }}>{isWater ? `Sản lượng (${unit})` : `${BAND_LABELS[k]} (${unit})`}</td>
+                {months.map(r => <td key={r.id} style={{ textAlign: 'right', padding: '5px 6px', background: cellBg(r.id) }}>{fmt(r.bands[k].kwh)}</td>)}
               </tr>
             ))}
             {visibleBands.map(k => (
               <tr key={`${k}-gia`} style={{ fontSize: 10, lineHeight: '14px' }}>
-                <td style={{ fontWeight: 600, padding: '2px 6px' }}>{isWater ? 'Đơn giá' : `${BAND_LABELS[k]} (giá)`}</td>
-                {months.map(r => <td key={r.id} style={{ textAlign: 'right', padding: '2px 6px', background: cellBg(r.id) }}>{fmtDec(r.bands[k].donGia)}</td>)}
+                <td style={{ fontWeight: 600, padding: '5px 6px' }}>{isWater ? 'Đơn giá' : `${BAND_LABELS[k]} (giá)`}</td>
+                {months.map(r => <td key={r.id} style={{ textAlign: 'right', padding: '5px 6px', background: cellBg(r.id) }}>{fmtDec(r.bands[k].donGia)}</td>)}
               </tr>
             ))}
             <tr>
