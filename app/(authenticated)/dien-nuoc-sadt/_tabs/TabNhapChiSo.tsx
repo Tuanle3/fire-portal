@@ -77,7 +77,7 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
       {months.length === 0 ? (
         <div className="dn-empty">Chưa có dữ liệu tháng nào cho đồng hồ này.</div>
       ) : (
-        <table className="dn-table">
+        <table className="dn-table" style={{ fontSize: 11 }}>
           <thead><tr>
             <th>Chỉ tiêu</th>
             {months.map(r => {
@@ -112,9 +112,9 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
               <td style={{ fontWeight: 600 }}>VAT</td>
               {months.map(r => <td key={r.id} style={{ textAlign: 'right', background: cellBg(r.id) }}>{fmt(meterVat(r.bands, r.vatPercent))}</td>)}
             </tr>
-            <tr>
+            <tr style={{ background: '#E0EDFA' }}>
               <td style={{ fontWeight: 700 }}>Tổng tiền</td>
-              {months.map(r => <td key={r.id} style={{ textAlign: 'right', fontWeight: 700, background: cellBg(r.id) }}>{fmt(meterTotal(r.bands, r.vatPercent))}</td>)}
+              {months.map(r => <td key={r.id} style={{ textAlign: 'right', fontWeight: 700, background: cellBg(r.id) ?? '#E0EDFA' }}>{fmt(meterTotal(r.bands, r.vatPercent))}</td>)}
             </tr>
           </tbody>
         </table>
@@ -216,7 +216,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
           <tfoot>
             <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Tổng tiền chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterSubtotal(bands))} đ</td></tr>
             <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Thuế VAT ({vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterVat(bands, vatPercent))} đ</td></tr>
-            <tr><td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)' }}>Tổng thanh toán</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmt(meterTotal(bands, vatPercent))} đ</td></tr>
+            <tr style={{ background: '#E0EDFA' }}><td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)' }}>Tổng thanh toán</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmt(meterTotal(bands, vatPercent))} đ</td></tr>
           </tfoot>
         </table>
 
