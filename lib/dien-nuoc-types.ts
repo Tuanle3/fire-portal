@@ -30,6 +30,16 @@ export function meterLabel(customNames: Partial<Record<number, string>> | undefi
   return customNames?.[id]?.trim() || METER_LABELS[id]
 }
 
+// ── Đồng hồ 1: số ghi điện từng khu (tầng) & tỷ lệ chia khung giờ cho BQT ─────
+// Mỗi khu khớp với "Nhóm khách hàng" (group) để trừ sản lượng khách trong khu đó.
+export interface FloorReading { group: string; indexOld: number; indexNew: number }
+export interface BqtRatio { caoDiem: number; thapDiem: number; binhThuong: number }
+export const DEFAULT_BQT_RATIO: BqtRatio = { binhThuong: 50, caoDiem: 15, thapDiem: 35 }
+export const DEFAULT_FLOOR_GROUPS = ['Tầng 1 + hầm', 'Tầng 2', 'Tầng 3']
+export function defaultFloorReadings(): FloorReading[] {
+  return DEFAULT_FLOOR_GROUPS.map(g => ({ group: g, indexOld: 0, indexNew: 0 }))
+}
+
 export interface MeterReading {
   id: string          // `${meterId}_${month}`
   meterId: MeterId
@@ -37,6 +47,8 @@ export interface MeterReading {
   bands: Bands
   vatPercent: number
   note: string
+  floorReadings?: FloorReading[]   // chỉ dùng cho đồng hồ 1: số ghi điện từng khu
+  bqtRatio?: BqtRatio              // chỉ dùng cho đồng hồ 1: tỷ lệ chia khung giờ cho BQT (%)
   createdAt: string
   updatedAt: string
 }
@@ -221,4 +233,71 @@ export function isAmountAnomalous(currentTotal: number, priorReadings: MeterRead
   const avg = priorReadings.reduce((s, r) => s + meterTotal(r.bands, r.vatPercent), 0) / priorReadings.length
   if (avg === 0) return false
   return Math.abs(currentTotal - avg) / avg > thresholdPct
+}
+
+// ── Tính tiền điện BQT (Ban quản trị) cho đồng hồ 1 ──────────────────────────
+const ELECTRIC_BANDS = ['caoDiem', 'thapDiem', 'binhThuong'] as const
+
+// Sản lượng (kWh) 1 khách đã dùng trong tháng (theo loại tính tiền).
+export function usageKwh(customer: Customer, usage: CustomerUsage | undefined): number {
+  if (!usage) return 0
+  if (customer.chargeType === 'timeband_excl_vat') {
+    const b = usage.bandsKwh ?? {}
+    return (b.caoDiem ?? 0) + (b.thapDiem ?? 0) + (b.binhThuong ?? 0)
+  }
+  return usage.totalUnit ?? 0  // flat_vat_incl; các loại khác không theo kWh (=0)
+}
+
+export interface BqtFloorRow { group: string; floorKwh: number; customerKwh: number; bqtKwh: number }
+export interface BqtBandRow { key: BandKey; ratioPct: number; kwh: number; price: number; amount: number }
+export interface BqtCalc {
+  floors: BqtFloorRow[]
+  sumFloorKwh: number      // tổng kWh ghi các tầng
+  mainMeterKwh: number     // tổng kWh đồng hồ chính (cao+thấp+bình)
+  discrepancy: number      // chênh lệch đồng hồ chính − tổng ghi tầng (tính cho BQT)
+  bqtTotalKwh: number      // tổng kWh BQT phải chịu
+  bands: BqtBandRow[]
+  subtotal: number
+  vat: number
+  total: number
+  ratioSum: number         // tổng % (để cảnh báo nếu ≠ 100)
+}
+
+// Tính toàn bộ phần BQT: kWh từng khu (= ghi tầng − khách trong nhóm), cộng chênh lệch,
+// rồi chia tổng theo tỷ lệ khung giờ × đơn giá đồng hồ tháng đó.
+export function computeBqt(
+  reading: MeterReading,
+  customers: Customer[],
+  usages: CustomerUsage[],
+  ratio: BqtRatio = DEFAULT_BQT_RATIO,
+): BqtCalc {
+  const floorReadings = reading.floorReadings ?? []
+  const usageByCustomer = new Map(usages.filter(u => u.month === reading.month).map(u => [u.customerId, u]))
+  const meterCustomers = customers.filter(c => c.meterId === reading.meterId && c.active)
+
+  const floors: BqtFloorRow[] = floorReadings.map(f => {
+    const floorKwh = Math.max(0, (f.indexNew || 0) - (f.indexOld || 0))
+    const g = (f.group || '').trim()
+    const customerKwh = meterCustomers
+      .filter(c => (c.group || '').trim() === g && g !== '')
+      .reduce((s, c) => s + usageKwh(c, usageByCustomer.get(c.id)), 0)
+    return { group: f.group, floorKwh, customerKwh, bqtKwh: Math.max(0, floorKwh - customerKwh) }
+  })
+
+  const sumFloorKwh = floors.reduce((s, f) => s + f.floorKwh, 0)
+  const mainMeterKwh = ELECTRIC_BANDS.reduce((s, k) => s + (reading.bands[k]?.kwh || 0), 0)
+  const discrepancy = mainMeterKwh - sumFloorKwh
+  const bqtFloorKwh = floors.reduce((s, f) => s + f.bqtKwh, 0)
+  const bqtTotalKwh = Math.max(0, bqtFloorKwh + discrepancy)
+
+  const ratioSum = ratio.caoDiem + ratio.thapDiem + ratio.binhThuong
+  const bands: BqtBandRow[] = ELECTRIC_BANDS.map(k => {
+    const ratioPct = ratio[k] || 0
+    const kwh = bqtTotalKwh * ratioPct / 100
+    const price = reading.bands[k]?.donGia || 0
+    return { key: k, ratioPct, kwh, price, amount: kwh * price }
+  })
+  const subtotal = bands.reduce((s, b) => s + b.amount, 0)
+  const vat = subtotal * reading.vatPercent / 100
+  return { floors, sumFloorKwh, mainMeterKwh, discrepancy, bqtTotalKwh, bands, subtotal, vat, total: subtotal + vat, ratioSum }
 }

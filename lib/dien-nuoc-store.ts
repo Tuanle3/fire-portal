@@ -34,6 +34,8 @@ function parseMeter(id: string, d: Record<string, unknown>): MeterReading {
     bands,
     vatPercent: Number(d.vatPercent ?? 8),
     note:     (d.note as string) ?? '',
+    floorReadings: (d.floorReadings as MeterReading['floorReadings']) ?? undefined,
+    bqtRatio:      (d.bqtRatio as MeterReading['bqtRatio']) ?? undefined,
     createdAt:(d.createdAt as string) ?? '',
     updatedAt:(d.updatedAt as string) ?? '',
   }

@@ -5,6 +5,7 @@ import {
   BAND_KEYS, BandKey, BAND_LABELS, meterLabel, METER_UNIT, EMPTY_BANDS,
   bandMoney, meterSubtotal, meterVat, meterTotal, customerCharge, resolvePrice, resolveTimebandPoint,
   lastReadingBefore, bandsWithPriceChange, isAmountAnomalous,
+  FloorReading, BqtRatio, DEFAULT_BQT_RATIO, defaultFloorReadings, computeBqt,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
 import { NumberInput } from '../_components/NumberInput'
@@ -17,6 +18,12 @@ function prefillBands(prev: MeterReading | null): Bands {
   const out = { ...EMPTY_BANDS }
   for (const k of BAND_KEYS) out[k] = { kwh: 0, donGia: prev.bands[k].donGia }
   return out
+}
+
+// Số ghi tầng tháng mới: chỉ số cũ = chỉ số mới tháng trước; giữ tên nhóm khu.
+function prefillFloors(prev: MeterReading | null): FloorReading[] {
+  if (!prev?.floorReadings?.length) return defaultFloorReadings()
+  return prev.floorReadings.map(f => ({ group: f.group, indexOld: f.indexNew || 0, indexNew: 0 }))
 }
 
 function EditableMeterTitle({ meterId, meterNames, canEdit, onSave }: {
@@ -136,6 +143,8 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
   const [bands, setBands] = useState<Bands>(reading?.bands ?? prefillBands(prevReading))
   const [vatPercent, setVatPercent] = useState(reading?.vatPercent ?? prevReading?.vatPercent ?? 8)
   const [note, setNote] = useState(reading?.note ?? '')
+  const [floorReadings, setFloorReadings] = useState<FloorReading[]>(reading?.floorReadings ?? prefillFloors(prevReading))
+  const [bqtRatio, setBqtRatio] = useState<BqtRatio>(reading?.bqtRatio ?? prevReading?.bqtRatio ?? DEFAULT_BQT_RATIO)
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
 
@@ -143,6 +152,8 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
     setBands(reading?.bands ?? prefillBands(prevReading))
     setVatPercent(reading?.vatPercent ?? prevReading?.vatPercent ?? 8)
     setNote(reading?.note ?? '')
+    setFloorReadings(reading?.floorReadings ?? prefillFloors(prevReading))
+    setBqtRatio(reading?.bqtRatio ?? prevReading?.bqtRatio ?? DEFAULT_BQT_RATIO)
     setSavedAt(null)
   }, [reading, month, prevReading])
 
@@ -154,12 +165,15 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
     setBands(b => ({ ...b, [k]: { ...b[k], [field]: v } }))
   }
 
+  const isMeter1 = meterId === 1
+
   const save = async () => {
     setSaving(true)
     const now = new Date().toISOString().slice(0, 10)
     const id = `${meterId}_${month}`
     await saveMeterReading({
       id, meterId, month, bands, vatPercent, note,
+      ...(isMeter1 ? { floorReadings, bqtRatio } : {}),
       createdAt: reading?.createdAt || now, updatedAt: now,
     })
     setSaving(false)
@@ -167,7 +181,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
   }
 
   const meterCustomers = customers.filter(c => c.meterId === meterId && c.active)
-  const draftReading: MeterReading = { id: '', meterId, month, bands, vatPercent, note, createdAt: '', updatedAt: '' }
+  const draftReading: MeterReading = { id: '', meterId, month, bands, vatPercent, note, floorReadings, bqtRatio, createdAt: '', updatedAt: '' }
 
   // Cảnh báo sai lệch ngay khi đang nhập (trước khi lưu)
   const priceChangedBands = bandsWithPriceChange(bands, prevReading)
@@ -247,6 +261,132 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
         {meterCustomers.length > 0 && (
           <CustomerUsageTable meterId={meterId} month={month} customers={customers} readings={readings} usages={usages} reading={draftReading} unit={unit} />
         )}
+
+        {isMeter1 && (
+          <BqtSection reading={draftReading} customers={customers} usages={usages}
+            floorReadings={floorReadings} setFloorReadings={setFloorReadings}
+            bqtRatio={bqtRatio} setBqtRatio={setBqtRatio} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Đồng hồ 1: tính tiền điện BQT theo 3 mục (hướng dẫn · nhập theo tầng · chia khung giờ) ──
+function BqtSection({ reading, customers, usages, floorReadings, setFloorReadings, bqtRatio, setBqtRatio }: {
+  reading: MeterReading; customers: Customer[]; usages: CustomerUsage[]
+  floorReadings: FloorReading[]; setFloorReadings: (v: FloorReading[]) => void
+  bqtRatio: BqtRatio; setBqtRatio: (v: BqtRatio) => void
+}) {
+  const calc = computeBqt(reading, customers, usages, bqtRatio)
+  const groupSuggestions = Array.from(new Set(customers.filter(c => c.meterId === 1 && c.active).map(c => (c.group || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'))
+
+  const setFloor = (i: number, patch: Partial<FloorReading>) => setFloorReadings(floorReadings.map((f, idx) => idx === i ? { ...f, ...patch } : f))
+  const addFloor = () => setFloorReadings([...floorReadings, { group: '', indexOld: 0, indexNew: 0 }])
+  const removeFloor = (i: number) => setFloorReadings(floorReadings.filter((_, idx) => idx !== i))
+  const setRatio = (k: keyof BqtRatio, v: number) => setBqtRatio({ ...bqtRatio, [k]: v })
+
+  return (
+    <div style={{ marginTop: 20, border: '1px solid var(--border3)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: '#1C3557', color: '#fff', padding: '9px 14px', fontSize: 12, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase' }}>
+        Tính tiền điện Ban quản trị (BQT) — đồng hồ điện 1
+      </div>
+
+      <div style={{ padding: 14 }}>
+        {/* a. Hướng dẫn */}
+        <div style={{ background: '#EEF3FA', border: '1px solid #D0DCE8', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12.5, lineHeight: 1.6, color: 'var(--txt2)' }}>
+          <div style={{ fontWeight: 700, color: 'var(--navy)', marginBottom: 4 }}>a. Cách tính tiền điện BQT</div>
+          <div>① Mỗi khu (theo <b>Nhóm khách hàng</b>): <b>kWh ghi tầng</b> = chỉ số mới − chỉ số cũ; trừ đi sản lượng khách trong nhóm ⇒ <b>kWh BQT của khu</b>.</div>
+          <div>② <b>Chênh lệch</b> = tổng kWh đồng hồ chính (cao+thấp+bình) − tổng kWh ghi các tầng ⇒ cộng hết vào cho BQT.</div>
+          <div>③ <b>Tổng kWh BQT</b> chia theo tỷ lệ khung giờ (mặc định BT 50% · CĐ 15% · TĐ 35%), rồi × đơn giá từng khung của đồng hồ 1 + VAT ⇒ tiền BQT phải chịu.</div>
+        </div>
+
+        {/* b. Bảng nhập theo tầng */}
+        <div className="dn-col-title"><span>b. Nhập số ghi điện từng khu ⇒ kWh BQT</span></div>
+        <div className="dn-scroll">
+          <table className="dn-table" style={{ marginBottom: 6 }}>
+            <thead><tr>
+              <th>Khu vực (Nhóm KH)</th>
+              <th style={{ textAlign: 'right' }}>Chỉ số cũ</th>
+              <th style={{ textAlign: 'right' }}>Chỉ số mới</th>
+              <th style={{ textAlign: 'right' }}>kWh ghi tầng</th>
+              <th style={{ textAlign: 'right' }}>kWh khách dùng</th>
+              <th style={{ textAlign: 'right' }}>kWh BQT</th>
+              <th style={{ width: 44 }}></th>
+            </tr></thead>
+            <tbody>
+              {floorReadings.map((f, i) => {
+                const row = calc.floors[i]
+                return (
+                  <tr key={i}>
+                    <td>
+                      <input className="dn-input" list="dn-bqt-groups" style={{ minWidth: 160 }} value={f.group} placeholder="VD: Tầng 1 + hầm" onChange={e => setFloor(i, { group: e.target.value })} />
+                    </td>
+                    <td style={{ textAlign: 'right' }}><NumberInput style={{ textAlign: 'right', width: 110 }} value={f.indexOld} onValueChange={v => setFloor(i, { indexOld: v })} /></td>
+                    <td style={{ textAlign: 'right' }}><NumberInput style={{ textAlign: 'right', width: 110 }} value={f.indexNew} onValueChange={v => setFloor(i, { indexNew: v })} /></td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(row?.floorKwh ?? 0)}</td>
+                    <td style={{ textAlign: 'right', color: '#2563EB' }}>{fmt(row?.customerKwh ?? 0)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)' }}>{fmt(row?.bqtKwh ?? 0)}</td>
+                    <td style={{ textAlign: 'center' }}>{floorReadings.length > 1 && <button className="btn-danger" onClick={() => removeFloor(i)}>×</button>}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
+        </div>
+        <button className="btn-ghost" style={{ marginBottom: 12 }} onClick={addFloor}>+ Thêm khu</button>
+
+        <div className="dn-scroll">
+          <table className="dn-table" style={{ marginBottom: 16, maxWidth: 520 }}>
+            <tbody>
+              <tr><td>Tổng kWh ghi các tầng</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(calc.sumFloorKwh)}</td></tr>
+              <tr><td>Tổng kWh đồng hồ chính (cao + thấp + bình)</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(calc.mainMeterKwh)}</td></tr>
+              <tr><td>Chênh lệch (đồng hồ − tổng tầng) → BQT</td><td style={{ textAlign: 'right', fontWeight: 600, color: calc.discrepancy < 0 ? '#DC2626' : undefined }}>{fmt(calc.discrepancy)}</td></tr>
+              <tr style={{ background: '#E0EDFA' }}><td style={{ fontWeight: 700, color: 'var(--navy)' }}>Tổng kWh BQT phải chịu</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmt(calc.bqtTotalKwh)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* c. Chia theo khung giờ */}
+        <div className="dn-col-title"><span>c. Chia kWh BQT theo khung giờ × đơn giá</span></div>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+          {([['binhThuong', 'Bình thường'], ['caoDiem', 'Cao điểm'], ['thapDiem', 'Thấp điểm']] as [keyof BqtRatio, string][]).map(([k, label]) => (
+            <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label className="dn-label" style={{ margin: 0 }}>{label} %:</label>
+              <input type="number" className="dn-input" style={{ width: 70 }} value={bqtRatio[k] || ''} onChange={e => setRatio(k, Number(e.target.value))} />
+            </span>
+          ))}
+          <span style={{ fontSize: 11.5, color: calc.ratioSum === 100 ? 'var(--green)' : '#DC2626', fontWeight: 600 }}>Tổng tỷ lệ: {calc.ratioSum}%{calc.ratioSum !== 100 ? ' (nên = 100%)' : ' ✓'}</span>
+        </div>
+        <div className="dn-scroll">
+          <table className="dn-table">
+            <thead><tr>
+              <th>Khung giờ</th>
+              <th style={{ textAlign: 'right' }}>Tỷ lệ %</th>
+              <th style={{ textAlign: 'right' }}>kWh BQT</th>
+              <th style={{ textAlign: 'right' }}>Đơn giá (đ)</th>
+              <th style={{ textAlign: 'right' }}>Thành tiền</th>
+            </tr></thead>
+            <tbody>
+              {calc.bands.map(b => (
+                <tr key={b.key}>
+                  <td>{BAND_LABELS[b.key]}</td>
+                  <td style={{ textAlign: 'right' }}>{b.ratioPct}%</td>
+                  <td style={{ textAlign: 'right' }}>{fmt(b.kwh)}</td>
+                  <td style={{ textAlign: 'right' }}>{fmtDec(b.price)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(b.amount)} đ</td>
+                </tr>
+              ))}
+              <tr className="dn-sum-top"><td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Tổng tiền chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(calc.subtotal)} đ</td></tr>
+              <tr><td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Thuế VAT ({reading.vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(calc.vat)} đ</td></tr>
+              <tr style={{ background: '#E0EDFA' }}><td colSpan={4} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)', whiteSpace: 'nowrap' }}>Tổng thanh toán BQT</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', fontSize: 14, whiteSpace: 'nowrap' }}>{fmt(calc.total)} đ</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 6 }}>
+          * Số ghi từng tầng &amp; tỷ lệ được lưu cùng khi bấm “Lưu chỉ số” ở trên.
+        </div>
       </div>
     </div>
   )
