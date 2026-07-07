@@ -13,6 +13,7 @@ import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 20 })  // giữ phần lẻ cho đơn giá
+const fmtKwh = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 2 })   // kWh giữ tối đa 2 số lẻ
 
 function prefillBands(prev: MeterReading | null): Bands {
   if (!prev) return EMPTY_BANDS
@@ -108,7 +109,7 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
             {visibleBands.map(k => (
               <tr key={`${k}-kwh`} style={{ fontSize: 10, lineHeight: '14px', color: '#2563EB' }}>
                 <td style={{ fontWeight: 400, padding: '5px 6px' }}>{isWater ? `Sản lượng (${unit})` : `${BAND_LABELS[k]} (${unit})`}</td>
-                {months.map(r => <td key={r.id} style={{ textAlign: 'right', padding: '5px 6px', background: cellBg(r.id) }}>{fmt(r.bands[k].kwh)}</td>)}
+                {months.map(r => <td key={r.id} style={{ textAlign: 'right', padding: '5px 6px', background: cellBg(r.id) }}>{fmtKwh(r.bands[k].kwh)}</td>)}
               </tr>
             ))}
             {visibleBands.map(k => (
@@ -336,13 +337,13 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
                           <NumberInput style={{ textAlign: 'right', width: 92 }} value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
                           <span style={{ fontSize: 10, color: 'var(--muted)' }}>Mới</span>
                           <NumberInput style={{ textAlign: 'right', width: 92 }} value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
-                          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmt(floorBandKwh(f.bands[k]))}</span>
+                          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmtKwh(floorBandKwh(f.bands[k]))}</span>
                         </div>
                       ))}
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'top' }}>{fmt(row?.floorKwh ?? floorTotalKwh(f))}</td>
-                    <td style={{ textAlign: 'right', color: '#2563EB', verticalAlign: 'top' }}>{fmt(row?.customerKwh ?? 0)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)', verticalAlign: 'top' }}>{fmt(row?.bqtKwh ?? 0)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'top' }}>{fmtKwh(row?.floorKwh ?? floorTotalKwh(f))}</td>
+                    <td style={{ textAlign: 'right', color: '#2563EB', verticalAlign: 'top' }}>{fmtKwh(row?.customerKwh ?? 0)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)', verticalAlign: 'top' }}>{fmtKwh(row?.bqtKwh ?? 0)}</td>
                     <td style={{ textAlign: 'center', verticalAlign: 'top' }}>{floorReadings.length > 1 && <button className="btn-danger" onClick={() => removeFloor(i)}>×</button>}</td>
                   </tr>
                 )
@@ -356,10 +357,10 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
         <div className="dn-scroll">
           <table className="dn-table" style={{ marginBottom: 16, maxWidth: 520 }}>
             <tbody>
-              <tr><td>Tổng kWh ghi các tầng</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(calc.sumFloorKwh)}</td></tr>
-              <tr><td>Tổng kWh đồng hồ chính (cao + thấp + bình)</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(calc.mainMeterKwh)}</td></tr>
-              <tr><td>Chênh lệch (đồng hồ − tổng tầng) → BQT</td><td style={{ textAlign: 'right', fontWeight: 600, color: calc.discrepancy < 0 ? '#DC2626' : undefined }}>{fmt(calc.discrepancy)}</td></tr>
-              <tr style={{ background: '#E0EDFA' }}><td style={{ fontWeight: 700, color: 'var(--navy)' }}>Tổng kWh BQT phải chịu</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmt(calc.bqtTotalKwh)}</td></tr>
+              <tr><td>Tổng kWh ghi các tầng</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtKwh(calc.sumFloorKwh)}</td></tr>
+              <tr><td>Tổng kWh đồng hồ chính (cao + thấp + bình)</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtKwh(calc.mainMeterKwh)}</td></tr>
+              <tr><td>Chênh lệch (đồng hồ − tổng tầng) → BQT</td><td style={{ textAlign: 'right', fontWeight: 600, color: calc.discrepancy < 0 ? '#DC2626' : undefined }}>{fmtKwh(calc.discrepancy)}</td></tr>
+              <tr style={{ background: '#E0EDFA' }}><td style={{ fontWeight: 700, color: 'var(--navy)' }}>Tổng kWh BQT phải chịu</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmtKwh(calc.bqtTotalKwh)}</td></tr>
             </tbody>
           </table>
         </div>
@@ -389,7 +390,7 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
                 <tr key={b.key}>
                   <td>{BAND_LABELS[b.key]}</td>
                   <td style={{ textAlign: 'right' }}>{b.ratioPct}%</td>
-                  <td style={{ textAlign: 'right' }}>{fmt(b.kwh)}</td>
+                  <td style={{ textAlign: 'right' }}>{fmtKwh(b.kwh)}</td>
                   <td style={{ textAlign: 'right' }}>{fmtDec(b.price)}</td>
                   <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(b.amount)} đ</td>
                 </tr>
@@ -437,9 +438,9 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
     return { pct, up: pct > 0 }
   }
 
-  const rowCells = (fn: (c: ReturnType<typeof computeBqt>) => number, opts?: { bold?: boolean; bg?: string }) =>
+  const rowCells = (fn: (c: ReturnType<typeof computeBqt>) => number, opts?: { bold?: boolean; bg?: string; kwh?: boolean }) =>
     calcs.map(x => (
-      <td key={x.month} style={{ textAlign: 'right', fontWeight: opts?.bold ? 700 : undefined, background: x.isCur ? '#E0EDFA' : opts?.bg, whiteSpace: 'nowrap' }}>{fmt(fn(x.c))}</td>
+      <td key={x.month} style={{ textAlign: 'right', fontWeight: opts?.bold ? 700 : undefined, background: x.isCur ? '#E0EDFA' : opts?.bg, whiteSpace: 'nowrap' }}>{(opts?.kwh ? fmtKwh : fmt)(fn(x.c))}</td>
     ))
 
   return (
@@ -452,10 +453,10 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
             {calcs.map(x => <th key={x.month} style={{ textAlign: 'right', background: x.isCur ? '#E0EDFA' : undefined }}>{x.month}{x.isCur ? ' ★' : ''}</th>)}
           </tr></thead>
           <tbody>
-            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Tổng ghi các tầng (kWh)</td>{rowCells(c => c.sumFloorKwh)}</tr>
-            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Đồng hồ chính (kWh)</td>{rowCells(c => c.mainMeterKwh)}</tr>
-            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Chênh lệch → BQT (kWh)</td>{rowCells(c => c.discrepancy)}</tr>
-            <tr><td style={{ fontWeight: 600, color: 'var(--navy)' }}>Tổng kWh BQT</td>{rowCells(c => c.bqtTotalKwh, { bold: true })}</tr>
+            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Tổng ghi các tầng (kWh)</td>{rowCells(c => c.sumFloorKwh, { kwh: true })}</tr>
+            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Đồng hồ chính (kWh)</td>{rowCells(c => c.mainMeterKwh, { kwh: true })}</tr>
+            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Chênh lệch → BQT (kWh)</td>{rowCells(c => c.discrepancy, { kwh: true })}</tr>
+            <tr><td style={{ fontWeight: 600, color: 'var(--navy)' }}>Tổng kWh BQT</td>{rowCells(c => c.bqtTotalKwh, { bold: true, kwh: true })}</tr>
             <tr className="dn-sum-top"><td style={{ fontWeight: 600 }}>Chưa VAT</td>{rowCells(c => c.subtotal)}</tr>
             <tr><td style={{ fontWeight: 600 }}>VAT</td>{rowCells(c => c.vat)}</tr>
             <tr style={{ background: '#E0EDFA' }}><td style={{ fontWeight: 700 }}>Tổng thanh toán BQT</td>
@@ -581,7 +582,7 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
     const priceLabel = (() => {
       if (c.chargeType === 'flat_vat_incl') {
         const p = resolvePrice(c.flatPriceHistory, c.flatUnitPrice, r.month)
-        return `${fmt(sl ?? 0)} × ${fmtDec(p)}`
+        return `${fmtKwh(sl ?? 0)} × ${fmtDec(p)}`
       }
       if (c.chargeType === 'fixed_area') {
         const p = resolvePrice(c.areaPriceHistory, c.pricePerM2, r.month)
@@ -614,7 +615,7 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
         {tbDetail ? (
           <>
             {tbDetail.lines.map(l => (
-              <div key={l.label} style={{ fontSize: 10, color: 'var(--muted2)' }}>{l.label}: {fmt(l.kw)} × {fmtDec(l.price)}</div>
+              <div key={l.label} style={{ fontSize: 10, color: 'var(--muted2)' }}>{l.label}: {fmtKwh(l.kw)} × {fmtDec(l.price)}</div>
             ))}
             <div style={{ fontSize: 10, color: 'var(--muted2)' }}>Chưa VAT: {fmt(tbDetail.sub)}</div>
             <div style={{ fontSize: 10, color: 'var(--muted2)' }}>VAT ({tbDetail.vatPercent}%): {fmt(tbDetail.vat)}</div>
@@ -622,7 +623,7 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
           </>
         ) : (
           <>
-            <div style={{ fontWeight: isCurrent ? 700 : undefined }}>{sl == null ? '—' : fmt(sl)}</div>
+            <div style={{ fontWeight: isCurrent ? 700 : undefined }}>{sl == null ? '—' : fmtKwh(sl)}</div>
             {priceLabel && <div style={{ fontSize: 10, color: 'var(--muted2)' }}>{priceLabel}</div>}
             <div style={{ fontSize: 11, color: isCurrent ? 'var(--navy)' : 'var(--muted)', fontWeight: isCurrent ? 600 : undefined }}>{fmt(tt)} đ</div>
           </>
@@ -667,7 +668,7 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
             <NumberInput style={{ width: 80 }} placeholder="Chỉ số cũ" value={indexOld} onValueChange={setIndexOld} />
             <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Mới:</span>
             <NumberInput style={{ width: 80 }} placeholder="Chỉ số mới" value={indexNew} onValueChange={setIndexNew} />
-            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ SL: {fmt(totalUnit)} × {fmtDec(flatPrice)}</span>
+            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ SL: {fmtKwh(totalUnit)} × {fmtDec(flatPrice)}</span>
           </div>
         </td>
         <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right' }}><b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b></td>
@@ -698,7 +699,7 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
             <NumberInput style={{ width: 70 }} value={bandsIndexOld[k] ?? 0} onValueChange={v => setBandsIndexOld(b => ({ ...b, [k]: v }))} />
             <span style={{ fontSize: 10, color: 'var(--muted)' }}>Mới</span>
             <NumberInput style={{ width: 70 }} value={bandsIndexNew[k] ?? 0} onValueChange={v => setBandsIndexNew(b => ({ ...b, [k]: v }))} />
-            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmt(bandsKwh[k] ?? 0)} × {fmtDec(tbPrices[i])} = {fmt((bandsKwh[k] ?? 0) * tbPrices[i])}</span>
+            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmtKwh(bandsKwh[k] ?? 0)} × {fmtDec(tbPrices[i])} = {fmt((bandsKwh[k] ?? 0) * tbPrices[i])}</span>
           </div>
         ))}
       </td>
