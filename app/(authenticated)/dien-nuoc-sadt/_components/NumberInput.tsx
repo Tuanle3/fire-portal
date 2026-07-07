@@ -44,6 +44,12 @@ export function NumberInput({ value, onValueChange, className = 'dn-input', ...r
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
 
+  const apply = (raw: string) => {
+    const { display, value: v } = normalize(raw)
+    setText(display)
+    onValueChange(v)
+  }
+
   return (
     <input
       {...rest}
@@ -51,11 +57,17 @@ export function NumberInput({ value, onValueChange, className = 'dn-input', ...r
       inputMode="decimal"
       className={className}
       value={text}
-      onChange={e => {
-        const { display, value: v } = normalize(e.target.value)
-        setText(display)
-        onValueChange(v)
+      onKeyDown={e => {
+        // Bàn phím gõ dấu "." (kể cả phím Decimal của numpad) → tự chuyển thành "," (dấu thập phân).
+        if (e.key === '.' || e.key === 'Decimal') {
+          e.preventDefault()
+          const el = e.currentTarget
+          const start = el.selectionStart ?? el.value.length
+          const end = el.selectionEnd ?? start
+          apply(el.value.slice(0, start) + ',' + el.value.slice(end))
+        }
       }}
+      onChange={e => apply(e.target.value)}
     />
   )
 }
