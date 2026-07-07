@@ -128,7 +128,7 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
 
   return (
     <div style={{ background: 'var(--surf2)', border: '1px solid var(--border3)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+      <div className="dn-form-grid">
         <div>
           <label className="dn-label">Tên khách hàng *</label>
           <input className="dn-input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="VD: Vin, SAG, Ki-ốt A1…" />
@@ -154,7 +154,7 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+      <div className="dn-form-grid">
         <div>
           <label className="dn-label">Tầng</label>
           <input className="dn-input" value={form.floor} onChange={e => set('floor', e.target.value)} placeholder="VD: Tầng 1" />
@@ -253,7 +253,7 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
         {editing === 'new' && <CustomerForm meterNames={meterNames} groupSuggestions={groupSuggestions} onSave={save} onCancel={() => setEditing(null)} />}
         {editing && editing !== 'new' && <CustomerForm initial={editing} meterNames={meterNames} groupSuggestions={groupSuggestions} onSave={save} onCancel={() => setEditing(null)} />}
 
-        <div style={{ overflowX: 'auto' }}>
+        <div className="dn-scroll">
           <table className="dn-table">
             <thead><tr>
               <th>Tên khách hàng</th><th>Nhóm</th><th>Tầng</th><th>Mã ki-ốt</th><th>Chủ ki-ốt</th><th>Khách hàng thuê</th>

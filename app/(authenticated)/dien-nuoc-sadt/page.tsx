@@ -116,9 +116,29 @@ export default function DienNuocSadtPage() {
         .dn-sum-top td { border-top:2px solid var(--navy) !important; }
         .dn-col-title { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; min-height:26px; }
         .dn-empty { font-size:12px; color:var(--muted2); font-style:italic; padding:16px 4px; }
+        /* Cho phép bảng rộng cuộn ngang trong khung, tránh vỡ layout / tràn trang */
+        .dn-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+        /* Lưới form khách hàng tự co theo bề rộng (không cần media query) */
+        .dn-form-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-bottom:10px; }
+
         @media (max-width: 1100px) {
-          .dn-split { flex-direction:column; }
+          /* Xếp dọc 2 bảng: tắt co giãn + bỏ hàng đệm (chỉ dùng khi 2 cột nằm ngang) */
+          .dn-split { flex-direction:column; align-items:stretch; }
           .dn-split-left, .dn-split-right { flex:1 1 auto; width:100%; max-width:100%; }
+          .dn-fill { flex:0 0 auto; }
+          .dn-spacer { display:none; }
+          .ceo-kpi-row { grid-template-columns:repeat(2,1fr); }
+        }
+        @media (max-width: 640px) {
+          .prj-content { padding:12px 10px; }
+          .subtab-bar { margin:0 8px; }
+          .subtab { padding:9px 12px; font-size:12px; }
+          .sc-body { padding:12px 10px; }
+          .sc-head { padding:9px 12px; }
+          /* Điện thoại: bỏ dính cột bảng sản lượng để cuộn xem hết các tháng */
+          .dn-sticky-col { position:static !important; }
+          .dn-sticky-input { min-width:280px; }
+          .dn-sticky-btn { border-right:none !important; }
         }
 
         /* Header của card dính lại khi cuộn (ngay dưới topbar ~92px), tiện bấm "Thêm khách hàng" */

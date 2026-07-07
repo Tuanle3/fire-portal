@@ -51,6 +51,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
       <div className="sc">
         <div className="sc-head"><span className="sc-title">Tổng hợp theo đồng hồ — tháng {month}</span></div>
         <div className="sc-body">
+          <div className="dn-scroll">
           <table className="dn-table">
             <thead><tr>
               <th>Đồng hồ</th><th style={{ textAlign: 'right' }}>Tổng tiền</th><th style={{ textAlign: 'right' }}>Đã phân bổ khách</th><th style={{ textAlign: 'right' }}>Còn lại (Ban quản trị / gánh)</th>
@@ -73,6 +74,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
               })}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>

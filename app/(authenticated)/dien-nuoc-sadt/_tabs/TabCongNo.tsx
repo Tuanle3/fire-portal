@@ -81,6 +81,7 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>Tổng tiền: <b style={{ color: 'var(--navy)' }}>{fmt(alloc.total)} đ</b></span>
       </div>
       <div className="sc-body">
+        <div className="dn-scroll">
         <table className="dn-table">
           <thead><tr>
             <th>Khách hàng</th><th style={{ textAlign: 'right' }}>Phải trả</th><th style={{ textAlign: 'right' }}>Đã thu</th><th style={{ textAlign: 'right' }}>Còn nợ</th><th style={{ width: 100 }}></th>
@@ -104,6 +105,7 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
             )}
           </tbody>
         </table>
+        </div>
 
         {remBand && (
           <details style={{ marginTop: 10 }}>
@@ -146,6 +148,7 @@ function GroupSummaryCard({ readings, customers, usages, payments, month }: {
     <div className="sc">
       <div className="sc-head"><span className="sc-title">Tổng hợp theo nhóm khách hàng — tháng {month}</span></div>
       <div className="sc-body">
+        <div className="dn-scroll">
         <table className="dn-table">
           <thead><tr>
             <th>Nhóm</th><th style={{ textAlign: 'right' }}>Số KH</th><th style={{ textAlign: 'right' }}>Phải trả</th>
@@ -180,6 +183,7 @@ function GroupSummaryCard({ readings, customers, usages, payments, month }: {
             </tfoot>
           )}
         </table>
+        </div>
       </div>
     </div>
   )
