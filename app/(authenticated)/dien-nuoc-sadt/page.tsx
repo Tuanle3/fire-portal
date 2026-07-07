@@ -106,9 +106,14 @@ export default function DienNuocSadtPage() {
         .sc-body { padding:14px 16px; }
 
         /* Bảng 1 (nhập chỉ số) bên trái 30% + Bảng 2 (theo tháng) bên phải 70% */
-        .dn-split { display:flex; gap:18px; align-items:flex-start; }
-        .dn-split-left  { flex:0 0 30%; max-width:30%; min-width:0; }
-        .dn-split-right { flex:1 1 70%; min-width:0; overflow-x:auto; }
+        .dn-split { display:flex; gap:18px; align-items:stretch; }
+        .dn-split-left  { flex:0 0 30%; max-width:30%; min-width:0; display:flex; flex-direction:column; }
+        .dn-split-right { flex:1 1 70%; min-width:0; overflow-x:auto; display:flex; flex-direction:column; }
+        /* Bảng nhập/đối chiếu cao bằng cột: hàng đệm co giãn đẩy khối tổng xuống đáy */
+        .dn-fill { flex:1 1 auto; }
+        .dn-spacer td { height:100%; padding:0 !important; border:none !important; background:transparent !important; }
+        .dn-spacer:hover td { background:transparent !important; }
+        .dn-sum-top td { border-top:2px solid var(--navy) !important; }
         .dn-col-title { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; min-height:26px; }
         .dn-empty { font-size:12px; color:var(--muted2); font-style:italic; padding:16px 4px; }
         @media (max-width: 1100px) {

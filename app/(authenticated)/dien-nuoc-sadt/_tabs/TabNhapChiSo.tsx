@@ -69,15 +69,16 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
     return w?.anomalous ? '#FDECEC' : w?.priceChanged ? '#FFF4E0' : undefined
   }
 
+  const colCount = months.length + 1
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 0 }}>
       <div className="dn-col-title">
         <span>Bảng 2 — Chi tiết thông số theo tháng (12 tháng gần nhất)</span>
       </div>
       {months.length === 0 ? (
         <div className="dn-empty">Chưa có dữ liệu tháng nào cho đồng hồ này.</div>
       ) : (
-        <table className="dn-table" style={{ fontSize: 11 }}>
+        <table className="dn-table dn-fill" style={{ fontSize: 11 }}>
           <thead><tr>
             <th>Chỉ tiêu</th>
             {months.map(r => {
@@ -104,16 +105,17 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
                 {months.map(r => <td key={r.id} style={{ textAlign: 'right', padding: '5px 6px', background: cellBg(r.id) }}>{fmtDec(r.bands[k].donGia)}</td>)}
               </tr>
             ))}
-            <tr>
-              <td style={{ fontWeight: 600 }}>Chưa VAT</td>
+            <tr className="dn-spacer" aria-hidden><td colSpan={colCount}></td></tr>
+            <tr className="dn-sum-top">
+              <td style={{ fontWeight: 600 }}>Tổng tiền chưa VAT</td>
               {months.map(r => <td key={r.id} style={{ textAlign: 'right', background: cellBg(r.id) }}>{fmt(meterSubtotal(r.bands))}</td>)}
             </tr>
             <tr>
-              <td style={{ fontWeight: 600 }}>VAT</td>
+              <td style={{ fontWeight: 600 }}>Thuế VAT</td>
               {months.map(r => <td key={r.id} style={{ textAlign: 'right', background: cellBg(r.id) }}>{fmt(meterVat(r.bands, r.vatPercent))}</td>)}
             </tr>
             <tr style={{ background: '#E0EDFA' }}>
-              <td style={{ fontWeight: 700 }}>Tổng tiền</td>
+              <td style={{ fontWeight: 700 }}>Tổng thanh toán</td>
               {months.map(r => <td key={r.id} style={{ textAlign: 'right', fontWeight: 700, background: cellBg(r.id) ?? '#E0EDFA' }}>{fmt(meterTotal(r.bands, r.vatPercent))}</td>)}
             </tr>
           </tbody>
@@ -189,7 +191,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
           </span>
         </div>
 
-        <table className="dn-table" style={{ marginBottom: 10 }}>
+        <table className="dn-table dn-fill">
           <thead><tr>
             <th>Khung giờ</th>
             <th style={{ textAlign: 'right' }}>Sản lượng ({unit})</th>
@@ -212,16 +214,21 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
                 </tr>
               )
             })}
-          </tbody>
-          <tfoot>
-            <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Tổng tiền chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterSubtotal(bands))} đ</td></tr>
+            <tr className="dn-spacer" aria-hidden><td colSpan={4}></td></tr>
+            <tr className="dn-sum-top"><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Tổng tiền chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterSubtotal(bands))} đ</td></tr>
             <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Thuế VAT ({vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(meterVat(bands, vatPercent))} đ</td></tr>
             <tr style={{ background: '#E0EDFA' }}><td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)' }}>Tổng thanh toán</td><td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmt(meterTotal(bands, vatPercent))} đ</td></tr>
-          </tfoot>
+          </tbody>
         </table>
+        </div>
+
+        <div className="dn-split-right">
+          <MeterHistoryTable meterId={meterId} readings={readings} visibleBands={visibleBands} isWater={isWater} unit={unit} />
+        </div>
+       </div>
 
         {priceChangedBands.length > 0 && (
-          <div style={{ background: '#FFF4E0', color: '#8A5A12', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+          <div style={{ background: '#FFF4E0', color: '#8A5A12', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600, marginTop: 12, marginBottom: 8 }}>
             ⚠ Đơn giá thay đổi so với tháng trước ở: {priceChangedBands.map(k => isWater ? 'sử dụng' : BAND_LABELS[k]).join(', ')}. Kiểm tra lại nếu không cố ý sửa.
           </div>
         )}
@@ -231,17 +238,11 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12, marginBottom: 12 }}>
           <button className="btn-primary" onClick={save} disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu chỉ số'}</button>
           {savedAt && <span style={{ fontSize: 11, color: 'var(--green)' }}>✓ Đã lưu</span>}
           <input className="dn-input" placeholder="Ghi chú (tuỳ chọn)" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1 }} />
         </div>
-        </div>
-
-        <div className="dn-split-right">
-          <MeterHistoryTable meterId={meterId} readings={readings} visibleBands={visibleBands} isWater={isWater} unit={unit} />
-        </div>
-       </div>
 
         {meterCustomers.length > 0 && (
           <CustomerUsageTable meterId={meterId} month={month} customers={customers} readings={readings} usages={usages} reading={draftReading} unit={unit} />
