@@ -32,12 +32,41 @@ export function meterLabel(customNames: Partial<Record<number, string>> | undefi
 
 // ── Đồng hồ 1: số ghi điện từng khu (tầng) & tỷ lệ chia khung giờ cho BQT ─────
 // Mỗi khu khớp với "Nhóm khách hàng" (group) để trừ sản lượng khách trong khu đó.
-export interface FloorReading { group: string; indexOld: number; indexNew: number }
+// Số ghi từng tầng nhập theo 3 khung giờ (cao/thấp/bình), mỗi khung có chỉ số cũ/mới.
+export type FloorBandKey = 'caoDiem' | 'thapDiem' | 'binhThuong'
+export const FLOOR_BAND_KEYS: FloorBandKey[] = ['caoDiem', 'thapDiem', 'binhThuong']
+export interface FloorBandIndex { indexOld: number; indexNew: number }
+export type FloorBands = Record<FloorBandKey, FloorBandIndex>
+export interface FloorReading { group: string; bands: FloorBands }
+
 export interface BqtRatio { caoDiem: number; thapDiem: number; binhThuong: number }
 export const DEFAULT_BQT_RATIO: BqtRatio = { binhThuong: 50, caoDiem: 15, thapDiem: 35 }
 export const DEFAULT_FLOOR_GROUPS = ['Tầng 1 + hầm', 'Tầng 2', 'Tầng 3']
+
+export function emptyFloorBands(): FloorBands {
+  return { caoDiem: { indexOld: 0, indexNew: 0 }, thapDiem: { indexOld: 0, indexNew: 0 }, binhThuong: { indexOld: 0, indexNew: 0 } }
+}
 export function defaultFloorReadings(): FloorReading[] {
-  return DEFAULT_FLOOR_GROUPS.map(g => ({ group: g, indexOld: 0, indexNew: 0 }))
+  return DEFAULT_FLOOR_GROUPS.map(g => ({ group: g, bands: emptyFloorBands() }))
+}
+export function floorBandKwh(b: FloorBandIndex | undefined): number {
+  return Math.max(0, (b?.indexNew || 0) - (b?.indexOld || 0))
+}
+export function floorTotalKwh(f: FloorReading): number {
+  return FLOOR_BAND_KEYS.reduce((s, k) => s + floorBandKwh(f.bands?.[k]), 0)
+}
+// Chuẩn hoá dữ liệu tầng (tương thích dữ liệu cũ dạng { indexOld, indexNew } gộp vào Bình thường).
+export function normalizeFloor(f: unknown): FloorReading {
+  const o = (f ?? {}) as Record<string, unknown>
+  if (o.bands) {
+    const rb = o.bands as Record<string, { indexOld?: number; indexNew?: number }>
+    const bands = emptyFloorBands()
+    for (const k of FLOOR_BAND_KEYS) bands[k] = { indexOld: Number(rb[k]?.indexOld ?? 0), indexNew: Number(rb[k]?.indexNew ?? 0) }
+    return { group: (o.group as string) ?? '', bands }
+  }
+  const bands = emptyFloorBands()
+  bands.binhThuong = { indexOld: Number(o.indexOld ?? 0), indexNew: Number(o.indexNew ?? 0) }
+  return { group: (o.group as string) ?? '', bands }
 }
 
 export interface MeterReading {
@@ -275,8 +304,9 @@ export function computeBqt(
   const usageByCustomer = new Map(usages.filter(u => u.month === reading.month).map(u => [u.customerId, u]))
   const meterCustomers = customers.filter(c => c.meterId === reading.meterId && c.active)
 
-  const floors: BqtFloorRow[] = floorReadings.map(f => {
-    const floorKwh = Math.max(0, (f.indexNew || 0) - (f.indexOld || 0))
+  const floors: BqtFloorRow[] = floorReadings.map(raw => {
+    const f = normalizeFloor(raw)
+    const floorKwh = floorTotalKwh(f)
     const g = (f.group || '').trim()
     const customerKwh = meterCustomers
       .filter(c => (c.group || '').trim() === g && g !== '')

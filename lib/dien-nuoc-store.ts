@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore'
 import { diennuocDb } from './firebase-diennuoc'
 import {
-  MeterReading, Customer, CustomerUsage, Payment, EMPTY_BANDS, BAND_KEYS,
+  MeterReading, Customer, CustomerUsage, Payment, EMPTY_BANDS, BAND_KEYS, normalizeFloor,
 } from './dien-nuoc-types'
 
 const COL_METERS   = 'dn_meters'
@@ -34,7 +34,7 @@ function parseMeter(id: string, d: Record<string, unknown>): MeterReading {
     bands,
     vatPercent: Number(d.vatPercent ?? 8),
     note:     (d.note as string) ?? '',
-    floorReadings: (d.floorReadings as MeterReading['floorReadings']) ?? undefined,
+    floorReadings: Array.isArray(d.floorReadings) ? (d.floorReadings as unknown[]).map(normalizeFloor) : undefined,
     bqtRatio:      (d.bqtRatio as MeterReading['bqtRatio']) ?? undefined,
     createdAt:(d.createdAt as string) ?? '',
     updatedAt:(d.updatedAt as string) ?? '',
