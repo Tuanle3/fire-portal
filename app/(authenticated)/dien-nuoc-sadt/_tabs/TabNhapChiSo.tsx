@@ -292,8 +292,6 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
   const setFloorGroup = (i: number, group: string) => setFloorReadings(floorReadings.map((f, idx) => idx === i ? { ...f, group } : f))
   const setFloorBand = (i: number, k: FloorBandKey, field: 'indexOld' | 'indexNew', v: number) =>
     setFloorReadings(floorReadings.map((f, idx) => idx === i ? { ...f, bands: { ...f.bands, [k]: { ...f.bands[k], [field]: v } } } : f))
-  const addFloor = () => setFloorReadings([...floorReadings, { group: '', bands: emptyFloorBands() }])
-  const removeFloor = (i: number) => setFloorReadings(floorReadings.filter((_, idx) => idx !== i))
   const setRatio = (k: keyof BqtRatio, v: number) => setBqtRatio({ ...bqtRatio, [k]: v })
 
   return (
@@ -324,7 +322,6 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
               <div key={i} style={{ border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)' }}>
                   <input className="dn-input" list="dn-bqt-groups" style={{ flex: 1, fontWeight: 600 }} value={f.group} placeholder="Tên khu (Nhóm KH)" onChange={e => setFloorGroup(i, e.target.value)} />
-                  {floorReadings.length > 1 && <button className="btn-danger" style={{ padding: '5px 9px', flexShrink: 0 }} onClick={() => removeFloor(i)} title="Xoá khu">×</button>}
                 </div>
                 <div style={{ padding: '9px 10px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '66px 1fr 1fr 52px', gap: 5, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
@@ -352,22 +349,25 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
               </div>
             )
           })}
+
+          {/* Card 4: tổng hợp kWh — nằm cạnh các card tầng */}
+          <div style={{ border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tổng hợp kWh</div>
+            <div style={{ padding: '9px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {([['Tổng ghi các tầng', fmtKwh(calc.sumFloorKwh), 'var(--navy)', false],
+                 ['Đồng hồ chính (C+T+B)', fmtKwh(calc.mainMeterKwh), 'var(--navy)', false],
+                 ['Chênh lệch → BQT', fmtKwh(calc.discrepancy), calc.discrepancy < 0 ? '#DC2626' : 'var(--navy)', false],
+                 ['Tổng kWh BQT phải chịu', fmtKwh(calc.bqtTotalKwh), 'var(--navy)', true]] as [string, string, string, boolean][]).map(([lb, v, col, hi]) => (
+                <div key={lb} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, background: hi ? '#E0EDFA' : '#F8FAFC', borderRadius: 7, padding: '6px 9px' }}>
+                  <span style={{ fontSize: 10.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>{lb}</span>
+                  <span style={{ fontSize: hi ? 16 : 14, fontWeight: hi ? 800 : 700, color: col, whiteSpace: 'nowrap' }}>{v} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>kWh</span></span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
         <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
-        <button className="btn-ghost" style={{ marginBottom: 14 }} onClick={addFloor}>+ Thêm khu</button>
-
-        {/* Tổng hợp kWh — dải chip */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-          {([['Tổng ghi các tầng', fmtKwh(calc.sumFloorKwh), 'var(--navy)', false],
-             ['Đồng hồ chính (C+T+B)', fmtKwh(calc.mainMeterKwh), 'var(--navy)', false],
-             ['Chênh lệch → BQT', fmtKwh(calc.discrepancy), calc.discrepancy < 0 ? '#DC2626' : 'var(--navy)', false],
-             ['Tổng kWh BQT phải chịu', fmtKwh(calc.bqtTotalKwh), 'var(--navy)', true]] as [string, string, string, boolean][]).map(([lb, v, col, hi]) => (
-            <div key={lb} style={{ flex: '1 1 150px', minWidth: 140, border: '1px solid var(--border3)', borderRadius: 10, padding: '8px 12px', background: hi ? '#E0EDFA' : '#fff' }}>
-              <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.03em' }}>{lb}</div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: col }}>{v} <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)' }}>kWh</span></div>
-            </div>
-          ))}
-        </div>
+        <div style={{ marginBottom: 16 }} />
 
         {/* c. Chia theo khung giờ */}
         <div className="dn-col-title"><span>c. Chia kWh BQT theo khung giờ × đơn giá</span></div>
