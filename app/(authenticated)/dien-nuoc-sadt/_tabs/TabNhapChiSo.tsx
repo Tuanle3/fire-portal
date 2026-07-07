@@ -258,14 +258,14 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
           <input className="dn-input" placeholder="Ghi chú (tuỳ chọn)" value={note} onChange={e => setNote(e.target.value)} style={{ flex: 1 }} />
         </div>
 
-        {meterCustomers.length > 0 && (
-          <CustomerUsageTable meterId={meterId} month={month} customers={customers} readings={readings} usages={usages} reading={draftReading} unit={unit} />
-        )}
-
         {isMeter1 && (
-          <BqtSection reading={draftReading} customers={customers} usages={usages}
+          <BqtSection reading={draftReading} readings={readings} month={month} customers={customers} usages={usages}
             floorReadings={floorReadings} setFloorReadings={setFloorReadings}
             bqtRatio={bqtRatio} setBqtRatio={setBqtRatio} />
+        )}
+
+        {meterCustomers.length > 0 && (
+          <CustomerUsageTable meterId={meterId} month={month} customers={customers} readings={readings} usages={usages} reading={draftReading} unit={unit} />
         )}
       </div>
     </div>
@@ -273,8 +273,8 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
 }
 
 // ── Đồng hồ 1: tính tiền điện BQT theo 3 mục (hướng dẫn · nhập theo tầng · chia khung giờ) ──
-function BqtSection({ reading, customers, usages, floorReadings, setFloorReadings, bqtRatio, setBqtRatio }: {
-  reading: MeterReading; customers: Customer[]; usages: CustomerUsage[]
+function BqtSection({ reading, readings, month, customers, usages, floorReadings, setFloorReadings, bqtRatio, setBqtRatio }: {
+  reading: MeterReading; readings: MeterReading[]; month: string; customers: Customer[]; usages: CustomerUsage[]
   floorReadings: FloorReading[]; setFloorReadings: (v: FloorReading[]) => void
   bqtRatio: BqtRatio; setBqtRatio: (v: BqtRatio) => void
 }) {
@@ -387,8 +387,76 @@ function BqtSection({ reading, customers, usages, floorReadings, setFloorReading
         <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 6 }}>
           * Số ghi từng tầng &amp; tỷ lệ được lưu cùng khi bấm “Lưu chỉ số” ở trên.
         </div>
+
+        {/* d. Thống kê BQT theo tháng — đối chiếu tăng giảm */}
+        <div style={{ marginTop: 18 }}>
+          <BqtHistoryTable reading={reading} readings={readings} month={month} customers={customers} usages={usages} />
+        </div>
       </div>
     </div>
+  )
+}
+
+// Thống kê tiền/kWh BQT 12 tháng gần nhất (kiểu Bảng 2) — cột tháng hiện tại dùng số liệu live.
+function BqtHistoryTable({ reading, readings, month, customers, usages }: {
+  reading: MeterReading; readings: MeterReading[]; month: string; customers: Customer[]; usages: CustomerUsage[]
+}) {
+  // 12 tháng gần nhất của đồng hồ 1, cũ → mới; tháng hiện tại thay bằng số liệu live (reading)
+  const saved = readings.filter(r => r.meterId === 1).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
+    .sort((a, b) => a.month.localeCompare(b.month))
+  const hasCurrent = saved.some(r => r.month === month)
+  const months = (hasCurrent ? saved.map(r => r.month === month ? reading : r) : [...saved, reading].sort((a, b) => a.month.localeCompare(b.month)))
+
+  if (months.length === 0) return null
+
+  const calcs = months.map(r => ({ month: r.month, isCur: r.month === month, c: computeBqt(r, customers, usages, r.bqtRatio ?? DEFAULT_BQT_RATIO) }))
+  const totalOf = (i: number) => calcs[i].c.total
+  // % thay đổi tổng thanh toán so với tháng liền trước
+  const delta = (i: number): { pct: number; up: boolean } | null => {
+    if (i === 0) return null
+    const prev = totalOf(i - 1), cur = totalOf(i)
+    if (prev === 0) return null
+    const pct = (cur - prev) / prev * 100
+    if (Math.abs(pct) < 0.05) return null
+    return { pct, up: pct > 0 }
+  }
+
+  const rowCells = (fn: (c: ReturnType<typeof computeBqt>) => number, opts?: { bold?: boolean; bg?: string }) =>
+    calcs.map(x => (
+      <td key={x.month} style={{ textAlign: 'right', fontWeight: opts?.bold ? 700 : undefined, background: x.isCur ? '#E0EDFA' : opts?.bg, whiteSpace: 'nowrap' }}>{fmt(fn(x.c))}</td>
+    ))
+
+  return (
+    <>
+      <div className="dn-col-title"><span>d. Thống kê BQT theo tháng (đối chiếu tăng giảm)</span></div>
+      <div className="dn-scroll">
+        <table className="dn-table" style={{ fontSize: 11 }}>
+          <thead><tr>
+            <th>Chỉ tiêu</th>
+            {calcs.map(x => <th key={x.month} style={{ textAlign: 'right', background: x.isCur ? '#E0EDFA' : undefined }}>{x.month}{x.isCur ? ' ★' : ''}</th>)}
+          </tr></thead>
+          <tbody>
+            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Tổng ghi các tầng (kWh)</td>{rowCells(c => c.sumFloorKwh)}</tr>
+            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Đồng hồ chính (kWh)</td>{rowCells(c => c.mainMeterKwh)}</tr>
+            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Chênh lệch → BQT (kWh)</td>{rowCells(c => c.discrepancy)}</tr>
+            <tr><td style={{ fontWeight: 600, color: 'var(--navy)' }}>Tổng kWh BQT</td>{rowCells(c => c.bqtTotalKwh, { bold: true })}</tr>
+            <tr className="dn-sum-top"><td style={{ fontWeight: 600 }}>Chưa VAT</td>{rowCells(c => c.subtotal)}</tr>
+            <tr><td style={{ fontWeight: 600 }}>VAT</td>{rowCells(c => c.vat)}</tr>
+            <tr style={{ background: '#E0EDFA' }}><td style={{ fontWeight: 700 }}>Tổng thanh toán BQT</td>
+              {calcs.map((x, i) => {
+                const d = delta(i)
+                return (
+                  <td key={x.month} style={{ textAlign: 'right', fontWeight: 700, background: '#E0EDFA', whiteSpace: 'nowrap' }}>
+                    {fmt(x.c.total)}
+                    {d && <div style={{ fontSize: 9, fontWeight: 700, color: d.up ? '#DC2626' : 'var(--green)' }}>{d.up ? '▲' : '▼'} {Math.abs(d.pct).toFixed(1)}%</div>}
+                  </td>
+                )
+              })}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }
 
