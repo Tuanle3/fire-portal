@@ -47,6 +47,22 @@ function prefillFloors(readings: MeterReading[], meterId: MeterId, month: string
   })
 }
 
+// Tự điền "chỉ số cũ" = chỉ số mới cùng khu của tháng trước cho mọi ô CŨ đang trống (0).
+// Áp dụng cả khi tháng đã lưu — để chỉ số cũ luôn nối tiếp tháng trước, khỏi nhập tay.
+function fillOldFromPrev(floors: FloorReading[], prev: MeterReading | null): FloorReading[] {
+  if (!prev?.floorReadings?.length) return floors
+  const prevMap = new Map(prev.floorReadings.map(normalizeFloor).map(f => [(f.group || '').trim(), f]))
+  return floors.map(f => {
+    const pf = prevMap.get((f.group || '').trim())
+    if (!pf) return f
+    const bands = { ...f.bands }
+    for (const k of FLOOR_BAND_KEYS) {
+      if (!bands[k].indexOld) bands[k] = { ...bands[k], indexOld: pf.bands?.[k]?.indexNew || 0 }
+    }
+    return { ...f, bands }
+  })
+}
+
 function EditableMeterTitle({ meterId, meterNames, canEdit, onSave }: {
   meterId: MeterId; meterNames: Record<number, string>; canEdit: boolean; onSave: (id: number, name: string) => void
 }) {
@@ -164,7 +180,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
   const [bands, setBands] = useState<Bands>(reading?.bands ?? prefillBands(prevReading))
   const [vatPercent, setVatPercent] = useState(reading?.vatPercent ?? prevReading?.vatPercent ?? 8)
   const [note, setNote] = useState(reading?.note ?? '')
-  const [floorReadings, setFloorReadings] = useState<FloorReading[]>(reading?.floorReadings ?? prefillFloors(readings, meterId, month))
+  const [floorReadings, setFloorReadings] = useState<FloorReading[]>(fillOldFromPrev(reading?.floorReadings ?? prefillFloors(readings, meterId, month), prevReading))
   const [bqtRatio, setBqtRatio] = useState<BqtRatio>(reading?.bqtRatio ?? prevReading?.bqtRatio ?? DEFAULT_BQT_RATIO)
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
@@ -173,7 +189,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
     setBands(reading?.bands ?? prefillBands(prevReading))
     setVatPercent(reading?.vatPercent ?? prevReading?.vatPercent ?? 8)
     setNote(reading?.note ?? '')
-    setFloorReadings(reading?.floorReadings ?? prefillFloors(readings, meterId, month))
+    setFloorReadings(fillOldFromPrev(reading?.floorReadings ?? prefillFloors(readings, meterId, month), prevReading))
     setBqtRatio(reading?.bqtRatio ?? prevReading?.bqtRatio ?? DEFAULT_BQT_RATIO)
     setSavedAt(null)
   }, [reading, month, prevReading, readings, meterId])
