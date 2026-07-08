@@ -23,10 +23,24 @@ function prefillBands(prev: MeterReading | null): Bands {
   return out
 }
 
-// Số ghi tầng tháng mới: chỉ số cũ = chỉ số mới tháng trước (từng khung); giữ tên nhóm khu.
-function prefillFloors(prev: MeterReading | null): FloorReading[] {
-  if (!prev?.floorReadings?.length) return defaultFloorReadings()
-  return prev.floorReadings.map(f => {
+// Số ghi tầng tháng mới: GỘP mọi khu từng xuất hiện ở các tháng trước (ưu tiên tháng gần nhất) —
+// để card đã tạo luôn tự hiện ở tháng mới, không bị mất. Chỉ số cũ = chỉ số mới gần nhất của khu đó;
+// giữ tên & cờ cố định.
+function prefillFloors(readings: MeterReading[], meterId: MeterId, month: string): FloorReading[] {
+  const prior = readings.filter(r => r.meterId === meterId && r.month < month).sort((a, b) => b.month.localeCompare(a.month))
+  const seen = new Map<string, FloorReading>()
+  const order: string[] = []
+  for (const r of prior) {
+    for (const raw of (r.floorReadings ?? [])) {
+      const f = normalizeFloor(raw)
+      const g = (f.group || '').trim()
+      if (!g || seen.has(g)) continue  // lấy lần xuất hiện gần nhất của mỗi khu
+      seen.set(g, f); order.push(g)
+    }
+  }
+  if (order.length === 0) return defaultFloorReadings()
+  return order.map(g => {
+    const f = seen.get(g)!
     const bands = emptyFloorBands()
     for (const k of FLOOR_BAND_KEYS) bands[k] = { indexOld: f.bands?.[k]?.indexNew || 0, indexNew: 0 }
     return { group: f.group, bands, ...(f.fixed ? { fixed: true as const } : {}) }
@@ -150,7 +164,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
   const [bands, setBands] = useState<Bands>(reading?.bands ?? prefillBands(prevReading))
   const [vatPercent, setVatPercent] = useState(reading?.vatPercent ?? prevReading?.vatPercent ?? 8)
   const [note, setNote] = useState(reading?.note ?? '')
-  const [floorReadings, setFloorReadings] = useState<FloorReading[]>(reading?.floorReadings ?? prefillFloors(prevReading))
+  const [floorReadings, setFloorReadings] = useState<FloorReading[]>(reading?.floorReadings ?? prefillFloors(readings, meterId, month))
   const [bqtRatio, setBqtRatio] = useState<BqtRatio>(reading?.bqtRatio ?? prevReading?.bqtRatio ?? DEFAULT_BQT_RATIO)
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
@@ -159,10 +173,10 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
     setBands(reading?.bands ?? prefillBands(prevReading))
     setVatPercent(reading?.vatPercent ?? prevReading?.vatPercent ?? 8)
     setNote(reading?.note ?? '')
-    setFloorReadings(reading?.floorReadings ?? prefillFloors(prevReading))
+    setFloorReadings(reading?.floorReadings ?? prefillFloors(readings, meterId, month))
     setBqtRatio(reading?.bqtRatio ?? prevReading?.bqtRatio ?? DEFAULT_BQT_RATIO)
     setSavedAt(null)
-  }, [reading, month, prevReading])
+  }, [reading, month, prevReading, readings, meterId])
 
   const isWater = meterId === 3
   const visibleBands: BandKey[] = isWater ? ['toanThoiGian'] : BAND_KEYS
@@ -293,6 +307,15 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
   const calc = computeBqt(reading, customers, usages, bqtRatio)
   const groupSuggestions = Array.from(new Set(customers.filter(c => c.meterId === 1 && c.active).map(c => (c.group || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'))
 
+  const [dragIdx, setDragIdx] = useState<number | null>(null)  // kéo-thả đổi vị trí khu
+  const moveFloor = (from: number | null, to: number) => {
+    if (from === null || from === to) return
+    const arr = [...floorReadings]
+    const [m] = arr.splice(from, 1)
+    arr.splice(to, 0, m)
+    setFloorReadings(arr)
+  }
+
   const setFloorGroup = (i: number, group: string) => setFloorReadings(floorReadings.map((f, idx) => idx === i ? { ...f, group } : f))
   const setFloorBand = (i: number, k: FloorBandKey, field: 'indexOld' | 'indexNew', v: number) =>
     setFloorReadings(floorReadings.map((f, idx) => idx === i ? { ...f, bands: { ...f.bands, [k]: { ...f.bands[k], [field]: v } } } : f))
@@ -330,8 +353,15 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           {floorReadings.map((f, i) => {
             const row = calc.floors[i]
             return (
-              <div key={i} style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+              <div key={i}
+                onDragOver={e => { if (dragIdx !== null && dragIdx !== i) e.preventDefault() }}
+                onDrop={e => { e.preventDefault(); moveFloor(dragIdx, i); setDragIdx(null) }}
+                style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', border: dragIdx !== null && dragIdx !== i ? '1px dashed var(--navy3)' : '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', opacity: dragIdx === i ? 0.45 : 1, transition: 'opacity .12s' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)' }}>
+                  {floorReadings.length > 1 && (
+                    <span draggable onDragStart={() => setDragIdx(i)} onDragEnd={() => setDragIdx(null)} title="Kéo để đổi vị trí khu"
+                      style={{ flexShrink: 0, cursor: 'grab', color: 'var(--muted2)', fontSize: 14, lineHeight: 1, userSelect: 'none' }}>⠿</span>
+                  )}
                   <input className="dn-input" list="dn-bqt-groups" style={{ flex: 1, fontWeight: 600 }} value={f.group} placeholder="Tên khu (Nhóm KH)" onChange={e => setFloorGroup(i, e.target.value)} />
                   {floorReadings.length > 1 && (
                     <button onClick={() => removeFloor(i)} title="Xoá khu này" style={{ flexShrink: 0, width: 22, height: 22, padding: 0, lineHeight: '20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', border: '1px solid #FECACA', borderRadius: 6, background: '#fff', color: '#DC2626' }}>×</button>
