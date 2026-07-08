@@ -5,6 +5,7 @@ import {
   meterLabel, CHARGE_TYPE_LABELS, resolveTimebandPoint,
 } from '@/lib/dien-nuoc-types'
 import { saveCustomer, deleteCustomer } from '@/lib/dien-nuoc-store'
+import { exportKhachHang } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
@@ -247,7 +248,10 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
     <div className="sc sc--sticky" ref={cardRef}>
       <div className="sc-head">
         <span className="sc-title">Danh sách khách hàng</span>
-        <button className="btn-primary" onClick={() => setEditing('new')}>+ Thêm khách hàng</button>
+        <span style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-ghost" onClick={() => exportKhachHang(customers, meterNames)}>⬇ Xuất Excel</button>
+          <button className="btn-primary" onClick={() => setEditing('new')}>+ Thêm khách hàng</button>
+        </span>
       </div>
       <div className="sc-body">
         {editing === 'new' && <CustomerForm meterNames={meterNames} groupSuggestions={groupSuggestions} onSave={save} onCancel={() => setEditing(null)} />}

@@ -3,6 +3,7 @@ import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId,
   meterLabel, meterAllocation, meterTotal,
 } from '@/lib/dien-nuoc-types'
+import { exportTongQuan } from '@/lib/dien-nuoc-excel'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
@@ -49,7 +50,10 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
       </div>
 
       <div className="sc">
-        <div className="sc-head"><span className="sc-title">Tổng hợp theo đồng hồ — tháng {month}</span></div>
+        <div className="sc-head">
+          <span className="sc-title">Tổng hợp theo đồng hồ — tháng {month}</span>
+          <button className="btn-ghost" onClick={() => exportTongQuan(readings, customers, usages, payments, month, meterNames)}>⬇ Xuất Excel</button>
+        </div>
         <div className="sc-body">
           <div className="dn-scroll">
           <table className="dn-table">

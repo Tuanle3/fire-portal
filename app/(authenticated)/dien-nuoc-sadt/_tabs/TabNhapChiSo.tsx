@@ -9,6 +9,7 @@ import {
   defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, computeBqt,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
+import { exportMeter } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
@@ -198,7 +199,10 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
     <div className="sc">
       <div className="sc-head">
         <EditableMeterTitle meterId={meterId} meterNames={meterNames} canEdit={canEditMeterName} onSave={onSaveMeterNames} />
-        <span style={{ fontSize: 11, color: 'var(--muted)' }}>Đơn vị: {unit}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>Đơn vị: {unit}</span>
+          <button className="btn-ghost" onClick={() => exportMeter(meterId, month, readings, customers, usages, meterNames)}>⬇ Xuất Excel</button>
+        </span>
       </div>
       <div className="sc-body">
        <div className="dn-split">

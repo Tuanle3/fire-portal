@@ -5,6 +5,7 @@ import {
   meterLabel, meterAllocation, remainderByBand, BAND_KEYS, BAND_LABELS,
 } from '@/lib/dien-nuoc-types'
 import { savePayment } from '@/lib/dien-nuoc-store'
+import { exportCongNo } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
@@ -124,8 +125,9 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
 }
 
 // Bảng tổng hợp phải trả / đã thu / còn nợ theo NHÓM khách hàng (gộp cả 3 đồng hồ).
-function GroupSummaryCard({ readings, customers, usages, payments, month }: {
+function GroupSummaryCard({ readings, customers, usages, payments, month, meterNames }: {
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]; month: string
+  meterNames: Record<number, string>
 }) {
   const monthReadings = readings.filter(r => r.month === month)
   const allRows = monthReadings.flatMap(r => meterAllocation(r, customers, usages).rows)
@@ -146,7 +148,10 @@ function GroupSummaryCard({ readings, customers, usages, payments, month }: {
 
   return (
     <div className="sc">
-      <div className="sc-head"><span className="sc-title">Tổng hợp theo nhóm khách hàng — tháng {month}</span></div>
+      <div className="sc-head">
+        <span className="sc-title">Tổng hợp theo nhóm khách hàng — tháng {month}</span>
+        <button className="btn-ghost" onClick={() => exportCongNo(readings, customers, usages, payments, month, meterNames)}>⬇ Xuất Excel</button>
+      </div>
       <div className="sc-body">
         <div className="dn-scroll">
         <table className="dn-table">
@@ -198,7 +203,7 @@ export function TabCongNo({ readings, customers, usages, payments, month, meterN
 
   return (
     <div>
-      <GroupSummaryCard readings={readings} customers={customers} usages={usages} payments={payments} month={month} />
+      <GroupSummaryCard readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />
       {([1, 2, 3] as MeterId[]).map(id => (
         <MeterAllocationCard key={id} meterId={id} reading={byMeter(id)} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames}
           onCollect={(customerId, due, paid) => setCollecting({ customerId, due, paid })} />
