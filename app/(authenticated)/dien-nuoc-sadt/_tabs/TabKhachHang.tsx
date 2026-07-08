@@ -269,7 +269,12 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
     )
     return [...filtered].sort((a, b) => {
       const [na, sa] = floorSortKey(a.floor?.trim() || ''), [nb, sb] = floorSortKey(b.floor?.trim() || '')
-      return na - nb || sa.localeCompare(sb, 'vi') || a.name.localeCompare(b.name, 'vi')
+      // Trong cùng 1 tầng: xếp theo mã ki-ốt A→Z (numeric: A2 trước A10), rồi tên
+      const col = { numeric: true, sensitivity: 'base' } as const
+      return na - nb
+        || sa.localeCompare(sb, 'vi', col)
+        || (a.kioskCode?.trim() || '').localeCompare(b.kioskCode?.trim() || '', 'vi', col)
+        || a.name.localeCompare(b.name, 'vi', col)
     })
   }, [customers, floorFilter, statusFilter])
 
