@@ -29,7 +29,7 @@ function prefillFloors(prev: MeterReading | null): FloorReading[] {
   return prev.floorReadings.map(f => {
     const bands = emptyFloorBands()
     for (const k of FLOOR_BAND_KEYS) bands[k] = { indexOld: f.bands?.[k]?.indexNew || 0, indexNew: 0 }
-    return { group: f.group, bands }
+    return { group: f.group, bands, ...(f.fixed ? { fixed: true as const } : {}) }
   })
 }
 
@@ -299,6 +299,11 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
   const setRatio = (k: keyof BqtRatio, v: number) => setBqtRatio({ ...bqtRatio, [k]: v })
   const addFloor = () => setFloorReadings([...floorReadings, { group: '', bands: emptyFloorBands() }])
   const removeFloor = (i: number) => setFloorReadings(floorReadings.filter((_, idx) => idx !== i))
+  // Bật "cố định": gộp về 1 chỉ số (khung Bình thường), xoá CĐ/TĐ để không cộng nhầm
+  const setFloorFixed = (i: number, fixed: boolean) => setFloorReadings(floorReadings.map((f, idx) =>
+    idx !== i ? f
+      : fixed ? { ...f, fixed: true, bands: { ...f.bands, caoDiem: { indexOld: 0, indexNew: 0 }, thapDiem: { indexOld: 0, indexNew: 0 } } }
+      : { ...f, fixed: false }))
 
   return (
     <div style={{ marginTop: 20, border: '1px solid var(--border3)', borderRadius: 12, overflow: 'hidden' }}>
@@ -333,12 +338,16 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
                   )}
                 </div>
                 <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--muted)', marginBottom: 6, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!f.fixed} onChange={e => setFloorFixed(i, e.target.checked)} style={{ margin: 0 }} />
+                    Cố định (không theo khung giờ)
+                  </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 1fr 44px', gap: 4, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
-                    <span>Khung</span><span style={{ textAlign: 'right' }}>Cũ</span><span style={{ textAlign: 'right' }}>Mới</span><span style={{ textAlign: 'right' }}>kWh</span>
+                    <span>{f.fixed ? 'Loại' : 'Khung'}</span><span style={{ textAlign: 'right' }}>Cũ</span><span style={{ textAlign: 'right' }}>Mới</span><span style={{ textAlign: 'right' }}>kWh</span>
                   </div>
-                  {FLOOR_BAND_KEYS.map(k => (
+                  {(f.fixed ? (['binhThuong'] as FloorBandKey[]) : FLOOR_BAND_KEYS).map(k => (
                     <div key={k} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 1fr 44px', gap: 4, alignItems: 'center', marginBottom: 5 }}>
-                      <span style={{ fontSize: 9.5, color: 'var(--muted)' }}>{BAND_LABELS[k]}</span>
+                      <span style={{ fontSize: 9.5, color: 'var(--muted)' }}>{f.fixed ? 'Cố định' : BAND_LABELS[k]}</span>
                       <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
                       <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
                       <span style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>

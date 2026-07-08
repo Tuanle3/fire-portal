@@ -37,7 +37,8 @@ export type FloorBandKey = 'caoDiem' | 'thapDiem' | 'binhThuong'
 export const FLOOR_BAND_KEYS: FloorBandKey[] = ['caoDiem', 'thapDiem', 'binhThuong']
 export interface FloorBandIndex { indexOld: number; indexNew: number }
 export type FloorBands = Record<FloorBandKey, FloorBandIndex>
-export interface FloorReading { group: string; bands: FloorBands }
+// fixed = khu tính cố định (không theo khung giờ): chỉ dùng 1 chỉ số tổng, lưu ở khung Bình thường.
+export interface FloorReading { group: string; bands: FloorBands; fixed?: boolean }
 
 export interface BqtRatio { caoDiem: number; thapDiem: number; binhThuong: number }
 export const DEFAULT_BQT_RATIO: BqtRatio = { binhThuong: 50, caoDiem: 15, thapDiem: 35 }
@@ -53,20 +54,22 @@ export function floorBandKwh(b: FloorBandIndex | undefined): number {
   return Math.max(0, (b?.indexNew || 0) - (b?.indexOld || 0))
 }
 export function floorTotalKwh(f: FloorReading): number {
+  if (f.fixed) return floorBandKwh(f.bands?.binhThuong)  // khu cố định: chỉ tính 1 chỉ số tổng
   return FLOOR_BAND_KEYS.reduce((s, k) => s + floorBandKwh(f.bands?.[k]), 0)
 }
 // Chuẩn hoá dữ liệu tầng (tương thích dữ liệu cũ dạng { indexOld, indexNew } gộp vào Bình thường).
 export function normalizeFloor(f: unknown): FloorReading {
   const o = (f ?? {}) as Record<string, unknown>
+  const fx = o.fixed === true ? { fixed: true as const } : {}  // chỉ gắn key khi thật sự cố định (tránh undefined khi lưu Firestore)
   if (o.bands) {
     const rb = o.bands as Record<string, { indexOld?: number; indexNew?: number }>
     const bands = emptyFloorBands()
     for (const k of FLOOR_BAND_KEYS) bands[k] = { indexOld: Number(rb[k]?.indexOld ?? 0), indexNew: Number(rb[k]?.indexNew ?? 0) }
-    return { group: (o.group as string) ?? '', bands }
+    return { group: (o.group as string) ?? '', bands, ...fx }
   }
   const bands = emptyFloorBands()
   bands.binhThuong = { indexOld: Number(o.indexOld ?? 0), indexNew: Number(o.indexNew ?? 0) }
-  return { group: (o.group as string) ?? '', bands }
+  return { group: (o.group as string) ?? '', bands, ...fx }
 }
 
 export interface MeterReading {
