@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Customer, MeterId, ChargeType, PricePoint, TimebandPricePoint,
   meterLabel, CHARGE_TYPE_LABELS, resolveTimebandPoint,
@@ -12,6 +12,13 @@ const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 20 })  // giữ phần lẻ cho đơn giá
 
 const EMPTY_TIMEBAND_ROW: TimebandPricePoint = { fromMonth: '', caoDiem: 0, thapDiem: 0, binhThuong: 0 }
+
+// Khoá sắp xếp theo tầng: lấy số đầu tiên trong chuỗi (VD "Tầng 2" → 2, "Tầng 1 - Hầm" → 1).
+// Không có số ⇒ xếp cuối; cùng số thì so sánh chữ để giữ thứ tự ổn định (Hầm/lửng…).
+function floorSortKey(floor: string): [number, string] {
+  const m = (floor || '').match(/\d+/)
+  return [m ? parseInt(m[0], 10) : Number.POSITIVE_INFINITY, (floor || '').toLowerCase()]
+}
 
 const EMPTY: Omit<Customer, 'id' | 'createdAt'> = {
   name: '', group: '', meterId: 1, chargeType: 'flat_vat_incl', flatUnitPrice: 0, areaM2: 0, pricePerM2: 0,
@@ -238,18 +245,55 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
     else window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [editing])
 
+  const [floorFilter, setFloorFilter] = useState('')  // '' = tất cả tầng
+  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'inactive'>('')  // '' = tất cả trạng thái
+
   const save = async (c: Customer) => { await saveCustomer(c); setEditing(null) }
   const remove = async (id: string) => { if (confirm('Xoá khách hàng này?')) await deleteCustomer(id) }
 
   // Gợi ý nhóm từ các nhóm đã nhập (bỏ trùng, bỏ rỗng)
   const groupSuggestions = Array.from(new Set(customers.map(c => c.group?.trim()).filter((g): g is string => !!g))).sort((a, b) => a.localeCompare(b, 'vi'))
 
+  // Danh sách tầng để lọc (bỏ trùng, xếp theo số tầng tự nhiên)
+  const floorOptions = useMemo(
+    () => Array.from(new Set(customers.map(c => c.floor?.trim()).filter((f): f is string => !!f)))
+      .sort((a, b) => { const [na, sa] = floorSortKey(a), [nb, sb] = floorSortKey(b); return na - nb || sa.localeCompare(sb, 'vi') }),
+    [customers],
+  )
+
+  // Lọc theo tầng + trạng thái đang chọn rồi luôn sắp xếp theo tầng (rồi tên) để dễ theo dõi
+  const displayed = useMemo(() => {
+    const filtered = customers.filter(c =>
+      (!floorFilter || (c.floor?.trim() || '') === floorFilter) &&
+      (!statusFilter || (statusFilter === 'active' ? c.active : !c.active))
+    )
+    return [...filtered].sort((a, b) => {
+      const [na, sa] = floorSortKey(a.floor?.trim() || ''), [nb, sb] = floorSortKey(b.floor?.trim() || '')
+      return na - nb || sa.localeCompare(sb, 'vi') || a.name.localeCompare(b.name, 'vi')
+    })
+  }, [customers, floorFilter, statusFilter])
+
   return (
     <div className="sc sc--sticky" ref={cardRef}>
       <div className="sc-head">
         <span className="sc-title">Danh sách khách hàng</span>
-        <span style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-ghost" onClick={() => exportKhachHang(customers, meterNames)}>⬇ Xuất Excel</button>
+        <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label className="dn-label" style={{ margin: 0 }}>Tầng:</label>
+            <select className="dn-input" style={{ width: 150, padding: '5px 8px' }} value={floorFilter} onChange={e => setFloorFilter(e.target.value)}>
+              <option value="">Tất cả tầng</option>
+              {floorOptions.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label className="dn-label" style={{ margin: 0 }}>Trạng thái:</label>
+            <select className="dn-input" style={{ width: 150, padding: '5px 8px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value as '' | 'active' | 'inactive')}>
+              <option value="">Tất cả</option>
+              <option value="active">Đang hoạt động</option>
+              <option value="inactive">Chưa hoạt động</option>
+            </select>
+          </span>
+          <button className="btn-ghost" onClick={() => exportKhachHang(displayed, meterNames)}>⬇ Xuất Excel</button>
           <button className="btn-primary" onClick={() => setEditing('new')}>+ Thêm khách hàng</button>
         </span>
       </div>
@@ -267,7 +311,10 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
               {customers.length === 0 && (
                 <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Chưa có khách hàng nào.</td></tr>
               )}
-              {customers.map(c => (
+              {customers.length > 0 && displayed.length === 0 && (
+                <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Không có khách hàng khớp bộ lọc đang chọn.</td></tr>
+              )}
+              {displayed.map(c => (
                 <tr key={c.id}>
                   <td style={{ fontWeight: 600 }}>{c.name}{c.note && <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>{c.note}</div>}</td>
                   <td>{c.group?.trim() ? <span className="badge" style={{ background: 'var(--surf2)', color: 'var(--navy)', border: '1px solid var(--border3)' }}>{c.group}</span> : '—'}</td>
