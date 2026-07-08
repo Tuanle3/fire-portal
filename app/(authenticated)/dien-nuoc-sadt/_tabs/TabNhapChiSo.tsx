@@ -446,8 +446,13 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
 
   // Chi tiết ghi tầng theo khung giờ cho từng tháng (để bung dưới dòng "Tổng ghi các tầng")
   const monthFloors = months.map(r => ({ month: r.month, isCur: r.month === month, floors: (r.floorReadings ?? []).map(normalizeFloor) }))
-  const groupOrder: string[] = []
-  monthFloors.forEach(mf => mf.floors.forEach(f => { const g = (f.group || '').trim(); if (g && !groupOrder.includes(g)) groupOrder.push(g) }))
+  const allGroups: string[] = []
+  monthFloors.forEach(mf => mf.floors.forEach(f => { const g = (f.group || '').trim(); if (g && !allGroups.includes(g)) allGroups.push(g) }))
+  // Bỏ khu không có chỉ số nào (VD "Tầng 3" cũ còn sót sau khi tách A1/A2) — lọc theo chỉ số ≠ 0, không theo kWh
+  const groupOrder = allGroups.filter(g => monthFloors.some(mf => {
+    const f = mf.floors.find(x => (x.group || '').trim() === g)
+    return !!f && FLOOR_BAND_KEYS.some(k => (f.bands[k]?.indexOld || 0) !== 0 || (f.bands[k]?.indexNew || 0) !== 0)
+  }))
   const floorOf = (mf: typeof monthFloors[number], g: string) => mf.floors.find(f => (f.group || '').trim() === g)
   // % thay đổi tổng thanh toán so với tháng liền trước
   const delta = (i: number): { pct: number; up: boolean } | null => {

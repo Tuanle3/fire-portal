@@ -196,15 +196,20 @@ export function exportMeter(
     const fMonths = readings.filter(r => r.meterId === 1).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
       .sort((a, b) => a.month.localeCompare(b.month))
     const perMonth = fMonths.map(r => ({ month: r.month, floors: (r.floorReadings ?? []).map(normalizeFloor) }))
+    const bandCols: [FloorBandKey, string][] = [['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']]
     const groupOrder: string[] = []
     perMonth.forEach(mf => mf.floors.forEach(f => { const g = (f.group || '').trim(); if (g && !groupOrder.includes(g)) groupOrder.push(g) }))
-    if (groupOrder.length) {
-      const bandCols: [FloorBandKey, string][] = [['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']]
+    // Bỏ khu không có chỉ số nào (VD "Tầng 3" cũ còn sót sau khi tách A1/A2) — lọc theo chỉ số ≠ 0, KHÔNG lọc theo kWh
+    const groups = groupOrder.filter(g => perMonth.some(mf => {
+      const f = mf.floors.find(x => (x.group || '').trim() === g)
+      return !!f && bandCols.some(([k]) => (f.bands[k]?.indexOld || 0) !== 0 || (f.bands[k]?.indexNew || 0) !== 0)
+    }))
+    if (groups.length) {
       const fh: Cell[] = ['Tầng (khu)', 'Tháng']
       bandCols.forEach(([, lb]) => fh.push(`${lb} số đầu`, `${lb} số cuối`, `${lb} kWh`))
       fh.push('Tổng kWh tầng')
       const fa: Aoa = [fh]
-      for (const g of groupOrder) {
+      for (const g of groups) {
         for (const mf of perMonth) {
           const f = mf.floors.find(x => (x.group || '').trim() === g)
           const row: Cell[] = [g, mf.month]
