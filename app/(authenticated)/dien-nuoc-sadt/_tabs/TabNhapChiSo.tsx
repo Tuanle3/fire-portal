@@ -6,7 +6,7 @@ import {
   bandMoney, meterSubtotal, meterVat, meterTotal, customerCharge, resolvePrice, resolveTimebandPoint,
   lastReadingBefore, bandsWithPriceChange, isAmountAnomalous,
   FloorReading, FloorBandKey, FLOOR_BAND_KEYS, BqtRatio, DEFAULT_BQT_RATIO,
-  defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, computeBqt, isActiveInMonth, normalizeFloor,
+  defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, floorBandKwhSplit, computeBqt, isActiveInMonth, normalizeFloor,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
 import { exportMeter } from '@/lib/dien-nuoc-excel'
@@ -399,6 +399,17 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
                       <span style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>
                     </div>
                   ))}
+                  {f.fixed && (
+                    <div style={{ background: '#F8FAFC', border: '1px dashed var(--border3)', borderRadius: 7, padding: '6px 8px', marginBottom: 6, fontSize: 9.5, color: 'var(--muted)' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--navy)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.02em' }}>Tự phân bổ khung giờ</div>
+                      {([['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']] as [FloorBandKey, string][]).map(([k, lb]) => (
+                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{lb} {bqtRatio[k] || 0}%</span>
+                          <span style={{ fontWeight: 600, color: 'var(--txt)' }}>{fmtKwh(floorBandKwhSplit(f, k, bqtRatio))} kWh</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 6, marginTop: 'auto', borderTop: '1px dashed var(--border3)', paddingTop: 8 }}>
                     {([['Ghi tầng', fmtKwh(row?.floorKwh ?? floorTotalKwh(f)), 'var(--txt)', false],
                        ['Khách dùng', fmtKwh(row?.customerKwh ?? 0), '#2563EB', false],
@@ -500,7 +511,7 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
   const totalOf = (i: number) => calcs[i].c.total
 
   // Chi tiết ghi tầng theo khung giờ cho từng tháng (để bung dưới dòng "Tổng ghi các tầng")
-  const monthFloors = months.map(r => ({ month: r.month, isCur: r.month === month, floors: (r.floorReadings ?? []).map(normalizeFloor) }))
+  const monthFloors = months.map(r => ({ month: r.month, isCur: r.month === month, ratio: r.bqtRatio ?? DEFAULT_BQT_RATIO, floors: (r.floorReadings ?? []).map(normalizeFloor) }))
   const allGroups: string[] = []
   monthFloors.forEach(mf => mf.floors.forEach(f => { const g = (f.group || '').trim(); if (g && !allGroups.includes(g)) allGroups.push(g) }))
   // Bỏ khu không có chỉ số nào (VD "Tầng 3" cũ còn sót sau khi tách A1/A2) — lọc theo chỉ số ≠ 0, không theo kWh
@@ -560,7 +571,7 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
                     <td style={{ paddingLeft: 42 }}>{BAND_LABELS[k]}</td>
                     {monthFloors.map(mf => {
                       const f = floorOf(mf, g)
-                      return <td key={mf.month} style={{ textAlign: 'right', background: mf.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmtKwh(f ? floorBandKwh(f.bands[k]) : 0)}</td>
+                      return <td key={mf.month} style={{ textAlign: 'right', background: mf.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmtKwh(f ? floorBandKwhSplit(f, k, mf.ratio) : 0)}</td>
                     })}
                   </tr>
                 ))}

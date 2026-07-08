@@ -57,6 +57,17 @@ export function floorTotalKwh(f: FloorReading): number {
   if (f.fixed) return floorBandKwh(f.bands?.binhThuong)  // khu cố định: chỉ tính 1 chỉ số tổng
   return FLOOR_BAND_KEYS.reduce((s, k) => s + floorBandKwh(f.bands?.[k]), 0)
 }
+
+// kWh của 1 khu theo từng khung giờ.
+// - Khu thường: lấy kWh thực từng khung (mới − cũ).
+// - Khu cố định: tổng (mới − cũ) tự chia theo tỷ lệ BQT (mặc định BT 50% · CĐ 15% · TĐ 35%).
+export function floorBandKwhSplit(f: FloorReading, k: FloorBandKey, ratio: BqtRatio): number {
+  if (!f.fixed) return floorBandKwh(f.bands?.[k])
+  const total = floorBandKwh(f.bands?.binhThuong)
+  const sum = (ratio.caoDiem || 0) + (ratio.thapDiem || 0) + (ratio.binhThuong || 0)
+  if (sum <= 0) return k === 'binhThuong' ? total : 0
+  return total * (ratio[k] || 0) / sum
+}
 // Chuẩn hoá dữ liệu tầng (tương thích dữ liệu cũ dạng { indexOld, indexNew } gộp vào Bình thường).
 export function normalizeFloor(f: unknown): FloorReading {
   const o = (f ?? {}) as Record<string, unknown>
