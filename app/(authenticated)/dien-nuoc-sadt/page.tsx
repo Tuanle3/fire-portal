@@ -211,7 +211,7 @@ export default function DienNuocSadtPage() {
               <>
                 {activeTab === 'tong-quan' && <TabTongQuan readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
                 {METER_TAB[activeTab] && <TabNhapChiSo meterId={METER_TAB[activeTab]} readings={readings} customers={customers} usages={usages} month={month} meterNames={meterNames} canEditMeterName={canEditMeterName} onSaveMeterNames={setMeterNamesRemote} />}
-                {activeTab === 'khach-hang' && <TabKhachHang customers={customers} meterNames={meterNames} />}
+                {activeTab === 'khach-hang' && <TabKhachHang customers={customers} meterNames={meterNames} month={month} />}
                 {activeTab === 'cong-no' && <TabCongNo readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
               </>
             )}

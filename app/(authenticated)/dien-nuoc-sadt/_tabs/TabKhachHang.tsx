@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Customer, MeterId, ChargeType, PricePoint, TimebandPricePoint,
-  meterLabel, CHARGE_TYPE_LABELS, resolveTimebandPoint,
+  meterLabel, CHARGE_TYPE_LABELS, resolveTimebandPoint, isActiveInMonth,
 } from '@/lib/dien-nuoc-types'
 import { saveCustomer, deleteCustomer } from '@/lib/dien-nuoc-store'
 import { exportKhachHang } from '@/lib/dien-nuoc-excel'
@@ -233,7 +233,7 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
   )
 }
 
-export function TabKhachHang({ customers, meterNames }: { customers: Customer[]; meterNames: Record<number, string> }) {
+export function TabKhachHang({ customers, meterNames, month }: { customers: Customer[]; meterNames: Record<number, string>; month: string }) {
   const [editing, setEditing] = useState<Customer | 'new' | null>(null)
   const cardRef = useRef<HTMLDivElement>(null)
 
@@ -251,6 +251,13 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
   const save = async (c: Customer) => { await saveCustomer(c); setEditing(null) }
   const remove = async (id: string) => { if (confirm('Xoá khách hàng này?')) await deleteCustomer(id) }
 
+  // Bật/tắt tay trạng thái thuê của ki-ốt cho ĐÚNG tháng đang chọn (thêm/bớt month khỏi inactiveMonths)
+  const toggleMonth = async (c: Customer) => {
+    const set = new Set(c.inactiveMonths ?? [])
+    if (set.has(month)) set.delete(month); else set.add(month)
+    await saveCustomer({ ...c, inactiveMonths: Array.from(set).sort() })
+  }
+
   // Gợi ý nhóm từ các nhóm đã nhập (bỏ trùng, bỏ rỗng)
   const groupSuggestions = Array.from(new Set(customers.map(c => c.group?.trim()).filter((g): g is string => !!g))).sort((a, b) => a.localeCompare(b, 'vi'))
 
@@ -265,7 +272,7 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
   const displayed = useMemo(() => {
     const filtered = customers.filter(c =>
       (!floorFilter || (c.floor?.trim() || '') === floorFilter) &&
-      (!statusFilter || (statusFilter === 'active' ? c.active : !c.active))
+      (!statusFilter || (statusFilter === 'active' ? isActiveInMonth(c, month) : !isActiveInMonth(c, month)))
     )
     return [...filtered].sort((a, b) => {
       const [na, sa] = floorSortKey(a.floor?.trim() || ''), [nb, sb] = floorSortKey(b.floor?.trim() || '')
@@ -276,7 +283,7 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
         || (a.kioskCode?.trim() || '').localeCompare(b.kioskCode?.trim() || '', 'vi', col)
         || a.name.localeCompare(b.name, 'vi', col)
     })
-  }, [customers, floorFilter, statusFilter])
+  }, [customers, floorFilter, statusFilter, month])
 
   return (
     <div className="sc sc--sticky" ref={cardRef}>
@@ -291,14 +298,14 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
             </select>
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label className="dn-label" style={{ margin: 0 }}>Trạng thái:</label>
+            <label className="dn-label" style={{ margin: 0 }}>Trạng thái ({month}):</label>
             <select className="dn-input" style={{ width: 150, padding: '5px 8px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value as '' | 'active' | 'inactive')}>
               <option value="">Tất cả</option>
-              <option value="active">Đang hoạt động</option>
-              <option value="inactive">Chưa hoạt động</option>
+              <option value="active">Đang thuê</option>
+              <option value="inactive">Trống</option>
             </select>
           </span>
-          <button className="btn-ghost" onClick={() => exportKhachHang(displayed, meterNames)}>⬇ Xuất Excel</button>
+          <button className="btn-ghost" onClick={() => exportKhachHang(displayed, meterNames, month)}>⬇ Xuất Excel</button>
           <button className="btn-primary" onClick={() => setEditing('new')}>+ Thêm khách hàng</button>
         </span>
       </div>
@@ -310,7 +317,7 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
           <table className="dn-table">
             <thead><tr>
               <th>Tên khách hàng</th><th>Nhóm</th><th>Tầng</th><th>Mã ki-ốt</th><th>Chủ ki-ốt</th><th>Khách hàng thuê</th>
-              <th>Đồng hồ</th><th>Cách tính tiền</th><th>Thông số</th><th>Trạng thái</th><th style={{ width: 100 }}></th>
+              <th>Đồng hồ</th><th>Cách tính tiền</th><th>Thông số</th><th>Trạng thái ({month})</th><th style={{ width: 100 }}></th>
             </tr></thead>
             <tbody>
               {customers.length === 0 && (
@@ -340,7 +347,20 @@ export function TabKhachHang({ customers, meterNames }: { customers: Customer[];
                     })()}
                     {c.chargeType === 'remainder' && '—'}
                   </td>
-                  <td><span className={`badge ${c.active ? 'badge-green' : 'badge-red'}`}>{c.active ? 'Hoạt động' : 'Ngừng'}</span></td>
+                  <td>
+                    {!c.active ? (
+                      <span className="badge badge-red">Ngừng</span>
+                    ) : (
+                      <button
+                        onClick={() => toggleMonth(c)}
+                        title={isActiveInMonth(c, month) ? `Bấm để đánh dấu TRỐNG tháng ${month}` : `Bấm để bật thuê lại tháng ${month}`}
+                        className={`badge ${isActiveInMonth(c, month) ? 'badge-green' : 'badge-amber'}`}
+                        style={{ cursor: 'pointer', border: 'none', fontFamily: 'inherit' }}
+                      >
+                        {isActiveInMonth(c, month) ? 'Đang thuê' : 'Trống'}
+                      </button>
+                    )}
+                  </td>
                   <td>
                     <button className="btn-ghost" style={{ marginRight: 6 }} onClick={() => setEditing(c)}>Sửa</button>
                     <button className="btn-danger" onClick={() => remove(c.id)}>Xoá</button>

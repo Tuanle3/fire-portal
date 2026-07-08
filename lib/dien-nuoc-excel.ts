@@ -7,7 +7,7 @@ import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, BandKey,
   BAND_KEYS, BAND_LABELS, METER_UNIT, meterLabel,
   meterSubtotal, meterVat, meterTotal, meterAllocation,
-  resolvePrice, resolveTimebandPoint, usageKwh, computeBqt,
+  resolvePrice, resolveTimebandPoint, usageKwh, computeBqt, isActiveInMonth,
   CHARGE_TYPE_LABELS, DEFAULT_BQT_RATIO,
 } from './dien-nuoc-types'
 
@@ -253,7 +253,7 @@ export function exportTongQuan(
 }
 
 // ── Tab: Khách hàng ──────────────────────────────────────────────────────────
-export function exportKhachHang(customers: Customer[], meterNames: Record<number, string>) {
+export function exportKhachHang(customers: Customer[], meterNames: Record<number, string>, month: string) {
   const priceInfo = (c: Customer): string => {
     if (c.chargeType === 'flat_vat_incl') return `${c.flatUnitPrice} đ/đơn vị (gồm VAT)`
     if (c.chargeType === 'fixed_area')     return `${c.areaM2} m² × ${c.pricePerM2} đ/m²`
@@ -274,7 +274,7 @@ export function exportKhachHang(customers: Customer[], meterNames: Record<number
     'Đồng hồ':        meterLabel(meterNames, c.meterId),
     'Cách tính tiền': CHARGE_TYPE_LABELS[c.chargeType],
     'Thông số giá':   priceInfo(c),
-    'Trạng thái':     c.active ? 'Hoạt động' : 'Ngừng',
+    [`Trạng thái (${month})`]: !c.active ? 'Ngừng' : isActiveInMonth(c, month) ? 'Đang thuê' : 'Trống',
     'Ghi chú':        c.note || '',
   }))
   if (rows.length === 0) rows.push({ 'STT': '', 'Tên khách hàng': '(Chưa có khách hàng nào)' } as Row)

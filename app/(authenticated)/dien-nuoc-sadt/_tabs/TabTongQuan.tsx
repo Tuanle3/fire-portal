@@ -1,7 +1,7 @@
 'use client'
 import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId,
-  meterLabel, meterAllocation, meterTotal,
+  meterLabel, meterAllocation, meterTotal, isActiveInMonth,
 } from '@/lib/dien-nuoc-types'
 import { exportTongQuan } from '@/lib/dien-nuoc-excel'
 
@@ -22,7 +22,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
   const totalPaid = allRows.reduce((s, r) => s + paidByCustomer(r.customer.id), 0)
   const totalRemain = Math.max(0, totalDue - totalPaid)
 
-  const activeCustomers = customers.filter(c => c.active).length
+  const activeCustomers = customers.filter(c => isActiveInMonth(c, month)).length
 
   return (
     <div>
@@ -45,7 +45,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
         <div className="ceo-kpi ceo-kpi-amber">
           <div className="ceo-kpi-label">👥 KHÁCH HÀNG</div>
           <div className="ceo-kpi-val">{activeCustomers}</div>
-          <div className="ceo-kpi-sub">Đang hoạt động</div>
+          <div className="ceo-kpi-sub">Đang thuê tháng {month}</div>
         </div>
       </div>
 

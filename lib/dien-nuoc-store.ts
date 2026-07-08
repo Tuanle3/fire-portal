@@ -72,6 +72,7 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
     kioskOwner: (d.kioskOwner as string) ?? '',
     tenantName: (d.tenantName as string) ?? '',
     active:     d.active !== false,
+    inactiveMonths: Array.isArray(d.inactiveMonths) ? (d.inactiveMonths as string[]) : undefined,
     note:       (d.note as string) ?? '',
     createdAt:  (d.createdAt as string) ?? '',
   }

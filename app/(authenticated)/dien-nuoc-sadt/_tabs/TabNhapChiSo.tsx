@@ -1,12 +1,12 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import {
   MeterReading, Customer, CustomerUsage, MeterId, Bands,
   BAND_KEYS, BandKey, BAND_LABELS, meterLabel, METER_UNIT, EMPTY_BANDS,
   bandMoney, meterSubtotal, meterVat, meterTotal, customerCharge, resolvePrice, resolveTimebandPoint,
   lastReadingBefore, bandsWithPriceChange, isAmountAnomalous,
   FloorReading, FloorBandKey, FLOOR_BAND_KEYS, BqtRatio, DEFAULT_BQT_RATIO,
-  defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, computeBqt,
+  defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, computeBqt, isActiveInMonth, normalizeFloor,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
 import { exportMeter } from '@/lib/dien-nuoc-excel'
@@ -187,7 +187,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
     setSavedAt(now)
   }
 
-  const meterCustomers = customers.filter(c => c.meterId === meterId && c.active)
+  const meterCustomers = customers.filter(c => c.meterId === meterId && isActiveInMonth(c, month))
   const draftReading: MeterReading = { id: '', meterId, month, bands, vatPercent, note, floorReadings, bqtRatio, createdAt: '', updatedAt: '' }
 
   // Cảnh báo sai lệch ngay khi đang nhập (trước khi lưu)
@@ -423,6 +423,8 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
 function BqtHistoryTable({ reading, readings, month, customers, usages }: {
   reading: MeterReading; readings: MeterReading[]; month: string; customers: Customer[]; usages: CustomerUsage[]
 }) {
+  const [showFloors, setShowFloors] = useState(false)  // bung chi tiết ghi tầng theo khung giờ
+
   // 12 tháng gần nhất của đồng hồ 1, cũ → mới; tháng hiện tại thay bằng số liệu live (reading)
   const saved = readings.filter(r => r.meterId === 1).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
     .sort((a, b) => a.month.localeCompare(b.month))
@@ -433,6 +435,12 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
 
   const calcs = months.map(r => ({ month: r.month, isCur: r.month === month, c: computeBqt(r, customers, usages, r.bqtRatio ?? DEFAULT_BQT_RATIO) }))
   const totalOf = (i: number) => calcs[i].c.total
+
+  // Chi tiết ghi tầng theo khung giờ cho từng tháng (để bung dưới dòng "Tổng ghi các tầng")
+  const monthFloors = months.map(r => ({ month: r.month, isCur: r.month === month, floors: (r.floorReadings ?? []).map(normalizeFloor) }))
+  const groupOrder: string[] = []
+  monthFloors.forEach(mf => mf.floors.forEach(f => { const g = (f.group || '').trim(); if (g && !groupOrder.includes(g)) groupOrder.push(g) }))
+  const floorOf = (mf: typeof monthFloors[number], g: string) => mf.floors.find(f => (f.group || '').trim() === g)
   // % thay đổi tổng thanh toán so với tháng liền trước
   const delta = (i: number): { pct: number; up: boolean } | null => {
     if (i === 0) return null
@@ -458,7 +466,38 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
             {calcs.map(x => <th key={x.month} style={{ textAlign: 'right', background: x.isCur ? '#E0EDFA' : undefined }}>{x.month}{x.isCur ? ' ★' : ''}</th>)}
           </tr></thead>
           <tbody>
-            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Tổng ghi các tầng (kWh)</td>{rowCells(c => c.sumFloorKwh, { kwh: true })}</tr>
+            <tr style={{ fontSize: 10 }}>
+              <td style={{ fontWeight: 400 }}>
+                {groupOrder.length > 0 && (
+                  <button onClick={() => setShowFloors(v => !v)} title={showFloors ? 'Thu gọn chi tiết tầng' : 'Xem chi tiết từng tầng × khung giờ'}
+                    style={{ width: 16, height: 16, marginRight: 6, padding: 0, lineHeight: '14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border3)', borderRadius: 4, background: '#fff', color: 'var(--navy)' }}>
+                    {showFloors ? '−' : '+'}
+                  </button>
+                )}
+                Tổng ghi các tầng (kWh)
+              </td>
+              {rowCells(c => c.sumFloorKwh, { kwh: true })}
+            </tr>
+            {showFloors && groupOrder.map(g => (
+              <Fragment key={g}>
+                <tr style={{ fontSize: 9.5 }}>
+                  <td style={{ paddingLeft: 26, fontWeight: 700, color: 'var(--navy)' }}>{g} — tổng</td>
+                  {monthFloors.map(mf => {
+                    const f = floorOf(mf, g)
+                    return <td key={mf.month} style={{ textAlign: 'right', fontWeight: 600, background: mf.isCur ? '#E0EDFA' : '#F5F8FC', whiteSpace: 'nowrap' }}>{fmtKwh(f ? floorTotalKwh(f) : 0)}</td>
+                  })}
+                </tr>
+                {FLOOR_BAND_KEYS.map(k => (
+                  <tr key={`${g}-${k}`} style={{ fontSize: 9.5, color: 'var(--muted)' }}>
+                    <td style={{ paddingLeft: 42 }}>{BAND_LABELS[k]}</td>
+                    {monthFloors.map(mf => {
+                      const f = floorOf(mf, g)
+                      return <td key={mf.month} style={{ textAlign: 'right', background: mf.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmtKwh(f ? floorBandKwh(f.bands[k]) : 0)}</td>
+                    })}
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
             <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Đồng hồ chính (kWh)</td>{rowCells(c => c.mainMeterKwh, { kwh: true })}</tr>
             <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Chênh lệch → BQT (kWh)</td>{rowCells(c => c.discrepancy, { kwh: true })}</tr>
             <tr><td style={{ fontWeight: 600, color: 'var(--navy)' }}>Tổng kWh BQT</td>{rowCells(c => c.bqtTotalKwh, { bold: true, kwh: true })}</tr>
@@ -494,7 +533,7 @@ function CustomerUsageTable({ meterId, month, customers, readings, usages, readi
 }) {
   const histMonths = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
     .sort((a, b) => a.month.localeCompare(b.month))
-  const meterCustomers = customers.filter(c => c.meterId === meterId && c.active)
+  const meterCustomers = customers.filter(c => c.meterId === meterId && isActiveInMonth(c, month))
   if (meterCustomers.length === 0) return null
 
   // Luôn bao gồm tháng hiện tại trong cột để đối chiếu ngay khi nhập

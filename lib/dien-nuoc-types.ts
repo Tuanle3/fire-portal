@@ -118,8 +118,16 @@ export interface Customer {
   kioskOwner: string      // Chủ ki-ốt
   tenantName: string      // Khách hàng thuê (người đang thuê/vận hành thực tế)
   active: boolean
+  inactiveMonths?: string[]  // Các tháng (YYYY-MM) ki-ốt KHÔNG thuê (trống) — override active theo từng tháng
   note: string
   createdAt: string
+}
+
+// Ki-ốt có "đang thuê" trong tháng không: tắt hẳn (active=false) ⇒ luôn trống;
+// hoặc admin bấm tắt tay 1 tháng cụ thể (month nằm trong inactiveMonths).
+export function isActiveInMonth(c: Customer, month: string): boolean {
+  if (!c.active) return false
+  return !(c.inactiveMonths ?? []).includes(month)
 }
 
 // Giá có hiệu lực cho tháng `month`: lấy mốc mới nhất có fromMonth <= month.
@@ -214,7 +222,7 @@ export interface Allocation {
 }
 
 export function meterAllocation(reading: MeterReading, customers: Customer[], usages: CustomerUsage[]): Allocation {
-  const meterCustomers    = customers.filter(c => c.meterId === reading.meterId && c.active)
+  const meterCustomers    = customers.filter(c => c.meterId === reading.meterId && isActiveInMonth(c, reading.month))
   const priced            = meterCustomers.filter(c => c.chargeType !== 'remainder')
   const remainderCustomers = meterCustomers.filter(c => c.chargeType === 'remainder')
   const usageByCustomer   = new Map(usages.filter(u => u.month === reading.month).map(u => [u.customerId, u]))
@@ -232,7 +240,7 @@ export function meterAllocation(reading: MeterReading, customers: Customer[], us
 // Chi tiết phần còn lại theo khung giờ (chỉ áp dụng ý nghĩa đầy đủ cho khách timeband_excl_vat;
 // khách flat/fixed được trừ thẳng vào tổng, không gắn với khung giờ cụ thể).
 export function remainderByBand(reading: MeterReading, customers: Customer[], usages: CustomerUsage[]): Record<BandKey, number> {
-  const timebandCustomers = customers.filter(c => c.meterId === reading.meterId && c.active && c.chargeType === 'timeband_excl_vat')
+  const timebandCustomers = customers.filter(c => c.meterId === reading.meterId && isActiveInMonth(c, reading.month) && c.chargeType === 'timeband_excl_vat')
   const usageByCustomer = new Map(usages.filter(u => u.month === reading.month).map(u => [u.customerId, u]))
   const out: Record<BandKey, number> = { caoDiem: 0, thapDiem: 0, binhThuong: 0, toanThoiGian: 0 }
   for (const k of BAND_KEYS) {
@@ -302,7 +310,7 @@ export function computeBqt(
 ): BqtCalc {
   const floorReadings = reading.floorReadings ?? []
   const usageByCustomer = new Map(usages.filter(u => u.month === reading.month).map(u => [u.customerId, u]))
-  const meterCustomers = customers.filter(c => c.meterId === reading.meterId && c.active)
+  const meterCustomers = customers.filter(c => c.meterId === reading.meterId && isActiveInMonth(c, reading.month))
 
   const floors: BqtFloorRow[] = floorReadings.map(raw => {
     const f = normalizeFloor(raw)
