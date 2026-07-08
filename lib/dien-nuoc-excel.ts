@@ -9,6 +9,7 @@ import {
   meterSubtotal, meterVat, meterTotal, meterAllocation,
   resolvePrice, resolveTimebandPoint, usageKwh, computeBqt, isActiveInMonth,
   CHARGE_TYPE_LABELS, DEFAULT_BQT_RATIO,
+  FloorBandKey, normalizeFloor, floorBandKwh, floorTotalKwh,
 } from './dien-nuoc-types'
 
 const r0 = (n: number) => Math.round(n)                 // tiền: làm tròn đồng
@@ -190,6 +191,33 @@ export function exportMeter(
       hb.push([r.month, r2(c.sumFloorKwh), r2(c.mainMeterKwh), r2(c.discrepancy), r2(c.bqtTotalKwh), r0(c.subtotal), r0(c.vat), r0(c.total)])
     })
     XLSX.utils.book_append_sheet(wb, sheetFromAoa(hb, [10, 18, 18, 16, 14, 14, 12, 16], [0]), 'BQT lich su')
+
+    // Sheet 6 — Chỉ số ghi điện TỪNG TẦNG theo tháng: số đầu/số cuối × từng khung giờ
+    const fMonths = readings.filter(r => r.meterId === 1).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
+      .sort((a, b) => a.month.localeCompare(b.month))
+    const perMonth = fMonths.map(r => ({ month: r.month, floors: (r.floorReadings ?? []).map(normalizeFloor) }))
+    const groupOrder: string[] = []
+    perMonth.forEach(mf => mf.floors.forEach(f => { const g = (f.group || '').trim(); if (g && !groupOrder.includes(g)) groupOrder.push(g) }))
+    if (groupOrder.length) {
+      const bandCols: [FloorBandKey, string][] = [['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']]
+      const fh: Cell[] = ['Tầng (khu)', 'Tháng']
+      bandCols.forEach(([, lb]) => fh.push(`${lb} số đầu`, `${lb} số cuối`, `${lb} kWh`))
+      fh.push('Tổng kWh tầng')
+      const fa: Aoa = [fh]
+      for (const g of groupOrder) {
+        for (const mf of perMonth) {
+          const f = mf.floors.find(x => (x.group || '').trim() === g)
+          const row: Cell[] = [g, mf.month]
+          bandCols.forEach(([k]) => {
+            const b = f?.bands[k]
+            row.push(b?.indexOld ?? '', b?.indexNew ?? '', b ? r2(floorBandKwh(b)) : 0)
+          })
+          row.push(f ? r2(floorTotalKwh(f)) : 0)
+          fa.push(row)
+        }
+      }
+      XLSX.utils.book_append_sheet(wb, sheetFromAoa(fa, fh.map((_, i) => i === 0 ? 20 : i === 1 ? 10 : 11), [0]), 'Ghi dien tung tang')
+    }
   }
 
   download(wb, `dien-nuoc_${label}_${month}.xlsx`)
