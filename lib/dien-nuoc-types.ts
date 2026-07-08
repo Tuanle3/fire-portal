@@ -41,7 +41,7 @@ export interface FloorReading { group: string; bands: FloorBands }
 
 export interface BqtRatio { caoDiem: number; thapDiem: number; binhThuong: number }
 export const DEFAULT_BQT_RATIO: BqtRatio = { binhThuong: 50, caoDiem: 15, thapDiem: 35 }
-export const DEFAULT_FLOOR_GROUPS = ['Tầng 1 + hầm', 'Tầng 2', 'Tầng 3']
+export const DEFAULT_FLOOR_GROUPS = ['Tầng 1 + hầm', 'Tầng 2', 'Tầng 3 - A1', 'Tầng 3 - A2']
 
 export function emptyFloorBands(): FloorBands {
   return { caoDiem: { indexOld: 0, indexNew: 0 }, thapDiem: { indexOld: 0, indexNew: 0 }, binhThuong: { indexOld: 0, indexNew: 0 } }

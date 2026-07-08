@@ -297,6 +297,8 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
   const setFloorBand = (i: number, k: FloorBandKey, field: 'indexOld' | 'indexNew', v: number) =>
     setFloorReadings(floorReadings.map((f, idx) => idx === i ? { ...f, bands: { ...f.bands, [k]: { ...f.bands[k], [field]: v } } } : f))
   const setRatio = (k: keyof BqtRatio, v: number) => setBqtRatio({ ...bqtRatio, [k]: v })
+  const addFloor = () => setFloorReadings([...floorReadings, { group: '', bands: emptyFloorBands() }])
+  const removeFloor = (i: number) => setFloorReadings(floorReadings.filter((_, idx) => idx !== i))
 
   return (
     <div style={{ marginTop: 20, border: '1px solid var(--border3)', borderRadius: 12, overflow: 'hidden' }}>
@@ -313,16 +315,22 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           <div>③ <b>Tổng kWh BQT</b> chia theo tỷ lệ khung giờ (mặc định BT 50% · CĐ 15% · TĐ 35%), rồi × đơn giá từng khung của đồng hồ 1 + VAT ⇒ tiền BQT phải chịu.</div>
         </div>
 
-        {/* b + c: 5 card cùng hàng, cao bằng nhau (align-items stretch); tự xuống dòng ở màn hẹp */}
-        <div className="dn-col-title"><span>b. Nhập số ghi điện từng khu ⇒ kWh BQT  ·  c. Chia BQT theo khung giờ × đơn giá</span></div>
+        {/* b + c: các card cùng hàng (mặc định 4 khu + 2 tổng hợp = 6 card trên PC), cao bằng nhau; tự xuống dòng ở tablet/điện thoại */}
+        <div className="dn-col-title">
+          <span>b. Nhập số ghi điện từng khu ⇒ kWh BQT  ·  c. Chia BQT theo khung giờ × đơn giá</span>
+          <button className="btn-ghost" style={{ textTransform: 'none', fontWeight: 600 }} onClick={addFloor}>+ Thêm khu</button>
+        </div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
           {/* 3 card khu (tầng) */}
           {floorReadings.map((f, i) => {
             const row = calc.floors[i]
             return (
-              <div key={i} style={{ flex: '1 1 250px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+              <div key={i} style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)' }}>
                   <input className="dn-input" list="dn-bqt-groups" style={{ flex: 1, fontWeight: 600 }} value={f.group} placeholder="Tên khu (Nhóm KH)" onChange={e => setFloorGroup(i, e.target.value)} />
+                  {floorReadings.length > 1 && (
+                    <button onClick={() => removeFloor(i)} title="Xoá khu này" style={{ flexShrink: 0, width: 22, height: 22, padding: 0, lineHeight: '20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', border: '1px solid #FECACA', borderRadius: 6, background: '#fff', color: '#DC2626' }}>×</button>
+                  )}
                 </div>
                 <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 1fr 44px', gap: 4, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
@@ -351,8 +359,8 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
             )
           })}
 
-          {/* Card 4: Tổng hợp kWh */}
-          <div style={{ flex: '1 1 230px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+          {/* Card 5: Tổng hợp kWh */}
+          <div style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
             <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tổng hợp kWh</div>
             <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {([['Tổng ghi các tầng', fmtKwh(calc.sumFloorKwh), 'var(--navy)', false],
@@ -367,8 +375,8 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
             </div>
           </div>
 
-          {/* Card 5: c. Chia kWh BQT theo khung giờ (dạng danh sách gọn) */}
-          <div style={{ flex: '1 1 250px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+          {/* Card 6: c. Chia kWh BQT theo khung giờ (dạng danh sách gọn) */}
+          <div style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
             <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>c. Chia kWh BQT × đơn giá</div>
             <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
