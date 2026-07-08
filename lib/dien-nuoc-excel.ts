@@ -7,7 +7,7 @@ import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, BandKey,
   BAND_KEYS, BAND_LABELS, METER_UNIT, meterLabel,
   meterSubtotal, meterVat, meterTotal, meterAllocation,
-  resolveTimebandPoint, usageKwh, computeBqt,
+  resolvePrice, resolveTimebandPoint, usageKwh, computeBqt,
   CHARGE_TYPE_LABELS, DEFAULT_BQT_RATIO,
 } from './dien-nuoc-types'
 
@@ -118,6 +118,48 @@ export function exportMeter(
     }))
     if (rows.length === 0) rows.push({ 'Khách hàng': '(Chưa có khách hàng gán cho đồng hồ này)' } as Row)
     XLSX.utils.book_append_sheet(wb, sheetFromRows(rows, [26, 18, 12, 12, 26, 16, 18]), safeSheetName(`Khach hang ${month}`))
+  }
+
+  // Sheet 3b — Chi tiết sản lượng từng khách theo TỪNG THÁNG (chỉ số cũ/mới, sản lượng, tiền)
+  {
+    const isElec = meterId !== 3
+    const bandCols: [BandKey, string][] = [['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']]
+    const cmp = { numeric: true, sensitivity: 'base' } as const
+    const mCustomers = customers.filter(c => c.meterId === meterId && c.active).sort((a, b) =>
+      (a.floor?.trim() || '').localeCompare(b.floor?.trim() || '', 'vi', cmp)
+      || (a.kioskCode?.trim() || '').localeCompare(b.kioskCode?.trim() || '', 'vi', cmp)
+      || a.name.localeCompare(b.name, 'vi', cmp))
+    const dMonths = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
+      .sort((a, b) => a.month.localeCompare(b.month))
+    // Tiền từng tháng lấy qua meterAllocation để đúng cả khách "gánh phần còn lại"
+    const amtByMonth = new Map(dMonths.map(r => [r.month, new Map(meterAllocation(r, customers, usages).rows.map(x => [x.customer.id, x.amount]))]))
+    const usageOf = (cid: string, m: string) => usages.find(u => u.customerId === cid && u.month === m)
+
+    const header: Cell[] = ['Khách hàng', 'Nhóm', 'Tầng', 'Mã ki-ốt', 'Cách tính tiền', 'Tháng', 'Chỉ số cũ', 'Chỉ số mới']
+    if (isElec) bandCols.forEach(([, lb]) => header.push(`${lb} cũ`, `${lb} mới`))
+    header.push(`Sản lượng (${unit})`, 'Đơn giá (đ)', 'Thành tiền (đ)')
+
+    const detail: Aoa = [header]
+    for (const c of mCustomers) {
+      for (const r of dMonths) {
+        const u = usageOf(c.id, r.month)
+        const amount = amtByMonth.get(r.month)?.get(c.id) ?? 0
+        const row: Cell[] = [c.name, c.group?.trim() || '', c.floor || '', c.kioskCode || '', CHARGE_TYPE_LABELS[c.chargeType], r.month]
+        row.push(c.chargeType === 'flat_vat_incl' ? (u?.indexOld ?? '') : '', c.chargeType === 'flat_vat_incl' ? (u?.indexNew ?? '') : '')
+        if (isElec) bandCols.forEach(([k]) => {
+          if (c.chargeType === 'timeband_excl_vat') row.push(u?.bandsIndexOld?.[k] ?? '', u?.bandsIndexNew?.[k] ?? '')
+          else row.push('', '')
+        })
+        const sl: Cell = (c.chargeType === 'flat_vat_incl' || c.chargeType === 'timeband_excl_vat') ? r2(usageKwh(c, u)) : ''
+        const dg: Cell = c.chargeType === 'flat_vat_incl' ? resolvePrice(c.flatPriceHistory, c.flatUnitPrice, r.month)
+          : c.chargeType === 'fixed_area' ? resolvePrice(c.areaPriceHistory, c.pricePerM2, r.month) : ''
+        row.push(sl, dg, r0(amount))
+        detail.push(row)
+      }
+    }
+    if (mCustomers.length && dMonths.length) {
+      XLSX.utils.book_append_sheet(wb, sheetFromAoa(detail, header.map((_, i) => i === 0 ? 24 : i < 6 ? 14 : 12), [0]), 'Chi tiet SL theo thang')
+    }
   }
 
   // Sheet 4 & 5 — chỉ đồng hồ 1: BQT
