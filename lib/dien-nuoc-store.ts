@@ -74,6 +74,7 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
     active:     d.active !== false,
     inactiveMonths: Array.isArray(d.inactiveMonths) ? (d.inactiveMonths as string[]) : undefined,
     note:       (d.note as string) ?? '',
+    services:   Array.isArray(d.services) ? (d.services as Customer['services']) : undefined,
     hasManagementFee: d.hasManagementFee === true,
     managementFeePrice: d.managementFeePrice != null ? Number(d.managementFeePrice) : undefined,
     managementFeeHistory: (d.managementFeeHistory as Customer['managementFeeHistory']) ?? undefined,
@@ -98,6 +99,7 @@ function parseUsage(id: string, d: Record<string, unknown>): CustomerUsage {
   return {
     id,
     customerId: (d.customerId as string) ?? '',
+    service:    (d.service as CustomerUsage['service']) ?? undefined,
     month:      (d.month as string) ?? '',
     totalUnit:  Number(d.totalUnit ?? 0),
     bandsKwh:   (d.bandsKwh as CustomerUsage['bandsKwh']) ?? {},
@@ -131,6 +133,7 @@ function parsePayment(id: string, d: Record<string, unknown>): Payment {
     amount:     Number(d.amount ?? 0),
     paidAt:     (d.paidAt as string) ?? '',
     note:       (d.note as string) ?? '',
+    service:    (d.service as Payment['service']) ?? undefined,
     kind:       (d.kind as Payment['kind']) ?? undefined,
     createdAt:  (d.createdAt as string) ?? '',
   }

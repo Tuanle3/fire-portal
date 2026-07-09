@@ -1,9 +1,9 @@
 'use client'
 import { useState } from 'react'
 import {
-  MeterReading, Customer, CustomerUsage, Payment, MeterId, PaymentKind,
+  MeterReading, Customer, CustomerUsage, Payment, MeterId, ServiceId,
   meterLabel, meterAllocation, remainderByBand, BAND_KEYS, BAND_LABELS,
-  managementFeeOf,
+  managementFeeOf, METER_SERVICE, primaryService, paymentService,
 } from '@/lib/dien-nuoc-types'
 import { savePayment } from '@/lib/dien-nuoc-store'
 import { exportCongNo } from '@/lib/dien-nuoc-excel'
@@ -11,8 +11,8 @@ import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
-function PaymentModal({ customerId, month, due, paid, kind, label, onClose }: {
-  customerId: string; month: string; due: number; paid: number; kind: PaymentKind; label: string; onClose: () => void
+function PaymentModal({ customerId, month, due, paid, service, label, onClose }: {
+  customerId: string; month: string; due: number; paid: number; service: ServiceId; label: string; onClose: () => void
 }) {
   const remain = Math.max(0, due - paid)
   const [amount, setAmount] = useState(remain)
@@ -23,7 +23,7 @@ function PaymentModal({ customerId, month, due, paid, kind, label, onClose }: {
     if (amount <= 0) return
     setSaving(true)
     const now = new Date().toISOString().slice(0, 10)
-    await savePayment({ id: `p${Date.now()}`, customerId, month, amount, paidAt: now, note, kind, createdAt: now })
+    await savePayment({ id: `p${Date.now()}`, customerId, month, amount, paidAt: now, note, service, createdAt: now })
     setSaving(false)
     onClose()
   }
@@ -58,7 +58,7 @@ function PaymentModal({ customerId, month, due, paid, kind, label, onClose }: {
   )
 }
 
-type CollectArgs = { customerId: string; due: number; paid: number; kind: PaymentKind; label: string }
+type CollectArgs = { customerId: string; due: number; paid: number; service: ServiceId; label: string }
 
 function MeterAllocationCard({ meterId, reading, customers, usages, payments, month, meterNames, onCollect }: {
   meterId: MeterId; reading: MeterReading | undefined; customers: Customer[]; usages: CustomerUsage[]
@@ -76,9 +76,12 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
   const alloc = meterAllocation(reading, customers, usages)
   const remBand = meterId !== 3 ? remainderByBand(reading, customers, usages) : null
   const meterName = meterLabel(meterNames, meterId)
+  const service = METER_SERVICE[meterId]
+  const custById = new Map(customers.map(c => [c.id, c]))
 
-  // Chỉ tính các khoản thu cho ĐỒNG HỒ (không tính khoản thu phí quản lý)
-  const paidOf = (customerId: string) => payments.filter(p => p.customerId === customerId && p.month === month && p.kind !== 'management').reduce((s, p) => s + p.amount, 0)
+  // Chỉ tính khoản thu đúng dịch vụ đồng hồ này (khách có thể đóng cho nhiều đồng hồ khác nhau)
+  const paidOf = (customerId: string) => payments.filter(p => p.customerId === customerId && p.month === month
+    && paymentService(p, primaryService(custById.get(customerId)!)) === service).reduce((s, p) => s + p.amount, 0)
 
   return (
     <div className="sc">
@@ -102,7 +105,7 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
                   <td style={{ textAlign: 'right' }}>{fmt(r.amount)} đ</td>
                   <td style={{ textAlign: 'right', color: 'var(--green)' }}>{fmt(paid)} đ</td>
                   <td style={{ textAlign: 'right', fontWeight: 700, color: remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(remain)} đ</td>
-                  <td><button className="btn-ghost" onClick={() => onCollect({ customerId: r.customer.id, due: r.amount, paid, kind: 'meter', label: meterName })}>Thu tiền</button></td>
+                  <td><button className="btn-ghost" onClick={() => onCollect({ customerId: r.customer.id, due: r.amount, paid, service, label: meterName })}>Thu tiền</button></td>
                 </tr>
               )
             })}
@@ -138,7 +141,8 @@ function ManagementFeeCard({ customers, payments, month, onCollect }: {
     .sort((a, b) => (a.floor?.trim() || '').localeCompare(b.floor?.trim() || '', 'vi', cmp)
       || (a.kioskCode?.trim() || '').localeCompare(b.kioskCode?.trim() || '', 'vi', cmp)
       || a.name.localeCompare(b.name, 'vi', cmp))
-  const paidOf = (cid: string) => payments.filter(p => p.customerId === cid && p.month === month && p.kind === 'management').reduce((s, p) => s + p.amount, 0)
+  const paidOf = (cid: string) => payments.filter(p => p.customerId === cid && p.month === month
+    && paymentService(p, primaryService(feeCustomers.find(c => c.id === cid)!)) === 'phiql').reduce((s, p) => s + p.amount, 0)
   const total = feeCustomers.reduce((s, c) => s + managementFeeOf(c, month), 0)
 
   return (
@@ -164,7 +168,7 @@ function ManagementFeeCard({ customers, payments, month, onCollect }: {
                     <td style={{ textAlign: 'right' }}>{fmt(due)} đ</td>
                     <td style={{ textAlign: 'right', color: 'var(--green)' }}>{fmt(paid)} đ</td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(remain)} đ</td>
-                    <td><button className="btn-ghost" onClick={() => onCollect({ customerId: c.id, due, paid, kind: 'management', label: 'Phí quản lý' })}>Thu tiền</button></td>
+                    <td><button className="btn-ghost" onClick={() => onCollect({ customerId: c.id, due, paid, service: 'phiql', label: 'Phí quản lý' })}>Thu tiền</button></td>
                   </tr>
                 )
               })}
@@ -279,7 +283,7 @@ export function TabCongNo({ readings, customers, usages, payments, month, meterN
       )}
       {collecting && (
         <PaymentModal customerId={collecting.customerId} month={month} due={collecting.due} paid={collecting.paid}
-          kind={collecting.kind} label={collecting.label} onClose={() => setCollecting(null)} />
+          service={collecting.service} label={collecting.label} onClose={() => setCollecting(null)} />
       )}
     </div>
   )

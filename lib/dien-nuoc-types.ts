@@ -30,6 +30,17 @@ export function meterLabel(customNames: Partial<Record<number, string>> | undefi
   return customNames?.[id]?.trim() || METER_LABELS[id]
 }
 
+// ── Loại sử dụng (dịch vụ) 1 khách có thể đăng ký cùng lúc ────────────────────
+// dh1/dh2/nuoc = 3 đồng hồ; phiql = phí quản lý (không có đồng hồ). Một khách chọn
+// nhiều dịch vụ ⇒ hiện ở nhiều tab, mỗi dịch vụ có cách tính tiền & đơn giá riêng.
+export type ServiceId = 'dh1' | 'dh2' | 'nuoc' | 'phiql'
+export const SERVICE_IDS: ServiceId[] = ['dh1', 'dh2', 'nuoc', 'phiql']
+export const METER_SERVICE: Record<MeterId, ServiceId> = { 1: 'dh1', 2: 'dh2', 3: 'nuoc' }
+export const SERVICE_METER: Partial<Record<ServiceId, MeterId>> = { dh1: 1, dh2: 2, nuoc: 3 }
+export function serviceLabel(s: ServiceId, customNames?: Partial<Record<number, string>>): string {
+  return s === 'phiql' ? 'Phí quản lý' : meterLabel(customNames, SERVICE_METER[s]!)
+}
+
 // ── Đồng hồ 1: số ghi điện từng khu (tầng) & tỷ lệ chia khung giờ cho BQT ─────
 // Mỗi khu khớp với "Nhóm khách hàng" (group) để trừ sản lượng khách trong khu đó.
 // Số ghi từng tầng nhập theo 3 khung giờ (cao/thấp/bình), mỗi khung có chỉ số cũ/mới.
@@ -132,6 +143,20 @@ export interface PricePoint { fromMonth: string; price: number }
 // Mốc đơn giá theo khung giờ (chưa VAT) cho khách timeband — 1 mốc gồm giá 3 khung giờ, áp dụng từ `fromMonth`.
 export interface TimebandPricePoint { fromMonth: string; caoDiem: number; thapDiem: number; binhThuong: number }
 
+// Cấu hình tính tiền cho 1 dịch vụ (dùng chung cho Customer cũ & từng ServiceSubscription mới).
+// Với phí quản lý (phiql): dùng flatPriceHistory/flatUnitPrice làm mức phí đ/tháng (cố định, không nhân sản lượng).
+export interface ChargeConfig {
+  chargeType: ChargeType
+  flatUnitPrice?: number
+  areaM2?: number
+  pricePerM2?: number
+  flatPriceHistory?: PricePoint[]
+  areaPriceHistory?: PricePoint[]
+  timebandPriceHistory?: TimebandPricePoint[]
+}
+// 1 dịch vụ mà khách đăng ký, kèm cấu hình tính tiền riêng của dịch vụ đó.
+export interface ServiceSubscription extends ChargeConfig { service: ServiceId }
+
 export interface Customer {
   id: string
   name: string
@@ -151,7 +176,10 @@ export interface Customer {
   active: boolean
   inactiveMonths?: string[]  // Các tháng (YYYY-MM) ki-ốt KHÔNG thuê (trống) — override active theo từng tháng
   note: string
-  // ── Phí quản lý (loại sử dụng độc lập với đồng hồ): thu 1 khoản cố định mỗi tháng ──
+  // ── Loại sử dụng: danh sách dịch vụ khách đăng ký (nguồn chính khi có) ──
+  // Vắng mặt ⇒ khách cũ: suy ra từ meterId + hasManagementFee (xem customerServices()).
+  services?: ServiceSubscription[]
+  // ── Phí quản lý (cũ — giữ để tương thích; khi có services[] thì dùng dịch vụ 'phiql') ──
   hasManagementFee?: boolean            // khách này có bị thu phí quản lý không
   managementFeePrice?: number           // (tương thích) mức phí tĩnh mới nhất (đ/tháng)
   managementFeeHistory?: PricePoint[]   // bảng phí quản lý theo thời điểm (đ/tháng)
@@ -165,6 +193,24 @@ export function isActiveInMonth(c: Customer, month: string): boolean {
   return !(c.inactiveMonths ?? []).includes(month)
 }
 
+// Dịch vụ "gốc" của khách cũ = đồng hồ đang gán (để nối dữ liệu usage/payment cũ chưa gắn service).
+export function primaryService(c: Customer): ServiceId { return METER_SERVICE[c.meterId] }
+
+// Danh sách dịch vụ của khách: ưu tiên services[]; nếu chưa có (dữ liệu cũ) suy ra từ
+// đồng hồ đang gán + phí quản lý cũ ⇒ giữ tương thích, không cần migrate dữ liệu.
+export function customerServices(c: Customer): ServiceSubscription[] {
+  if (c.services && c.services.length) return c.services
+  const out: ServiceSubscription[] = [{
+    service: METER_SERVICE[c.meterId], chargeType: c.chargeType,
+    flatUnitPrice: c.flatUnitPrice, areaM2: c.areaM2, pricePerM2: c.pricePerM2,
+    flatPriceHistory: c.flatPriceHistory, areaPriceHistory: c.areaPriceHistory, timebandPriceHistory: c.timebandPriceHistory,
+  }]
+  if (c.hasManagementFee) out.push({ service: 'phiql', chargeType: 'flat_vat_incl', flatUnitPrice: c.managementFeePrice ?? 0, flatPriceHistory: c.managementFeeHistory })
+  return out
+}
+export function customerHasService(c: Customer, s: ServiceId): boolean { return customerServices(c).some(x => x.service === s) }
+export function subFor(c: Customer, s: ServiceId): ServiceSubscription | undefined { return customerServices(c).find(x => x.service === s) }
+
 // Giá có hiệu lực cho tháng `month`: lấy mốc mới nhất có fromMonth <= month.
 // Nếu month đứng trước mọi mốc thì dùng mốc sớm nhất. Không có history thì dùng fallback (giá tĩnh cũ).
 export function resolvePrice(history: PricePoint[] | undefined, fallback: number, month: string): number {
@@ -176,10 +222,11 @@ export function resolvePrice(history: PricePoint[] | undefined, fallback: number
   return earliest.price
 }
 
-// Phí quản lý của 1 khách cho tháng `month` (đ). = 0 nếu không thu phí hoặc ki-ốt trống tháng đó.
+// Phí quản lý của 1 khách cho tháng `month` (đ). = 0 nếu không đăng ký phí QL hoặc ki-ốt trống tháng đó.
 export function managementFeeOf(c: Customer, month: string): number {
-  if (!c.hasManagementFee || !isActiveInMonth(c, month)) return 0
-  return resolvePrice(c.managementFeeHistory, c.managementFeePrice ?? 0, month)
+  const sub = subFor(c, 'phiql')
+  if (!sub || !isActiveInMonth(c, month)) return 0
+  return resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, month)
 }
 
 // Mốc đơn giá khung giờ có hiệu lực cho tháng `month`: mốc mới nhất có fromMonth <= month (giống resolvePrice).
@@ -192,8 +239,9 @@ export function resolveTimebandPoint(history: TimebandPricePoint[] | undefined, 
 }
 
 export interface CustomerUsage {
-  id: string              // `${customerId}_${month}`
+  id: string              // `${customerId}_${service}_${month}` (cũ: `${customerId}_${month}`)
   customerId: string
+  service?: ServiceId     // dịch vụ của bản ghi này; vắng mặt = dữ liệu cũ ⇒ thuộc đồng hồ gốc của khách
   month: string
   totalUnit: number                          // dùng cho flat_vat_incl (tổng kWh/m³ trong tháng) = chỉ số mới − cũ
   bandsKwh: Partial<Record<BandKey, number>>  // dùng cho timeband_excl_vat = chỉ số mới − cũ từng khung
@@ -206,7 +254,14 @@ export interface CustomerUsage {
   updatedAt: string
 }
 
-export type PaymentKind = 'meter' | 'management'  // khoản thu cho đồng hồ (điện/nước) hay cho phí quản lý
+// Tìm bản usage của (khách, dịch vụ, tháng): ưu tiên bản gắn đúng service; nếu không có thì
+// dùng bản cũ (chưa gắn service) khi service đó là đồng hồ gốc của khách ⇒ đọc được dữ liệu lịch sử.
+export function findUsage(usages: CustomerUsage[], customerId: string, service: ServiceId, month: string, primary: ServiceId): CustomerUsage | undefined {
+  return usages.find(u => u.customerId === customerId && u.month === month && u.service === service)
+    ?? (service === primary ? usages.find(u => u.customerId === customerId && u.month === month && !u.service) : undefined)
+}
+
+export type PaymentKind = 'meter' | 'management'  // (cũ) khoản thu cho đồng hồ hay phí quản lý
 export interface Payment {
   id: string
   customerId: string
@@ -214,8 +269,16 @@ export interface Payment {
   amount: number
   paidAt: string
   note: string
-  kind?: PaymentKind   // mặc định 'meter' (tương thích dữ liệu cũ chưa gắn loại)
+  service?: ServiceId  // dịch vụ được thu; vắng mặt = dữ liệu cũ (suy từ kind / đồng hồ gốc)
+  kind?: PaymentKind   // (cũ) 'management' ⇒ phiql; còn lại ⇒ đồng hồ gốc của khách
   createdAt: string
+}
+
+// Dịch vụ mà 1 khoản thu áp vào: ưu tiên service; nếu cũ thì kind='management' ⇒ phiql, còn lại ⇒ đồng hồ gốc.
+export function paymentService(p: Payment, primary: ServiceId): ServiceId {
+  if (p.service) return p.service
+  if (p.kind === 'management') return 'phiql'
+  return primary
 }
 
 // ── Công thức ────────────────────────────────────────────────────────────────
@@ -231,17 +294,17 @@ export function meterTotal(bands: Bands, vatPercent: number): number {
   return meterSubtotal(bands) + meterVat(bands, vatPercent)
 }
 
-export function customerCharge(customer: Customer, usage: CustomerUsage | undefined, reading: MeterReading | undefined): number {
-  const month = usage?.month || reading?.month || ''
-  if (customer.chargeType === 'flat_vat_incl') {
-    const price = resolvePrice(customer.flatPriceHistory, customer.flatUnitPrice, month)
+// Tính tiền cho 1 dịch vụ (subscription) trong tháng. `reading` để lấy đơn giá đồng hồ (timeband) & VAT.
+export function subCharge(cfg: ChargeConfig, usage: CustomerUsage | undefined, reading: MeterReading | undefined, month: string): number {
+  if (cfg.chargeType === 'flat_vat_incl') {
+    const price = resolvePrice(cfg.flatPriceHistory, cfg.flatUnitPrice ?? 0, month)
     return (usage?.totalUnit ?? 0) * price
   }
-  if (customer.chargeType === 'timeband_excl_vat') {
+  if (cfg.chargeType === 'timeband_excl_vat') {
     if (!reading) return 0
     const bandsKwh = usage?.bandsKwh ?? {}
     // Đơn giá riêng của khách theo mốc thời điểm; khung nào chưa set thì dùng đơn giá của đồng hồ tháng đó.
-    const pt = resolveTimebandPoint(customer.timebandPriceHistory, month)
+    const pt = resolveTimebandPoint(cfg.timebandPriceHistory, month)
     const subtotal = (['caoDiem', 'thapDiem', 'binhThuong'] as const).reduce((s, k) => {
       const custPrice = pt?.[k] ?? 0
       const price = custPrice > 0 ? custPrice : reading.bands[k].donGia
@@ -249,11 +312,20 @@ export function customerCharge(customer: Customer, usage: CustomerUsage | undefi
     }, 0)
     return subtotal * (1 + reading.vatPercent / 100)
   }
-  if (customer.chargeType === 'fixed_area') {
-    const price = resolvePrice(customer.areaPriceHistory, customer.pricePerM2, month)
-    return customer.areaM2 * price
+  if (cfg.chargeType === 'fixed_area') {
+    const price = resolvePrice(cfg.areaPriceHistory, cfg.pricePerM2 ?? 0, month)
+    return (cfg.areaM2 ?? 0) * price
   }
   return 0 // remainder tính ở meterAllocation
+}
+
+// Tương thích: tính tiền của khách cho đồng hồ của `reading` (dùng đúng cấu hình dịch vụ tương ứng).
+export function customerCharge(customer: Customer, usage: CustomerUsage | undefined, reading: MeterReading | undefined): number {
+  const month = usage?.month || reading?.month || ''
+  const service = reading ? METER_SERVICE[reading.meterId] : primaryService(customer)
+  const sub = subFor(customer, service)
+  if (!sub) return 0
+  return subCharge(sub, usage, reading, month)
 }
 
 export interface AllocationRow { customer: Customer; amount: number }
@@ -265,12 +337,14 @@ export interface Allocation {
 }
 
 export function meterAllocation(reading: MeterReading, customers: Customer[], usages: CustomerUsage[]): Allocation {
-  const meterCustomers    = customers.filter(c => c.meterId === reading.meterId && isActiveInMonth(c, reading.month))
-  const priced            = meterCustomers.filter(c => c.chargeType !== 'remainder')
-  const remainderCustomers = meterCustomers.filter(c => c.chargeType === 'remainder')
-  const usageByCustomer   = new Map(usages.filter(u => u.month === reading.month).map(u => [u.customerId, u]))
+  const service = METER_SERVICE[reading.meterId]
+  const meterCustomers    = customers.filter(c => customerHasService(c, service) && isActiveInMonth(c, reading.month))
+  const isRemainder = (c: Customer) => subFor(c, service)?.chargeType === 'remainder'
+  const priced            = meterCustomers.filter(c => !isRemainder(c))
+  const remainderCustomers = meterCustomers.filter(isRemainder)
+  const usageOf = (c: Customer) => findUsage(usages, c.id, service, reading.month, primaryService(c))
 
-  const pricedRows: AllocationRow[] = priced.map(c => ({ customer: c, amount: customerCharge(c, usageByCustomer.get(c.id), reading) }))
+  const pricedRows: AllocationRow[] = priced.map(c => ({ customer: c, amount: customerCharge(c, usageOf(c), reading) }))
   const allocated = pricedRows.reduce((s, r) => s + r.amount, 0)
   const total = meterTotal(reading.bands, reading.vatPercent)
   const remainderTotal = Math.max(0, total - allocated)
@@ -283,11 +357,12 @@ export function meterAllocation(reading: MeterReading, customers: Customer[], us
 // Chi tiết phần còn lại theo khung giờ (chỉ áp dụng ý nghĩa đầy đủ cho khách timeband_excl_vat;
 // khách flat/fixed được trừ thẳng vào tổng, không gắn với khung giờ cụ thể).
 export function remainderByBand(reading: MeterReading, customers: Customer[], usages: CustomerUsage[]): Record<BandKey, number> {
-  const timebandCustomers = customers.filter(c => c.meterId === reading.meterId && isActiveInMonth(c, reading.month) && c.chargeType === 'timeband_excl_vat')
-  const usageByCustomer = new Map(usages.filter(u => u.month === reading.month).map(u => [u.customerId, u]))
+  const service = METER_SERVICE[reading.meterId]
+  const timebandCustomers = customers.filter(c => customerHasService(c, service) && isActiveInMonth(c, reading.month) && subFor(c, service)?.chargeType === 'timeband_excl_vat')
+  const usageOf = (c: Customer) => findUsage(usages, c.id, service, reading.month, primaryService(c))
   const out: Record<BandKey, number> = { caoDiem: 0, thapDiem: 0, binhThuong: 0, toanThoiGian: 0 }
   for (const k of BAND_KEYS) {
-    const usedByCustomers = timebandCustomers.reduce((s, c) => s + (usageByCustomer.get(c.id)?.bandsKwh?.[k] ?? 0), 0)
+    const usedByCustomers = timebandCustomers.reduce((s, c) => s + (usageOf(c)?.bandsKwh?.[k] ?? 0), 0)
     out[k] = Math.max(0, bandMoney(reading.bands[k]) - usedByCustomers * reading.bands[k].donGia)
   }
   return out
@@ -318,10 +393,10 @@ export function isAmountAnomalous(currentTotal: number, priorReadings: MeterRead
 // ── Tính tiền điện BQT (Ban quản trị) cho đồng hồ 1 ──────────────────────────
 const ELECTRIC_BANDS = ['caoDiem', 'thapDiem', 'binhThuong'] as const
 
-// Sản lượng (kWh) 1 khách đã dùng trong tháng (theo loại tính tiền).
-export function usageKwh(customer: Customer, usage: CustomerUsage | undefined): number {
+// Sản lượng (kWh) của 1 dịch vụ đã dùng trong tháng (theo loại tính tiền của dịch vụ đó).
+export function usageKwh(cfg: ChargeConfig, usage: CustomerUsage | undefined): number {
   if (!usage) return 0
-  if (customer.chargeType === 'timeband_excl_vat') {
+  if (cfg.chargeType === 'timeband_excl_vat') {
     const b = usage.bandsKwh ?? {}
     return (b.caoDiem ?? 0) + (b.thapDiem ?? 0) + (b.binhThuong ?? 0)
   }
@@ -352,8 +427,9 @@ export function computeBqt(
   ratio: BqtRatio = DEFAULT_BQT_RATIO,
 ): BqtCalc {
   const floorReadings = reading.floorReadings ?? []
-  const usageByCustomer = new Map(usages.filter(u => u.month === reading.month).map(u => [u.customerId, u]))
-  const meterCustomers = customers.filter(c => c.meterId === reading.meterId && isActiveInMonth(c, reading.month))
+  const service = METER_SERVICE[reading.meterId]
+  const meterCustomers = customers.filter(c => customerHasService(c, service) && isActiveInMonth(c, reading.month))
+  const kwhOf = (c: Customer) => usageKwh(subFor(c, service)!, findUsage(usages, c.id, service, reading.month, primaryService(c)))
 
   const floors: BqtFloorRow[] = floorReadings.map(raw => {
     const f = normalizeFloor(raw)
@@ -361,7 +437,7 @@ export function computeBqt(
     const g = (f.group || '').trim()
     const customerKwh = meterCustomers
       .filter(c => (c.group || '').trim() === g && g !== '')
-      .reduce((s, c) => s + usageKwh(c, usageByCustomer.get(c.id)), 0)
+      .reduce((s, c) => s + kwhOf(c), 0)
     return { group: f.group, floorKwh, customerKwh, bqtKwh: Math.max(0, floorKwh - customerKwh) }
   })
 

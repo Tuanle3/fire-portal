@@ -8,6 +8,7 @@ import {
   FloorReading, FloorBandKey, FLOOR_BAND_KEYS, BqtRatio, DEFAULT_BQT_RATIO,
   defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, floorBandKwhSplit, computeBqt, isActiveInMonth, normalizeFloor,
   WATER_METER_KEYS, WATER_METER_LABELS, defaultWaterFloorReadings, waterFloorTotal,
+  METER_SERVICE, subFor, findUsage, primaryService, customerHasService,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
 import { exportMeter } from '@/lib/dien-nuoc-excel'
@@ -219,7 +220,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
     setSavedAt(now)
   }
 
-  const meterCustomers = customers.filter(c => c.meterId === meterId && isActiveInMonth(c, month))
+  const meterCustomers = customers.filter(c => customerHasService(c, METER_SERVICE[meterId]) && isActiveInMonth(c, month))
   const draftReading: MeterReading = { id: '', meterId, month, bands, vatPercent, note, floorReadings, bqtRatio, createdAt: '', updatedAt: '' }
 
   // Cảnh báo sai lệch ngay khi đang nhập (trước khi lưu)
@@ -329,7 +330,7 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
   onSave: () => void; saving: boolean; savedAt: string | null
 }) {
   const calc = computeBqt(reading, customers, usages, bqtRatio)
-  const groupSuggestions = Array.from(new Set(customers.filter(c => c.meterId === 1 && c.active).map(c => (c.group || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'))
+  const groupSuggestions = Array.from(new Set(customers.filter(c => customerHasService(c, 'dh1') && c.active).map(c => (c.group || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'))
 
   const [dragIdx, setDragIdx] = useState<number | null>(null)  // kéo-thả đổi vị trí khu
   const moveFloor = (from: number | null, to: number) => {
@@ -508,7 +509,7 @@ function WaterFloorSection({ readings, month, customers, floorReadings, setFloor
   onSave: () => void; saving: boolean; savedAt: string | null
 }) {
   const groupSuggestions = Array.from(new Set([
-    ...customers.filter(c => c.meterId === 3 && c.active).map(c => (c.group || '').trim()).filter(Boolean),
+    ...customers.filter(c => customerHasService(c, 'nuoc') && c.active).map(c => (c.group || '').trim()).filter(Boolean),
   ])).sort((a, b) => a.localeCompare(b, 'vi'))
 
   const [dragIdx, setDragIdx] = useState<number | null>(null)
@@ -825,9 +826,10 @@ function CustomerUsageTable({ meterId, month, customers, readings, usages, readi
   meterId: MeterId; month: string; customers: Customer[]; readings: MeterReading[]
   usages: CustomerUsage[]; reading: MeterReading; unit: string
 }) {
+  const service = METER_SERVICE[meterId]
   const histMonths = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
     .sort((a, b) => a.month.localeCompare(b.month))
-  const meterCustomers = customers.filter(c => c.meterId === meterId && isActiveInMonth(c, month))
+  const meterCustomers = customers.filter(c => customerHasService(c, service) && isActiveInMonth(c, month))
   if (meterCustomers.length === 0) return null
 
   // Luôn bao gồm tháng hiện tại trong cột để đối chiếu ngay khi nhập
@@ -858,7 +860,7 @@ function CustomerUsageTable({ meterId, month, customers, readings, usages, readi
           <tbody>
             {meterCustomers.map(c => (
               <CURow key={c.id} customer={c} month={month}
-                usage={usages.find(u => u.customerId === c.id && u.month === month)}
+                usage={findUsage(usages, c.id, service, month, primaryService(c))}
                 allUsages={usages} reading={reading}
                 months={months} readingByMonth={readingByMonth} unit={unit} />
             ))}
@@ -874,7 +876,11 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
   allUsages: CustomerUsage[]; reading: MeterReading
   months: MeterReading[]; readingByMonth: Map<string, MeterReading>; unit: string
 }) {
-  const prevUsage = useMemo(() => allUsages.find(u => u.customerId === c.id && u.month === prevMonthStr(month)), [allUsages, c.id, month])
+  const service = METER_SERVICE[reading.meterId]
+  const primary = primaryService(c)
+  const sub = subFor(c, service)!            // luôn tồn tại vì đã lọc theo customerHasService
+  const ct = sub.chargeType
+  const prevUsage = useMemo(() => findUsage(allUsages, c.id, service, prevMonthStr(month), primary), [allUsages, c.id, service, month, primary])
   const [indexOld, setIndexOld] = useState(usage?.indexOld ?? prevUsage?.indexNew ?? 0)
   const [indexNew, setIndexNew] = useState(usage?.indexNew ?? 0)
   const [bandsIndexOld, setBandsIndexOld] = useState<Partial<Record<BandKey, number>>>(usage?.bandsIndexOld ?? prevUsage?.bandsIndexNew ?? {})
@@ -897,18 +903,18 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
   const save = async () => {
     setSaving(true)
     const now = new Date().toISOString().slice(0, 10)
-    const id = `${c.id}_${month}`
-    await saveUsage({ id, customerId: c.id, month, totalUnit, bandsKwh, indexOld, indexNew, bandsIndexOld, bandsIndexNew, createdAt: usage?.createdAt || now, updatedAt: now })
+    const id = `${c.id}_${service}_${month}`
+    await saveUsage({ id, customerId: c.id, service, month, totalUnit, bandsKwh, indexOld, indexNew, bandsIndexOld, bandsIndexNew, createdAt: usage?.createdAt || now, updatedAt: now })
     setSaving(false)
   }
 
-  const draftUsage: CustomerUsage = { id: '', customerId: c.id, month, totalUnit, bandsKwh, indexOld, indexNew, bandsIndexOld, bandsIndexNew, createdAt: '', updatedAt: '' }
+  const draftUsage: CustomerUsage = { id: '', customerId: c.id, service, month, totalUnit, bandsKwh, indexOld, indexNew, bandsIndexOld, bandsIndexNew, createdAt: '', updatedAt: '' }
   const charge = customerCharge(c, draftUsage, reading)
 
-  const usageOf = (m: string) => allUsages.find(u => u.customerId === c.id && u.month === m)
+  const usageOf = (m: string) => findUsage(allUsages, c.id, service, m, primaryService(c))
   const usageUnit = (u: CustomerUsage | undefined): number | null => {
-    if (c.chargeType === 'flat_vat_incl') return u?.totalUnit ?? 0
-    if (c.chargeType === 'timeband_excl_vat') { const b = u?.bandsKwh ?? {}; return (b.caoDiem ?? 0) + (b.thapDiem ?? 0) + (b.binhThuong ?? 0) }
+    if (ct === 'flat_vat_incl') return u?.totalUnit ?? 0
+    if (ct === 'timeband_excl_vat') { const b = u?.bandsKwh ?? {}; return (b.caoDiem ?? 0) + (b.thapDiem ?? 0) + (b.binhThuong ?? 0) }
     return null
   }
 
@@ -918,23 +924,23 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
     const sl = usageUnit(u)
     const tt = isCurrent ? charge : customerCharge(c, u, readingByMonth.get(r.month))
     const priceLabel = (() => {
-      if (c.chargeType === 'flat_vat_incl') {
-        const p = resolvePrice(c.flatPriceHistory, c.flatUnitPrice, r.month)
+      if (ct === 'flat_vat_incl') {
+        const p = resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, r.month)
         return `${fmtKwh(sl ?? 0)} × ${fmtDec(p)}`
       }
-      if (c.chargeType === 'fixed_area') {
-        const p = resolvePrice(c.areaPriceHistory, c.pricePerM2, r.month)
-        return `${c.areaM2} m² × ${fmtDec(p)}`
+      if (ct === 'fixed_area') {
+        const p = resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, r.month)
+        return `${sub.areaM2 ?? 0} m² × ${fmtDec(p)}`
       }
       return null
     })()
 
     // Chi tiết khung giờ cho timeband
     const tbDetail = (() => {
-      if (c.chargeType !== 'timeband_excl_vat') return null
+      if (ct !== 'timeband_excl_vat') return null
       const mU = isCurrent ? draftUsage : usageOf(r.month)
       const mBands = mU?.bandsKwh ?? {}
-      const mPt = resolveTimebandPoint(c.timebandPriceHistory, r.month)
+      const mPt = resolveTimebandPoint(sub.timebandPriceHistory, r.month)
       const mReading = readingByMonth.get(r.month)
       const lines = (['caoDiem', 'thapDiem', 'binhThuong'] as const).map(k => {
         const kw = mBands[k] ?? 0
@@ -942,10 +948,10 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
         const price = custP > 0 ? custP : (mReading?.bands[k].donGia ?? 0)
         return { label: BAND_LABELS[k], kw, price, amt: kw * price }
       })
-      const sub = lines.reduce((s, l) => s + l.amt, 0)
+      const subt = lines.reduce((s, l) => s + l.amt, 0)
       const vp = mReading?.vatPercent ?? 8
-      const vat = sub * vp / 100
-      return { lines, sub, vat, total: sub + vat, vatPercent: vp }
+      const vat = subt * vp / 100
+      return { lines, sub: subt, vat, total: subt + vat, vatPercent: vp }
     })()
 
     return (
@@ -970,19 +976,19 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
     )
   })
 
-  if (c.chargeType === 'fixed_area') {
-    const price = resolvePrice(c.areaPriceHistory, c.pricePerM2, month)
+  if (ct === 'fixed_area') {
+    const price = resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, month)
     return (
       <tr>
         <td className="dn-sticky-col" style={{ fontWeight: 600 }}>{c.name}</td>
-        <td className="dn-sticky-col dn-sticky-input"><span style={{ color: 'var(--muted)', fontSize: 11.5 }}>{c.areaM2} m² × {fmtDec(price)} đ/m²</span></td>
+        <td className="dn-sticky-col dn-sticky-input"><span style={{ color: 'var(--muted)', fontSize: 11.5 }}>{sub.areaM2 ?? 0} m² × {fmtDec(price)} đ/m²</span></td>
         <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right' }}><b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b></td>
         <td className="dn-sticky-col dn-sticky-btn"></td>
         {monthCells}
       </tr>
     )
   }
-  if (c.chargeType === 'remainder') {
+  if (ct === 'remainder') {
     return (
       <tr>
         <td className="dn-sticky-col" style={{ fontWeight: 600 }}>{c.name}</td>
@@ -994,9 +1000,9 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
     )
   }
 
-  const flatPrice = resolvePrice(c.flatPriceHistory, c.flatUnitPrice, month)
+  const flatPrice = resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, month)
 
-  if (c.chargeType === 'flat_vat_incl') {
+  if (ct === 'flat_vat_incl') {
     return (
       <tr>
         <td className="dn-sticky-col" style={{ fontWeight: 600 }}>{c.name}</td>
@@ -1017,7 +1023,7 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
   }
 
   // timeband_excl_vat
-  const tbPt = resolveTimebandPoint(c.timebandPriceHistory, month)
+  const tbPt = resolveTimebandPoint(sub.timebandPriceHistory, month)
   const tbPrices = (['caoDiem', 'thapDiem', 'binhThuong'] as const).map(k => {
     const custPrice = tbPt?.[k] ?? 0
     return custPrice > 0 ? custPrice : (reading.bands[k].donGia ?? 0)

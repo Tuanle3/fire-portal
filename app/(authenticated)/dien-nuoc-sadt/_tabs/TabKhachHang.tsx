@@ -1,14 +1,14 @@
 'use client'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import {
-  Customer, MeterId, ChargeType, PricePoint, TimebandPricePoint,
-  meterLabel, CHARGE_TYPE_LABELS, resolveTimebandPoint, isActiveInMonth,
+  Customer, ChargeType, PricePoint, TimebandPricePoint,
+  ServiceId, ServiceSubscription, SERVICE_IDS, SERVICE_METER, serviceLabel, customerServices,
+  CHARGE_TYPE_LABELS, resolveTimebandPoint, isActiveInMonth,
 } from '@/lib/dien-nuoc-types'
 import { saveCustomer, deleteCustomer } from '@/lib/dien-nuoc-store'
 import { exportKhachHang } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
 
-const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 20 })  // giữ phần lẻ cho đơn giá
 
 const EMPTY_TIMEBAND_ROW: TimebandPricePoint = { fromMonth: '', caoDiem: 0, thapDiem: 0, binhThuong: 0 }
@@ -103,39 +103,129 @@ function TimebandPriceEditor({ value, onChange }: {
   )
 }
 
+// Seed bảng giá cho 1 dịch vụ (để editor hiển thị ít nhất 1 dòng, tương thích khách cũ chỉ có giá tĩnh).
+function seedSubHistories(s: ServiceSubscription): ServiceSubscription {
+  return {
+    ...s,
+    flatPriceHistory: seedHistory(s.flatPriceHistory, s.flatUnitPrice ?? 0),
+    areaPriceHistory: seedHistory(s.areaPriceHistory, s.pricePerM2 ?? 0),
+    timebandPriceHistory: (s.timebandPriceHistory && s.timebandPriceHistory.length > 0) ? s.timebandPriceHistory : [{ ...EMPTY_TIMEBAND_ROW }],
+  }
+}
+function newSub(service: ServiceId): ServiceSubscription {
+  return seedSubHistories({ service, chargeType: 'flat_vat_incl', flatUnitPrice: 0, areaM2: 0, pricePerM2: 0 })
+}
+
+// Khối cấu hình tính tiền cho 1 dịch vụ. Phí quản lý (phiql): chỉ mức phí đ/tháng.
+function ServiceConfigBlock({ sub, meterNames, onChange }: {
+  sub: ServiceSubscription; meterNames: Record<number, string>; onChange: (patch: Partial<ServiceSubscription>) => void
+}) {
+  const isPhiql = sub.service === 'phiql'
+  const isWater = sub.service === 'nuoc'
+  return (
+    <div style={{ border: '1px solid var(--border3)', borderRadius: 10, padding: 12, marginBottom: 10, background: '#fff' }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>⚙ {serviceLabel(sub.service, meterNames)}</div>
+      {isPhiql ? (
+        <PriceHistoryEditor label="Bảng phí quản lý theo thời điểm" unit="đ/tháng"
+          value={sub.flatPriceHistory ?? [{ fromMonth: '', price: 0 }]} onChange={v => onChange({ flatPriceHistory: v })} />
+      ) : (
+        <>
+          <div style={{ marginBottom: 10, maxWidth: 260 }}>
+            <label className="dn-label">Cách tính tiền</label>
+            <select className="dn-input" value={sub.chargeType} onChange={e => onChange({ chargeType: e.target.value as ChargeType })}>
+              {(Object.keys(CHARGE_TYPE_LABELS) as ChargeType[]).map(k => <option key={k} value={k}>{CHARGE_TYPE_LABELS[k]}</option>)}
+            </select>
+          </div>
+          {sub.chargeType === 'flat_vat_incl' && (
+            <PriceHistoryEditor label={isWater ? 'Bảng giá nước theo thời điểm (đã gồm VAT)' : 'Bảng giá cố định theo thời điểm (đã gồm VAT)'}
+              unit={isWater ? 'đ/m³' : 'đ/đơn vị'} value={sub.flatPriceHistory ?? [{ fromMonth: '', price: 0 }]} onChange={v => onChange({ flatPriceHistory: v })} />
+          )}
+          {sub.chargeType === 'fixed_area' && (
+            <>
+              <div style={{ marginBottom: 10, maxWidth: 220 }}>
+                <label className="dn-label">Diện tích (m²)</label>
+                <input type="number" className="dn-input" value={sub.areaM2 || ''} onChange={e => onChange({ areaM2: Number(e.target.value) })} />
+              </div>
+              <PriceHistoryEditor label="Bảng giá / m² / tháng theo thời điểm" unit="đ/m²"
+                value={sub.areaPriceHistory ?? [{ fromMonth: '', price: 0 }]} onChange={v => onChange({ areaPriceHistory: v })} />
+            </>
+          )}
+          {sub.chargeType === 'timeband_excl_vat' && (
+            <>
+              <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 10 }}>
+                Tính theo sản lượng thực tế từng khung giờ (nhập ở tab đồng hồ tương ứng) × đơn giá bên dưới, cộng thêm VAT theo đồng hồ.
+              </div>
+              <TimebandPriceEditor value={sub.timebandPriceHistory ?? [{ ...EMPTY_TIMEBAND_ROW }]} onChange={v => onChange({ timebandPriceHistory: v })} />
+            </>
+          )}
+          {sub.chargeType === 'remainder' && (
+            <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic' }}>
+              Khách này tự động gánh phần còn lại của đồng hồ sau khi trừ hết các khách khác — không cần nhập sản lượng.
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel }: {
   initial?: Customer; meterNames: Record<number, string>; groupSuggestions: string[]
   onSave: (c: Customer) => void; onCancel: () => void
 }) {
   const [form, setForm] = useState<Omit<Customer, 'id' | 'createdAt'>>(
     initial
-      ? {
-          ...initial,
-          flatPriceHistory: seedHistory(initial.flatPriceHistory, initial.flatUnitPrice),
-          areaPriceHistory: seedHistory(initial.areaPriceHistory, initial.pricePerM2),
-          timebandPriceHistory: (initial.timebandPriceHistory && initial.timebandPriceHistory.length > 0) ? initial.timebandPriceHistory : [{ ...EMPTY_TIMEBAND_ROW }],
-          managementFeeHistory: seedHistory(initial.managementFeeHistory, initial.managementFeePrice ?? 0),
-        }
-      : { ...EMPTY }
+      ? { ...initial, services: customerServices(initial).map(seedSubHistories) }
+      : { ...EMPTY, services: [newSub('dh1')] }
   )
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) => setForm(f => ({ ...f, [k]: v }))
+
+  const services = form.services ?? []
+  const hasSvc = (s: ServiceId) => services.some(x => x.service === s)
+  const toggleSvc = (s: ServiceId) => setForm(f => {
+    const cur = f.services ?? []
+    return { ...f, services: cur.some(x => x.service === s) ? cur.filter(x => x.service !== s) : [...cur, newSub(s)] }
+  })
+  const setSvc = (s: ServiceId, patch: Partial<ServiceSubscription>) =>
+    setForm(f => ({ ...f, services: (f.services ?? []).map(x => x.service === s ? { ...x, ...patch } : x) }))
 
   const submit = () => {
     if (!form.name.trim()) return
     const now = new Date().toISOString().slice(0, 10)
-    // Đồng bộ giá tĩnh cũ = mốc giá mới nhất (để tương thích chỗ nào còn đọc flatUnitPrice/pricePerM2).
     const latest = (h: PricePoint[]) => [...h].filter(p => p.price > 0).sort((a, b) => (b.fromMonth || '').localeCompare(a.fromMonth || ''))[0]?.price ?? 0
-    const flatH = (form.flatPriceHistory ?? []).filter(p => p.price > 0)
-    const areaH = (form.areaPriceHistory ?? []).filter(p => p.price > 0)
-    const tbH = (form.timebandPriceHistory ?? []).filter(p => p.caoDiem > 0 || p.thapDiem > 0 || p.binhThuong > 0)
-    const mgmtH = form.hasManagementFee ? (form.managementFeeHistory ?? []).filter(p => p.price > 0) : []
+    // Dọn bảng giá của từng dịch vụ + đồng bộ giá tĩnh (tương thích).
+    const cleanSub = (s: ServiceSubscription): ServiceSubscription => {
+      const flatH = (s.flatPriceHistory ?? []).filter(p => p.price > 0)
+      const areaH = (s.areaPriceHistory ?? []).filter(p => p.price > 0)
+      const tbH = (s.timebandPriceHistory ?? []).filter(p => p.caoDiem > 0 || p.thapDiem > 0 || p.binhThuong > 0)
+      return {
+        service: s.service, chargeType: s.chargeType,
+        flatUnitPrice: flatH.length ? latest(flatH) : (s.flatUnitPrice ?? 0),
+        areaM2: s.areaM2 ?? 0, pricePerM2: areaH.length ? latest(areaH) : (s.pricePerM2 ?? 0),
+        flatPriceHistory: flatH, areaPriceHistory: areaH, timebandPriceHistory: tbH,
+      }
+    }
+    // Sắp xếp dịch vụ theo thứ tự chuẩn để hiển thị ổn định.
+    const cleaned = SERVICE_IDS.filter(hasSvc).map(s => cleanSub(services.find(x => x.service === s)!))
+    const meterSub = cleaned.find(s => s.service !== 'phiql')
+    const phiqlSub = cleaned.find(s => s.service === 'phiql')
+    const meterId = meterSub ? SERVICE_METER[meterSub.service]! : (initial?.meterId ?? 1)
+
     onSave({
       ...(initial ?? { id: `c${Date.now()}`, createdAt: now }), ...form,
-      flatPriceHistory: flatH, areaPriceHistory: areaH, timebandPriceHistory: tbH,
-      flatUnitPrice: flatH.length ? latest(flatH) : form.flatUnitPrice,
-      pricePerM2:    areaH.length ? latest(areaH) : form.pricePerM2,
-      managementFeeHistory: mgmtH,
-      managementFeePrice: mgmtH.length ? latest(mgmtH) : (form.hasManagementFee ? form.managementFeePrice : 0),
+      services: cleaned,
+      // Đồng bộ field cũ từ dịch vụ đồng hồ chính + phí quản lý (để code/kết xuất cũ vẫn đọc được)
+      meterId,
+      chargeType: meterSub?.chargeType ?? 'flat_vat_incl',
+      flatUnitPrice: meterSub?.flatUnitPrice ?? 0,
+      areaM2: meterSub?.areaM2 ?? 0,
+      pricePerM2: meterSub?.pricePerM2 ?? 0,
+      flatPriceHistory: meterSub?.flatPriceHistory ?? [],
+      areaPriceHistory: meterSub?.areaPriceHistory ?? [],
+      timebandPriceHistory: meterSub?.timebandPriceHistory ?? [],
+      hasManagementFee: !!phiqlSub,
+      managementFeeHistory: phiqlSub?.flatPriceHistory ?? [],
+      managementFeePrice: phiqlSub?.flatUnitPrice ?? 0,
     } as Customer)
   }
 
@@ -152,18 +242,6 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
           <datalist id="dn-group-suggestions">
             {groupSuggestions.map(g => <option key={g} value={g} />)}
           </datalist>
-        </div>
-        <div>
-          <label className="dn-label">Đồng hồ</label>
-          <select className="dn-input" value={form.meterId} onChange={e => set('meterId', Number(e.target.value) as MeterId)}>
-            {([1, 2, 3] as MeterId[]).map(id => <option key={id} value={id}>{meterLabel(meterNames, id)}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="dn-label">Cách tính tiền</label>
-          <select className="dn-input" value={form.chargeType} onChange={e => set('chargeType', e.target.value as ChargeType)}>
-            {(Object.keys(CHARGE_TYPE_LABELS) as ChargeType[]).map(k => <option key={k} value={k}>{CHARGE_TYPE_LABELS[k]}</option>)}
-          </select>
         </div>
       </div>
 
@@ -186,62 +264,25 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
         </div>
       </div>
 
-      {form.chargeType === 'flat_vat_incl' && (
-        <PriceHistoryEditor
-          label="Bảng giá cố định theo thời điểm (đã gồm VAT)"
-          unit="đ/đơn vị"
-          value={form.flatPriceHistory ?? [{ fromMonth: '', price: 0 }]}
-          onChange={v => set('flatPriceHistory', v)}
-        />
-      )}
-      {form.chargeType === 'fixed_area' && (
-        <>
-          <div style={{ marginBottom: 10, maxWidth: 220 }}>
-            <label className="dn-label">Diện tích (m²)</label>
-            <input type="number" className="dn-input" value={form.areaM2 || ''} onChange={e => set('areaM2', Number(e.target.value))} />
-          </div>
-          <PriceHistoryEditor
-            label="Bảng giá / m² / tháng theo thời điểm"
-            unit="đ/m²"
-            value={form.areaPriceHistory ?? [{ fromMonth: '', price: 0 }]}
-            onChange={v => set('areaPriceHistory', v)}
-          />
-        </>
-      )}
-      {form.chargeType === 'timeband_excl_vat' && (
-        <>
-          <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 10 }}>
-            Tính theo sản lượng thực tế từng khung giờ (nhập ở tab "Nhập chỉ số điện nước") × đơn giá bên dưới, cộng thêm VAT theo đồng hồ.
-          </div>
-          <TimebandPriceEditor
-            value={form.timebandPriceHistory ?? [{ ...EMPTY_TIMEBAND_ROW }]}
-            onChange={v => set('timebandPriceHistory', v)}
-          />
-        </>
-      )}
-      {form.chargeType === 'remainder' && (
-        <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 10 }}>
-          Khách này sẽ tự động gánh phần còn lại của đồng hồ sau khi trừ hết các khách khác — không cần nhập sản lượng.
+      {/* LOẠI SỬ DỤNG: tích nhiều dịch vụ; mỗi dịch vụ có cấu hình tính tiền riêng và hiện ở tab tương ứng */}
+      <div style={{ borderTop: '1px dashed var(--border3)', paddingTop: 12, marginBottom: 10 }}>
+        <label className="dn-label" style={{ marginBottom: 6 }}>Loại sử dụng (chọn tất cả dịch vụ khách dùng)</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 12 }}>
+          {SERVICE_IDS.map(s => (
+            <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: hasSvc(s) ? 'var(--navy)' : 'var(--muted)' }}>
+              <input type="checkbox" checked={hasSvc(s)} onChange={() => toggleSvc(s)} style={{ margin: 0 }} />
+              {serviceLabel(s, meterNames)}
+            </label>
+          ))}
         </div>
-      )}
-
-      {/* Loại sử dụng bổ sung: Phí quản lý (độc lập với đồng hồ điện/nước ở trên) */}
-      <div style={{ borderTop: '1px dashed var(--border3)', paddingTop: 10, marginBottom: 10 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>
-          <input type="checkbox" checked={!!form.hasManagementFee} onChange={e => set('hasManagementFee', e.target.checked)} style={{ margin: 0 }} />
-          Thu phí quản lý (dịch vụ)
-        </label>
-        <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', margin: '4px 0 8px' }}>
-          Khoản phí cố định thu hàng tháng, độc lập với tiền điện/nước. Khách bật mục này sẽ hiện ở tab “Phí quản lý” để theo dõi & thu.
-        </div>
-        {form.hasManagementFee && (
-          <PriceHistoryEditor
-            label="Bảng phí quản lý theo thời điểm"
-            unit="đ/tháng"
-            value={form.managementFeeHistory ?? [{ fromMonth: '', price: 0 }]}
-            onChange={v => set('managementFeeHistory', v)}
-          />
+        {services.length === 0 && (
+          <div style={{ fontSize: 11.5, color: '#8C1F1F', fontStyle: 'italic', marginBottom: 8 }}>
+            Chưa chọn dịch vụ nào — khách sẽ không xuất hiện ở tab nào. Hãy tích ít nhất 1 loại sử dụng.
+          </div>
         )}
+        {SERVICE_IDS.filter(hasSvc).map(s => (
+          <ServiceConfigBlock key={s} sub={services.find(x => x.service === s)!} meterNames={meterNames} onChange={patch => setSvc(s, patch)} />
+        ))}
       </div>
 
       <div style={{ marginBottom: 10 }}>
@@ -360,8 +401,13 @@ export function TabKhachHang({ customers, meterNames, month }: { customers: Cust
                   <td>{c.tenantName || '—'}</td>
                   <td>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                      <span className="badge" style={{ background: 'var(--surf2)', color: 'var(--navy)', border: '1px solid var(--border3)' }}>{meterLabel(meterNames, c.meterId)}</span>
-                      {c.hasManagementFee && <span className="badge badge-amber">Phí QL</span>}
+                      {customerServices(c).map(s => (
+                        <span key={s.service} className={`badge${s.service === 'phiql' ? ' badge-amber' : ''}`}
+                          style={s.service === 'phiql' ? undefined : { background: 'var(--surf2)', color: 'var(--navy)', border: '1px solid var(--border3)' }}>
+                          {serviceLabel(s.service, meterNames)}
+                        </span>
+                      ))}
+                      {customerServices(c).length === 0 && '—'}
                     </div>
                   </td>
                   <td>{CHARGE_TYPE_LABELS[c.chargeType]}</td>

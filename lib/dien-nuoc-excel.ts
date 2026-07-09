@@ -8,6 +8,8 @@ import {
   BAND_KEYS, BAND_LABELS, METER_UNIT, meterLabel,
   meterSubtotal, meterVat, meterTotal, meterAllocation,
   resolvePrice, resolveTimebandPoint, usageKwh, computeBqt, isActiveInMonth, managementFeeOf,
+  customerServices, customerHasService, subFor, findUsage, primaryService, paymentService,
+  METER_SERVICE, serviceLabel,
   CHARGE_TYPE_LABELS, DEFAULT_BQT_RATIO,
   FloorBandKey, normalizeFloor, floorBandKwh, floorTotalKwh,
 } from './dien-nuoc-types'
@@ -69,6 +71,7 @@ export function exportMeter(
   const label = meterLabel(meterNames, meterId)
   const unit = METER_UNIT[meterId]
   const isWater = meterId === 3
+  const service = METER_SERVICE[meterId]
   const visibleBands: BandKey[] = isWater ? ['toanThoiGian'] : BAND_KEYS
   const wb = XLSX.utils.book_new()
 
@@ -107,16 +110,19 @@ export function exportMeter(
   // Sheet 3 — Sản lượng & tiền khách hàng tháng hiện tại
   if (cur) {
     const alloc = meterAllocation(cur, customers, usages)
-    const usageByCustomer = new Map(usages.filter(u => u.month === month).map(u => [u.customerId, u]))
-    const rows: Row[] = alloc.rows.map(({ customer: c, amount }) => ({
-      'Khách hàng':    c.name,
-      'Nhóm':          c.group?.trim() || '',
-      'Tầng':          c.floor || '',
-      'Mã ki-ốt':      c.kioskCode || '',
-      'Cách tính tiền': CHARGE_TYPE_LABELS[c.chargeType],
-      [`Sản lượng (${unit})`]: c.chargeType === 'remainder' ? '' : r2(usageKwh(c, usageByCustomer.get(c.id))),
-      'Thành tiền (đ)': r0(amount),
-    }))
+    const rows: Row[] = alloc.rows.map(({ customer: c, amount }) => {
+      const sub = subFor(c, service)!
+      const u = findUsage(usages, c.id, service, month, primaryService(c))
+      return {
+        'Khách hàng':    c.name,
+        'Nhóm':          c.group?.trim() || '',
+        'Tầng':          c.floor || '',
+        'Mã ki-ốt':      c.kioskCode || '',
+        'Cách tính tiền': CHARGE_TYPE_LABELS[sub.chargeType],
+        [`Sản lượng (${unit})`]: sub.chargeType === 'remainder' ? '' : r2(usageKwh(sub, u)),
+        'Thành tiền (đ)': r0(amount),
+      }
+    })
     if (rows.length === 0) rows.push({ 'Khách hàng': '(Chưa có khách hàng gán cho đồng hồ này)' } as Row)
     XLSX.utils.book_append_sheet(wb, sheetFromRows(rows, [26, 18, 12, 12, 26, 16, 18]), safeSheetName(`Khach hang ${month}`))
   }
@@ -126,7 +132,7 @@ export function exportMeter(
     const isElec = meterId !== 3
     const bandCols: [BandKey, string][] = [['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']]
     const cmp = { numeric: true, sensitivity: 'base' } as const
-    const mCustomers = customers.filter(c => c.meterId === meterId && c.active).sort((a, b) =>
+    const mCustomers = customers.filter(c => customerHasService(c, service) && c.active).sort((a, b) =>
       (a.floor?.trim() || '').localeCompare(b.floor?.trim() || '', 'vi', cmp)
       || (a.kioskCode?.trim() || '').localeCompare(b.kioskCode?.trim() || '', 'vi', cmp)
       || a.name.localeCompare(b.name, 'vi', cmp))
@@ -134,7 +140,7 @@ export function exportMeter(
       .sort((a, b) => a.month.localeCompare(b.month))
     // Tiền từng tháng lấy qua meterAllocation để đúng cả khách "gánh phần còn lại"
     const amtByMonth = new Map(dMonths.map(r => [r.month, new Map(meterAllocation(r, customers, usages).rows.map(x => [x.customer.id, x.amount]))]))
-    const usageOf = (cid: string, m: string) => usages.find(u => u.customerId === cid && u.month === m)
+    const usageOf = (c: Customer, m: string) => findUsage(usages, c.id, service, m, primaryService(c))
 
     const header: Cell[] = ['Khách hàng', 'Nhóm', 'Tầng', 'Mã ki-ốt', 'Cách tính tiền', 'Tháng', 'Chỉ số cũ', 'Chỉ số mới']
     if (isElec) bandCols.forEach(([, lb]) => header.push(`${lb} cũ`, `${lb} mới`))
@@ -142,18 +148,20 @@ export function exportMeter(
 
     const detail: Aoa = [header]
     for (const c of mCustomers) {
+      const sub = subFor(c, service)!
+      const ct = sub.chargeType
       for (const r of dMonths) {
-        const u = usageOf(c.id, r.month)
+        const u = usageOf(c, r.month)
         const amount = amtByMonth.get(r.month)?.get(c.id) ?? 0
-        const row: Cell[] = [c.name, c.group?.trim() || '', c.floor || '', c.kioskCode || '', CHARGE_TYPE_LABELS[c.chargeType], r.month]
-        row.push(c.chargeType === 'flat_vat_incl' ? (u?.indexOld ?? '') : '', c.chargeType === 'flat_vat_incl' ? (u?.indexNew ?? '') : '')
+        const row: Cell[] = [c.name, c.group?.trim() || '', c.floor || '', c.kioskCode || '', CHARGE_TYPE_LABELS[ct], r.month]
+        row.push(ct === 'flat_vat_incl' ? (u?.indexOld ?? '') : '', ct === 'flat_vat_incl' ? (u?.indexNew ?? '') : '')
         if (isElec) bandCols.forEach(([k]) => {
-          if (c.chargeType === 'timeband_excl_vat') row.push(u?.bandsIndexOld?.[k] ?? '', u?.bandsIndexNew?.[k] ?? '')
+          if (ct === 'timeband_excl_vat') row.push(u?.bandsIndexOld?.[k] ?? '', u?.bandsIndexNew?.[k] ?? '')
           else row.push('', '')
         })
-        const sl: Cell = (c.chargeType === 'flat_vat_incl' || c.chargeType === 'timeband_excl_vat') ? r2(usageKwh(c, u)) : ''
-        const dg: Cell = c.chargeType === 'flat_vat_incl' ? resolvePrice(c.flatPriceHistory, c.flatUnitPrice, r.month)
-          : c.chargeType === 'fixed_area' ? resolvePrice(c.areaPriceHistory, c.pricePerM2, r.month) : ''
+        const sl: Cell = (ct === 'flat_vat_incl' || ct === 'timeband_excl_vat') ? r2(usageKwh(sub, u)) : ''
+        const dg: Cell = ct === 'flat_vat_incl' ? resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, r.month)
+          : ct === 'fixed_area' ? resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, r.month) : ''
         row.push(sl, dg, r0(amount))
         detail.push(row)
       }
@@ -305,7 +313,7 @@ export function exportKhachHang(customers: Customer[], meterNames: Record<number
     'Mã ki-ốt':       c.kioskCode || '',
     'Chủ ki-ốt':      c.kioskOwner || '',
     'Khách hàng thuê': c.tenantName || '',
-    'Đồng hồ':        meterLabel(meterNames, c.meterId),
+    'Loại sử dụng':   customerServices(c).map(s => serviceLabel(s.service, meterNames)).join(', '),
     'Cách tính tiền': CHARGE_TYPE_LABELS[c.chargeType],
     'Thông số giá':   priceInfo(c),
     [`Trạng thái (${month})`]: !c.active ? 'Ngừng' : isActiveInMonth(c, month) ? 'Đang thuê' : 'Trống',
@@ -379,7 +387,7 @@ export function exportCongNo(
     const r = monthReadings.find(x => x.meterId === id)
     if (!r) return
     meterAllocation(r, customers, usages).rows.forEach(({ customer: c, amount }) => {
-      const paid = payments.filter(p => p.customerId === c.id && p.month === month && p.kind !== 'management').reduce((s, p) => s + p.amount, 0)
+      const paid = payments.filter(p => p.customerId === c.id && p.month === month && paymentService(p, primaryService(c)) === METER_SERVICE[id]).reduce((s, p) => s + p.amount, 0)
       rows.push({
         'Đồng hồ':    meterLabel(meterNames, id),
         'Khách hàng': c.name,
@@ -393,7 +401,7 @@ export function exportCongNo(
   // Phí quản lý (đã thu chỉ tính khoản kind='management')
   customers.filter(c => managementFeeOf(c, month) > 0).forEach(c => {
     const due = managementFeeOf(c, month)
-    const paid = payments.filter(p => p.customerId === c.id && p.month === month && p.kind === 'management').reduce((s, p) => s + p.amount, 0)
+    const paid = payments.filter(p => p.customerId === c.id && p.month === month && paymentService(p, primaryService(c)) === 'phiql').reduce((s, p) => s + p.amount, 0)
     rows.push({
       'Đồng hồ':    'Phí quản lý',
       'Khách hàng': c.name,
