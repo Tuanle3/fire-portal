@@ -153,6 +153,9 @@ export interface ChargeConfig {
   flatPriceHistory?: PricePoint[]
   areaPriceHistory?: PricePoint[]
   timebandPriceHistory?: TimebandPricePoint[]
+  // Chỉ dùng cho phí quản lý (phiql): đơn giá đã gồm VAT chưa (mặc định true). false ⇒ cộng thêm VAT.
+  vatIncluded?: boolean
+  vatPercent?: number     // % VAT áp khi vatIncluded = false (mặc định 8)
 }
 // 1 dịch vụ mà khách đăng ký, kèm cấu hình tính tiền riêng của dịch vụ đó.
 export interface ServiceSubscription extends ChargeConfig { service: ServiceId }
@@ -222,11 +225,20 @@ export function resolvePrice(history: PricePoint[] | undefined, fallback: number
   return earliest.price
 }
 
-// Phí quản lý của 1 khách cho tháng `month` (đ). = 0 nếu không đăng ký phí QL hoặc ki-ốt trống tháng đó.
-export function managementFeeOf(c: Customer, month: string): number {
+// Chi tiết phí quản lý 1 khách trong tháng: đơn giá gốc, VAT, tổng phải thu.
+export interface ManagementFeeBreakdown { base: number; vatIncluded: boolean; vatPercent: number; vat: number; total: number }
+export function managementFeeBreakdown(c: Customer, month: string): ManagementFeeBreakdown {
   const sub = subFor(c, 'phiql')
-  if (!sub || !isActiveInMonth(c, month)) return 0
-  return resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, month)
+  if (!sub || !isActiveInMonth(c, month)) return { base: 0, vatIncluded: true, vatPercent: 0, vat: 0, total: 0 }
+  const base = resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, month)
+  const vatIncluded = sub.vatIncluded !== false               // mặc định coi như đã gồm VAT (tương thích cũ)
+  const vatPercent = vatIncluded ? 0 : (sub.vatPercent ?? 8)
+  const vat = vatIncluded ? 0 : base * vatPercent / 100
+  return { base, vatIncluded, vatPercent, vat, total: base + vat }
+}
+// Phí quản lý phải thu (đã gồm VAT) của 1 khách cho tháng `month` (đ). = 0 nếu không đăng ký hoặc trống tháng đó.
+export function managementFeeOf(c: Customer, month: string): number {
+  return managementFeeBreakdown(c, month).total
 }
 
 // Mốc đơn giá khung giờ có hiệu lực cho tháng `month`: mốc mới nhất có fromMonth <= month (giống resolvePrice).

@@ -16,7 +16,12 @@ function subPriceInfo(s: ServiceSubscription) {
   const mocGia = (n: number) => n > 1 ? <span style={{ color: 'var(--gold2)' }}> · {n} mốc giá</span> : null
   if (s.service === 'phiql') {
     const n = s.flatPriceHistory?.filter(x => x.price > 0).length ?? 0
-    return <>{fmtDec(resolvePrice(s.flatPriceHistory, s.flatUnitPrice ?? 0, '9999-12'))} đ/tháng{mocGia(n)}</>
+    const base = resolvePrice(s.flatPriceHistory, s.flatUnitPrice ?? 0, '9999-12')
+    if (s.vatIncluded === false) {
+      const vp = s.vatPercent ?? 8
+      return <>{fmtDec(base)} đ/tháng (chưa VAT) → {fmtDec(Math.round(base * (1 + vp / 100)))} đ (gồm {vp}% VAT){mocGia(n)}</>
+    }
+    return <>{fmtDec(base)} đ/tháng (gồm VAT){mocGia(n)}</>
   }
   if (s.chargeType === 'flat_vat_incl') {
     const n = s.flatPriceHistory?.filter(x => x.price > 0).length ?? 0
@@ -150,8 +155,25 @@ function ServiceConfigBlock({ sub, meterNames, onChange }: {
     <div style={{ border: '1px solid var(--border3)', borderRadius: 10, padding: 12, background: '#fff', flex: '1 1 320px', minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>⚙ {serviceLabel(sub.service, meterNames)}</div>
       {isPhiql ? (
-        <PriceHistoryEditor label="Bảng phí quản lý theo thời điểm" unit="đ/tháng"
-          value={sub.flatPriceHistory ?? [{ fromMonth: '', price: 0 }]} onChange={v => onChange({ flatPriceHistory: v })} />
+        <>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
+            <div style={{ minWidth: 190 }}>
+              <label className="dn-label">Đơn giá</label>
+              <select className="dn-input" value={sub.vatIncluded === false ? 'excl' : 'incl'} onChange={e => onChange({ vatIncluded: e.target.value === 'incl' })}>
+                <option value="incl">Đã gồm VAT</option>
+                <option value="excl">Chưa gồm VAT (cộng thêm)</option>
+              </select>
+            </div>
+            {sub.vatIncluded === false && (
+              <div style={{ width: 84 }}>
+                <label className="dn-label">VAT %</label>
+                <input type="number" className="dn-input" value={sub.vatPercent ?? 8} onChange={e => onChange({ vatPercent: Number(e.target.value) })} />
+              </div>
+            )}
+          </div>
+          <PriceHistoryEditor label={sub.vatIncluded === false ? 'Bảng phí quản lý theo thời điểm (chưa VAT)' : 'Bảng phí quản lý theo thời điểm (đã gồm VAT)'}
+            unit="đ/tháng" value={sub.flatPriceHistory ?? [{ fromMonth: '', price: 0 }]} onChange={v => onChange({ flatPriceHistory: v })} />
+        </>
       ) : (
         <>
           <div style={{ marginBottom: 10, maxWidth: 260 }}>
@@ -222,12 +244,15 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
       const flatH = (s.flatPriceHistory ?? []).filter(p => p.price > 0)
       const areaH = (s.areaPriceHistory ?? []).filter(p => p.price > 0)
       const tbH = (s.timebandPriceHistory ?? []).filter(p => p.caoDiem > 0 || p.thapDiem > 0 || p.binhThuong > 0)
-      return {
+      const base: ServiceSubscription = {
         service: s.service, chargeType: s.chargeType,
         flatUnitPrice: flatH.length ? latest(flatH) : (s.flatUnitPrice ?? 0),
         areaM2: s.areaM2 ?? 0, pricePerM2: areaH.length ? latest(areaH) : (s.pricePerM2 ?? 0),
         flatPriceHistory: flatH, areaPriceHistory: areaH, timebandPriceHistory: tbH,
       }
+      // Phí quản lý: luôn lưu cờ VAT ở dạng cụ thể (tránh undefined khi ghi Firestore)
+      if (s.service === 'phiql') return { ...base, vatIncluded: s.vatIncluded !== false, vatPercent: s.vatPercent ?? 8 }
+      return base
     }
     // Sắp xếp dịch vụ theo thứ tự chuẩn để hiển thị ổn định.
     const cleaned = SERVICE_IDS.filter(hasSvc).map(s => cleanSub(services.find(x => x.service === s)!))

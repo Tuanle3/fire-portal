@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { Customer, PricePoint, managementFeeOf, isActiveInMonth, resolvePrice } from '@/lib/dien-nuoc-types'
+import { Customer, PricePoint, ServiceSubscription, managementFeeOf, isActiveInMonth, resolvePrice, subFor } from '@/lib/dien-nuoc-types'
 import { saveCustomer } from '@/lib/dien-nuoc-store'
 import { exportPhiQuanLy } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
@@ -14,23 +14,39 @@ function floorSortKey(floor: string): [number, string] {
 }
 
 // Đặt/sửa mức phí quản lý áp dụng TỪ tháng `month` (thêm/ghi đè 1 mốc giá cùng fromMonth).
+// Cập nhật cả services[] (nguồn chính) lẫn field cũ để đồng bộ.
 function upsertFeeForMonth(c: Customer, month: string, price: number): Customer {
-  const hist: PricePoint[] = [...(c.managementFeeHistory ?? [])]
-  const idx = hist.findIndex(p => (p.fromMonth || '') === month)
-  if (idx >= 0) hist[idx] = { fromMonth: month, price }
-  else hist.push({ fromMonth: month, price })
-  const cleaned = hist.filter(p => p.price > 0)
-  const latest = [...cleaned].sort((a, b) => (b.fromMonth || '').localeCompare(a.fromMonth || ''))[0]?.price ?? 0
-  return { ...c, hasManagementFee: true, managementFeeHistory: cleaned, managementFeePrice: latest }
+  const upsert = (h?: PricePoint[]) => {
+    const arr = [...(h ?? [])]
+    const idx = arr.findIndex(p => (p.fromMonth || '') === month)
+    if (idx >= 0) arr[idx] = { fromMonth: month, price }; else arr.push({ fromMonth: month, price })
+    return arr.filter(p => p.price > 0)
+  }
+  const latestOf = (arr: PricePoint[]) => [...arr].sort((a, b) => (b.fromMonth || '').localeCompare(a.fromMonth || ''))[0]?.price ?? 0
+
+  let newServices = c.services
+  if (c.services && c.services.length) {
+    const cur = c.services.find(s => s.service === 'phiql')
+    const hist = upsert(cur?.flatPriceHistory)
+    const latest = latestOf(hist)
+    newServices = cur
+      ? c.services.map(s => s.service === 'phiql' ? { ...s, flatPriceHistory: hist, flatUnitPrice: latest } : s)
+      : [...c.services, { service: 'phiql', chargeType: 'flat_vat_incl', flatUnitPrice: latest, areaM2: 0, pricePerM2: 0, flatPriceHistory: hist, vatIncluded: true, vatPercent: 8 } as ServiceSubscription]
+  }
+  const legacyHist = upsert(c.managementFeeHistory)
+  return { ...c, services: newServices, hasManagementFee: true, managementFeeHistory: legacyHist, managementFeePrice: latestOf(legacyHist) }
 }
 
 function PhiRow({ c, month }: { c: Customer; month: string }) {
-  const applied = managementFeeOf(c, month)                                  // phải thu (0 nếu tháng này không thu)
-  const configured = resolvePrice(c.managementFeeHistory, c.managementFeePrice ?? 0, month)  // mức phí cấu hình (bỏ qua trạng thái)
+  const applied = managementFeeOf(c, month)                                  // phải thu, đã gồm VAT (0 nếu tháng này không thu)
+  const sub = subFor(c, 'phiql')
+  const configured = resolvePrice(sub?.flatPriceHistory, sub?.flatUnitPrice ?? 0, month)  // đơn giá gốc (bỏ qua trạng thái)
+  const vatExcl = sub?.vatIncluded === false
+  const vp = sub?.vatPercent ?? 8
   const [draft, setDraft] = useState(configured)
   const [saving, setSaving] = useState(false)
   const active = isActiveInMonth(c, month)
-  const priceCount = c.managementFeeHistory?.filter(p => p.price > 0).length ?? 0
+  const priceCount = sub?.flatPriceHistory?.filter(p => p.price > 0).length ?? 0
 
   const saveFee = async () => { setSaving(true); await saveCustomer(upsertFeeForMonth(c, month, draft)); setSaving(false) }
   const toggleMonth = async () => {
@@ -49,8 +65,8 @@ function PhiRow({ c, month }: { c: Customer; month: string }) {
       <td>{c.tenantName || c.kioskOwner || '—'}</td>
       <td style={{ textAlign: 'right' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
-          <NumberInput style={{ width: 130, textAlign: 'right' }} value={draft} onValueChange={setDraft} />
-          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>đ/tháng</span>
+          <NumberInput style={{ width: 120, textAlign: 'right' }} value={draft} onValueChange={setDraft} />
+          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>đ/tháng {vatExcl ? `(chưa VAT +${vp}%)` : '(gồm VAT)'}</span>
           {dirty && <button className="btn-ghost" onClick={saveFee} disabled={saving}>{saving ? '…' : `Lưu từ ${month}`}</button>}
         </div>
         {priceCount > 1 && <div style={{ fontSize: 10, color: 'var(--gold2)' }}>{priceCount} mốc giá</div>}
