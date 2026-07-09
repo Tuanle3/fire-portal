@@ -50,6 +50,23 @@ export function emptyFloorBands(): FloorBands {
 export function defaultFloorReadings(): FloorReading[] {
   return DEFAULT_FLOOR_GROUPS.map(g => ({ group: g, bands: emptyFloorBands() }))
 }
+
+// ── Đồng hồ nước (meterId 3): số ghi nước từng tầng ──────────────────────────
+// Nước KHÔNG chia khung giờ. Tận dụng lại 3 khe của FloorBands làm 3 ĐỒNG HỒ NƯỚC vật lý
+// mỗi tầng (như bảng "CHỈ SỐ NƯỚC THÁNG" trong Excel): mỗi đồng hồ có chỉ số cũ/mới ⇒ tiêu thụ.
+// Nhờ vậy tái dùng nguyên prefill/normalize/lưu trữ, không phải đổi schema hay store.
+export const WATER_METER_KEYS: FloorBandKey[] = FLOOR_BAND_KEYS
+export const WATER_METER_LABELS: Record<FloorBandKey, string> = {
+  caoDiem: 'Đồng hồ 1', thapDiem: 'Đồng hồ 2', binhThuong: 'Đồng hồ 3',
+}
+export const DEFAULT_WATER_FLOOR_GROUPS = ['Tầng 1', 'Tầng 2 - A1', 'Tầng 2 - A2', 'Tầng 3 - A1', 'Tầng 3 - A2']
+export function defaultWaterFloorReadings(): FloorReading[] {
+  return DEFAULT_WATER_FLOOR_GROUPS.map(g => ({ group: g, bands: emptyFloorBands() }))
+}
+// Tổng tiêu thụ nước 1 tầng = tổng (mới − cũ) của cả 3 đồng hồ.
+export function waterFloorTotal(f: FloorReading): number {
+  return WATER_METER_KEYS.reduce((s, k) => s + floorBandKwh(f.bands?.[k]), 0)
+}
 export function floorBandKwh(b: FloorBandIndex | undefined): number {
   return Math.max(0, (b?.indexNew || 0) - (b?.indexOld || 0))
 }
@@ -134,6 +151,10 @@ export interface Customer {
   active: boolean
   inactiveMonths?: string[]  // Các tháng (YYYY-MM) ki-ốt KHÔNG thuê (trống) — override active theo từng tháng
   note: string
+  // ── Phí quản lý (loại sử dụng độc lập với đồng hồ): thu 1 khoản cố định mỗi tháng ──
+  hasManagementFee?: boolean            // khách này có bị thu phí quản lý không
+  managementFeePrice?: number           // (tương thích) mức phí tĩnh mới nhất (đ/tháng)
+  managementFeeHistory?: PricePoint[]   // bảng phí quản lý theo thời điểm (đ/tháng)
   createdAt: string
 }
 
@@ -153,6 +174,12 @@ export function resolvePrice(history: PricePoint[] | undefined, fallback: number
   if (applicable.length > 0) return applicable[0].price
   const earliest = [...valid].sort((a, b) => (a.fromMonth || '').localeCompare(b.fromMonth || ''))[0]
   return earliest.price
+}
+
+// Phí quản lý của 1 khách cho tháng `month` (đ). = 0 nếu không thu phí hoặc ki-ốt trống tháng đó.
+export function managementFeeOf(c: Customer, month: string): number {
+  if (!c.hasManagementFee || !isActiveInMonth(c, month)) return 0
+  return resolvePrice(c.managementFeeHistory, c.managementFeePrice ?? 0, month)
 }
 
 // Mốc đơn giá khung giờ có hiệu lực cho tháng `month`: mốc mới nhất có fromMonth <= month (giống resolvePrice).
@@ -179,6 +206,7 @@ export interface CustomerUsage {
   updatedAt: string
 }
 
+export type PaymentKind = 'meter' | 'management'  // khoản thu cho đồng hồ (điện/nước) hay cho phí quản lý
 export interface Payment {
   id: string
   customerId: string
@@ -186,6 +214,7 @@ export interface Payment {
   amount: number
   paidAt: string
   note: string
+  kind?: PaymentKind   // mặc định 'meter' (tương thích dữ liệu cũ chưa gắn loại)
   createdAt: string
 }
 

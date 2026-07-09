@@ -10,8 +10,9 @@ import { TabTongQuan } from './_tabs/TabTongQuan'
 import { TabNhapChiSo } from './_tabs/TabNhapChiSo'
 import { TabKhachHang } from './_tabs/TabKhachHang'
 import { TabCongNo } from './_tabs/TabCongNo'
+import { TabPhiQuanLy } from './_tabs/TabPhiQuanLy'
 
-type TabId = 'tong-quan' | 'dh1' | 'dh2' | 'nuoc' | 'khach-hang' | 'cong-no'
+type TabId = 'tong-quan' | 'dh1' | 'dh2' | 'nuoc' | 'phi-quan-ly' | 'khach-hang' | 'cong-no'
 const METER_TAB: Record<string, MeterId> = { dh1: 1, dh2: 2, nuoc: 3 }
 
 function curMonth() { return new Date().toISOString().slice(0, 7) }
@@ -196,6 +197,7 @@ export default function DienNuocSadtPage() {
                 { id: 'dh1' as TabId, label: meterLabel(meterNames, 1) },
                 { id: 'dh2' as TabId, label: meterLabel(meterNames, 2) },
                 { id: 'nuoc' as TabId, label: meterLabel(meterNames, 3) },
+                { id: 'phi-quan-ly' as TabId, label: 'Phí quản lý' },
                 { id: 'khach-hang' as TabId, label: 'Khách hàng' },
                 { id: 'cong-no' as TabId, label: 'Công nợ & Thu tiền' },
               ]).map(t => (
@@ -211,6 +213,7 @@ export default function DienNuocSadtPage() {
               <>
                 {activeTab === 'tong-quan' && <TabTongQuan readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
                 {METER_TAB[activeTab] && <TabNhapChiSo meterId={METER_TAB[activeTab]} readings={readings} customers={customers} usages={usages} month={month} meterNames={meterNames} canEditMeterName={canEditMeterName} onSaveMeterNames={setMeterNamesRemote} />}
+                {activeTab === 'phi-quan-ly' && <TabPhiQuanLy customers={customers} month={month} />}
                 {activeTab === 'khach-hang' && <TabKhachHang customers={customers} meterNames={meterNames} month={month} />}
                 {activeTab === 'cong-no' && <TabCongNo readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />}
               </>

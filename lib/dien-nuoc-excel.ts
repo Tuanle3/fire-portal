@@ -7,7 +7,7 @@ import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, BandKey,
   BAND_KEYS, BAND_LABELS, METER_UNIT, meterLabel,
   meterSubtotal, meterVat, meterTotal, meterAllocation,
-  resolvePrice, resolveTimebandPoint, usageKwh, computeBqt, isActiveInMonth,
+  resolvePrice, resolveTimebandPoint, usageKwh, computeBqt, isActiveInMonth, managementFeeOf,
   CHARGE_TYPE_LABELS, DEFAULT_BQT_RATIO,
   FloorBandKey, normalizeFloor, floorBandKwh, floorTotalKwh,
 } from './dien-nuoc-types'
@@ -239,8 +239,9 @@ export function exportTongQuan(
 
   const totalBill = monthReadings.reduce((s, r) => s + meterTotal(r.bands, r.vatPercent), 0)
   const allRows = monthReadings.flatMap(r => meterAllocation(r, customers, usages).rows)
-  const totalDue = allRows.reduce((s, r) => s + r.amount, 0)
-  const totalPaid = allRows.reduce((s, r) => s + paidOf(r.customer.id), 0)
+  const managementDue = customers.reduce((s, c) => s + managementFeeOf(c, month), 0)
+  const totalDue = allRows.reduce((s, r) => s + r.amount, 0) + managementDue
+  const totalPaid = payments.filter(p => p.month === month).reduce((s, p) => s + p.amount, 0)
 
   const wb = XLSX.utils.book_new()
 
@@ -317,6 +318,29 @@ export function exportKhachHang(customers: Customer[], meterNames: Record<number
   download(wb, `dien-nuoc_khach-hang.xlsx`)
 }
 
+// ── Tab: Phí quản lý ─────────────────────────────────────────────────────────
+export function exportPhiQuanLy(customers: Customer[], month: string) {
+  const feeCustomers = customers.filter(c => c.hasManagementFee)
+  const rows: Row[] = feeCustomers.map((c, i) => ({
+    'STT':            i + 1,
+    'Khách hàng':     c.name,
+    'Nhóm':           c.group?.trim() || '',
+    'Tầng':           c.floor || '',
+    'Mã ki-ốt':       c.kioskCode || '',
+    'Khách thuê':     c.tenantName || c.kioskOwner || '',
+    'Mức phí (đ/tháng)': r0(resolvePrice(c.managementFeeHistory, c.managementFeePrice ?? 0, month)),
+    [`Phải thu (${month}) (đ)`]: r0(managementFeeOf(c, month)),
+    [`Trạng thái (${month})`]: !c.active ? 'Ngừng' : isActiveInMonth(c, month) ? 'Có thu' : 'Không thu',
+  }))
+  const total = feeCustomers.reduce((s, c) => s + managementFeeOf(c, month), 0)
+  if (rows.length === 0) rows.push({ 'STT': '', 'Khách hàng': '(Chưa có khách nào bật phí quản lý)' } as Row)
+  else rows.push({ 'Khách hàng': 'TỔNG CỘNG', [`Phải thu (${month}) (đ)`]: r0(total) } as Row)
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, sheetFromRows(rows, [5, 26, 18, 12, 12, 20, 18, 20, 16]), safeSheetName(`Phi quan ly ${month}`))
+  download(wb, `dien-nuoc_phi-quan-ly_${month}.xlsx`)
+}
+
 // ── Tab: Công nợ & Thu tiền ──────────────────────────────────────────────────
 export function exportCongNo(
   readings: MeterReading[], customers: Customer[], usages: CustomerUsage[], payments: Payment[],
@@ -326,13 +350,18 @@ export function exportCongNo(
   const paidOf = (cid: string) => payments.filter(p => p.customerId === cid && p.month === month).reduce((s, p) => s + p.amount, 0)
   const wb = XLSX.utils.book_new()
 
-  // Sheet 1 — Tổng hợp theo nhóm
-  const allRows = monthReadings.flatMap(r => meterAllocation(r, customers, usages).rows)
+  // Sheet 1 — Tổng hợp theo nhóm (gộp tiền đồng hồ + phí quản lý)
+  const dueByCustomer = new Map<string, number>()
+  for (const r of monthReadings) for (const row of meterAllocation(r, customers, usages).rows) {
+    dueByCustomer.set(row.customer.id, (dueByCustomer.get(row.customer.id) ?? 0) + row.amount)
+  }
+  for (const c of customers) { const fee = managementFeeOf(c, month); if (fee > 0) dueByCustomer.set(c.id, (dueByCustomer.get(c.id) ?? 0) + fee) }
+  const custById = new Map(customers.map(c => [c.id, c]))
   const groups = new Map<string, { due: number; paid: number; count: number }>()
-  for (const r of allRows) {
-    const g = r.customer.group?.trim() || 'Chưa phân nhóm'
+  for (const [cid, due] of dueByCustomer) {
+    const g = custById.get(cid)?.group?.trim() || 'Chưa phân nhóm'
     const cur = groups.get(g) ?? { due: 0, paid: 0, count: 0 }
-    cur.due += r.amount; cur.paid += paidOf(r.customer.id); cur.count += 1
+    cur.due += due; cur.paid += paidOf(cid); cur.count += 1
     groups.set(g, cur)
   }
   const gRows = Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0], 'vi'))
@@ -350,7 +379,7 @@ export function exportCongNo(
     const r = monthReadings.find(x => x.meterId === id)
     if (!r) return
     meterAllocation(r, customers, usages).rows.forEach(({ customer: c, amount }) => {
-      const paid = paidOf(c.id)
+      const paid = payments.filter(p => p.customerId === c.id && p.month === month && p.kind !== 'management').reduce((s, p) => s + p.amount, 0)
       rows.push({
         'Đồng hồ':    meterLabel(meterNames, id),
         'Khách hàng': c.name,
@@ -359,6 +388,19 @@ export function exportCongNo(
         'Đã thu (đ)':   r0(paid),
         'Còn nợ (đ)':   r0(Math.max(0, amount - paid)),
       })
+    })
+  })
+  // Phí quản lý (đã thu chỉ tính khoản kind='management')
+  customers.filter(c => managementFeeOf(c, month) > 0).forEach(c => {
+    const due = managementFeeOf(c, month)
+    const paid = payments.filter(p => p.customerId === c.id && p.month === month && p.kind === 'management').reduce((s, p) => s + p.amount, 0)
+    rows.push({
+      'Đồng hồ':    'Phí quản lý',
+      'Khách hàng': c.name,
+      'Nhóm':       c.group?.trim() || '',
+      'Phải trả (đ)': r0(due),
+      'Đã thu (đ)':   r0(paid),
+      'Còn nợ (đ)':   r0(Math.max(0, due - paid)),
     })
   })
   if (rows.length === 0) rows.push({ 'Đồng hồ': '(Chưa có dữ liệu tháng này)' } as Row)

@@ -7,6 +7,7 @@ import {
   lastReadingBefore, bandsWithPriceChange, isAmountAnomalous,
   FloorReading, FloorBandKey, FLOOR_BAND_KEYS, BqtRatio, DEFAULT_BQT_RATIO,
   defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, floorBandKwhSplit, computeBqt, isActiveInMonth, normalizeFloor,
+  WATER_METER_KEYS, WATER_METER_LABELS, defaultWaterFloorReadings, waterFloorTotal,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
 import { exportMeter } from '@/lib/dien-nuoc-excel'
@@ -38,7 +39,7 @@ function prefillFloors(readings: MeterReading[], meterId: MeterId, month: string
       seen.set(g, f); order.push(g)
     }
   }
-  if (order.length === 0) return defaultFloorReadings()
+  if (order.length === 0) return meterId === 3 ? defaultWaterFloorReadings() : defaultFloorReadings()
   return order.map(g => {
     const f = seen.get(g)!
     const bands = emptyFloorBands()
@@ -211,6 +212,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
     await saveMeterReading({
       id, meterId, month, bands, vatPercent, note,
       ...(isMeter1 ? { floorReadings, bqtRatio } : {}),
+      ...(isWater ? { floorReadings } : {}),  // nước: lưu số ghi từng tầng (không có bqtRatio/khung giờ)
       createdAt: reading?.createdAt || now, updatedAt: now,
     })
     setSaving(false)
@@ -302,6 +304,12 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
           <BqtSection reading={draftReading} readings={readings} month={month} customers={customers} usages={usages}
             floorReadings={floorReadings} setFloorReadings={setFloorReadings}
             bqtRatio={bqtRatio} setBqtRatio={setBqtRatio}
+            onSave={save} saving={saving} savedAt={savedAt} />
+        )}
+
+        {isWater && (
+          <WaterFloorSection readings={readings} month={month} customers={customers}
+            floorReadings={floorReadings} setFloorReadings={setFloorReadings}
             onSave={save} saving={saving} savedAt={savedAt} />
         )}
 
@@ -490,6 +498,213 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Đồng hồ nước: ghi chỉ số nước từng tầng (mỗi tầng 3 đồng hồ · cũ → mới ⇒ tiêu thụ) ──
+function WaterFloorSection({ readings, month, customers, floorReadings, setFloorReadings, onSave, saving, savedAt }: {
+  readings: MeterReading[]; month: string; customers: Customer[]
+  floorReadings: FloorReading[]; setFloorReadings: (v: FloorReading[]) => void
+  onSave: () => void; saving: boolean; savedAt: string | null
+}) {
+  const groupSuggestions = Array.from(new Set([
+    ...customers.filter(c => c.meterId === 3 && c.active).map(c => (c.group || '').trim()).filter(Boolean),
+  ])).sort((a, b) => a.localeCompare(b, 'vi'))
+
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const moveFloor = (from: number | null, to: number) => {
+    if (from === null || from === to) return
+    const arr = [...floorReadings]
+    const [m] = arr.splice(from, 1)
+    arr.splice(to, 0, m)
+    setFloorReadings(arr)
+  }
+  const setFloorGroup = (i: number, group: string) => setFloorReadings(floorReadings.map((f, idx) => idx === i ? { ...f, group } : f))
+  const setFloorBand = (i: number, k: FloorBandKey, field: 'indexOld' | 'indexNew', v: number) =>
+    setFloorReadings(floorReadings.map((f, idx) => idx === i ? { ...f, bands: { ...f.bands, [k]: { ...f.bands[k], [field]: v } } } : f))
+  const addFloor = () => setFloorReadings([...floorReadings, { group: '', bands: emptyFloorBands() }])
+  const removeFloor = (i: number) => setFloorReadings(floorReadings.filter((_, idx) => idx !== i))
+
+  // Tổng tiêu thụ toàn nhà + tổng theo từng đồng hồ (cộng các tầng)
+  const grandTotal = floorReadings.reduce((s, f) => s + waterFloorTotal(f), 0)
+  const perMeterTotal = (k: FloorBandKey) => floorReadings.reduce((s, f) => s + floorBandKwh(f.bands[k]), 0)
+
+  return (
+    <div style={{ marginTop: 20, border: '1px solid var(--border3)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: '#1C3557', color: '#fff', padding: '9px 14px', fontSize: 12, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase' }}>
+        Ghi chỉ số nước theo tầng — đồng hồ nước
+      </div>
+
+      <div style={{ padding: 14 }}>
+        {/* a. Hướng dẫn */}
+        <div style={{ background: '#EEF3FA', border: '1px solid #D0DCE8', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12.5, lineHeight: 1.6, color: 'var(--txt2)' }}>
+          <div style={{ fontWeight: 700, color: 'var(--navy)', marginBottom: 4 }}>a. Cách ghi chỉ số nước</div>
+          <div>① Mỗi tầng có tối đa <b>3 đồng hồ nước</b>. Nhập <b>chỉ số cũ</b> &amp; <b>chỉ số mới</b> ⇒ <b>tiêu thụ (m³)</b> = mới − cũ.</div>
+          <div>② Chỉ số cũ tháng này tự điền = chỉ số mới cùng đồng hồ của tháng trước (có thể sửa tay).</div>
+          <div>③ <b>Tổng tiêu thụ tầng</b> = cộng 3 đồng hồ; <b>tổng toàn nhà</b> = cộng các tầng. Tầng nào không dùng thì để trống/0.</div>
+        </div>
+
+        {/* b. Các card tầng + card tổng hợp */}
+        <div className="dn-col-title">
+          <span>b. Nhập chỉ số nước từng tầng ⇒ tiêu thụ (m³)</span>
+          <button className="btn-ghost" style={{ textTransform: 'none', fontWeight: 600 }} onClick={addFloor}>+ Thêm tầng</button>
+        </div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
+          {floorReadings.map((f, i) => (
+            <div key={i}
+              onDragOver={e => { if (dragIdx !== null && dragIdx !== i) e.preventDefault() }}
+              onDrop={e => { e.preventDefault(); moveFloor(dragIdx, i); setDragIdx(null) }}
+              style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', flexDirection: 'column', border: dragIdx !== null && dragIdx !== i ? '1px dashed var(--navy3)' : '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', opacity: dragIdx === i ? 0.45 : 1, transition: 'opacity .12s' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)' }}>
+                {floorReadings.length > 1 && (
+                  <span draggable onDragStart={() => setDragIdx(i)} onDragEnd={() => setDragIdx(null)} title="Kéo để đổi vị trí tầng"
+                    style={{ flexShrink: 0, cursor: 'grab', color: 'var(--muted2)', fontSize: 14, lineHeight: 1, userSelect: 'none' }}>⠿</span>
+                )}
+                <input className="dn-input" list="dn-water-groups" style={{ flex: 1, fontWeight: 600 }} value={f.group} placeholder="Tên tầng / địa điểm" onChange={e => setFloorGroup(i, e.target.value)} />
+                {floorReadings.length > 1 && (
+                  <button onClick={() => removeFloor(i)} title="Xoá tầng này" style={{ flexShrink: 0, width: 22, height: 22, padding: 0, lineHeight: '20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', border: '1px solid #FECACA', borderRadius: 6, background: '#fff', color: '#DC2626' }}>×</button>
+                )}
+              </div>
+              <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '58px 1fr 1fr 52px', gap: 4, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
+                  <span>Đồng hồ</span><span style={{ textAlign: 'right' }}>CS cũ</span><span style={{ textAlign: 'right' }}>CS mới</span><span style={{ textAlign: 'right' }}>Tiêu thụ</span>
+                </div>
+                {WATER_METER_KEYS.map(k => (
+                  <div key={k} style={{ display: 'grid', gridTemplateColumns: '58px 1fr 1fr 52px', gap: 4, alignItems: 'center', marginBottom: 5 }}>
+                    <span style={{ fontSize: 9.5, color: 'var(--muted)' }}>{WATER_METER_LABELS[k]}</span>
+                    <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
+                    <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
+                    <span style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 'auto', borderTop: '1px dashed var(--border3)', paddingTop: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, background: '#E0EDFA', borderRadius: 7, padding: '6px 9px' }}>
+                    <span style={{ fontSize: 9.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>Tổng tiêu thụ tầng</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmtKwh(waterFloorTotal(f))} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>m³</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Card tổng hợp */}
+          <div style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tổng hợp tiêu thụ (m³)</div>
+            <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {WATER_METER_KEYS.map(k => (
+                <div key={k} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, background: '#F8FAFC', borderRadius: 7, padding: '6px 9px' }}>
+                  <span style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>{WATER_METER_LABELS[k]} (cộng tầng)</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmtKwh(perMeterTotal(k))} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>m³</span></span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, background: '#E0EDFA', borderRadius: 7, padding: '6px 9px', marginTop: 'auto' }}>
+                <span style={{ fontSize: 10.5, color: 'var(--navy)', textTransform: 'uppercase', letterSpacing: '.02em', fontWeight: 700 }}>Tổng toàn nhà</span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmtKwh(grandTotal)} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>m³</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <datalist id="dn-water-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button className="btn-primary" style={{ background: '#D4A64A' }} onClick={onSave} disabled={saving}>{saving ? 'Đang lưu…' : '💾 Lưu tháng này'}</button>
+          {savedAt && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)' }}>✓ Đã lưu</span>}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 4 }}>
+          * Bấm “💾 Lưu tháng này” để lưu số ghi nước từng tầng cho tháng {month}. (Cũng được lưu chung khi bấm “Lưu chỉ số” ở Bảng 1.)
+        </div>
+
+        {/* c. Thống kê tiêu thụ nước theo tháng */}
+        <div style={{ marginTop: 18 }}>
+          <WaterFloorHistoryTable readings={readings} month={month} floorReadings={floorReadings} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Thống kê tiêu thụ nước 12 tháng gần nhất — cột tháng hiện tại dùng số liệu live.
+function WaterFloorHistoryTable({ readings, month, floorReadings }: {
+  readings: MeterReading[]; month: string; floorReadings: FloorReading[]
+}) {
+  const [showFloors, setShowFloors] = useState(false)
+
+  const saved = readings.filter(r => r.meterId === 3).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
+    .sort((a, b) => a.month.localeCompare(b.month))
+  const liveFloors = floorReadings.map(normalizeFloor)
+  const hasCurrent = saved.some(r => r.month === month)
+  const months = (hasCurrent ? saved.map(r => r.month === month ? { ...r, floorReadings } : r)
+    : [...saved, { meterId: 3 as MeterId, month, floorReadings } as MeterReading].sort((a, b) => a.month.localeCompare(b.month)))
+
+  if (months.length === 0) return null
+
+  const monthFloors = months.map(r => ({
+    month: r.month, isCur: r.month === month,
+    floors: r.month === month ? liveFloors : (r.floorReadings ?? []).map(normalizeFloor),
+    mainKwh: r.bands?.toanThoiGian?.kwh ?? 0,
+  }))
+  const sumFloors = (fl: FloorReading[]) => fl.reduce((s, f) => s + waterFloorTotal(f), 0)
+
+  // Danh sách tầng xuất hiện (có ít nhất 1 chỉ số ≠ 0)
+  const allGroups: string[] = []
+  monthFloors.forEach(mf => mf.floors.forEach(f => { const g = (f.group || '').trim(); if (g && !allGroups.includes(g)) allGroups.push(g) }))
+  const groupOrder = allGroups.filter(g => monthFloors.some(mf => {
+    const f = mf.floors.find(x => (x.group || '').trim() === g)
+    return !!f && WATER_METER_KEYS.some(k => (f.bands[k]?.indexOld || 0) !== 0 || (f.bands[k]?.indexNew || 0) !== 0)
+  }))
+  const floorOf = (mf: typeof monthFloors[number], g: string) => mf.floors.find(f => (f.group || '').trim() === g)
+
+  return (
+    <>
+      <div className="dn-col-title"><span>c. Thống kê tiêu thụ nước theo tháng</span></div>
+      <div className="dn-scroll">
+        <table className="dn-table" style={{ fontSize: 11 }}>
+          <thead><tr>
+            <th>Chỉ tiêu</th>
+            {monthFloors.map(mf => <th key={mf.month} style={{ textAlign: 'right', background: mf.isCur ? '#E0EDFA' : undefined }}>{mf.month}{mf.isCur ? ' ★' : ''}</th>)}
+          </tr></thead>
+          <tbody>
+            <tr style={{ fontSize: 10 }}>
+              <td style={{ fontWeight: 400 }}>
+                {groupOrder.length > 0 && (
+                  <button onClick={() => setShowFloors(v => !v)} title={showFloors ? 'Thu gọn chi tiết tầng' : 'Xem chi tiết từng tầng × đồng hồ'}
+                    style={{ width: 16, height: 16, marginRight: 6, padding: 0, lineHeight: '14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border3)', borderRadius: 4, background: '#fff', color: 'var(--navy)' }}>
+                    {showFloors ? '−' : '+'}
+                  </button>
+                )}
+                Tổng tiêu thụ các tầng (m³)
+              </td>
+              {monthFloors.map(mf => <td key={mf.month} style={{ textAlign: 'right', background: mf.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmtKwh(sumFloors(mf.floors))}</td>)}
+            </tr>
+            {showFloors && groupOrder.map(g => (
+              <Fragment key={g}>
+                <tr style={{ fontSize: 9.5 }}>
+                  <td style={{ paddingLeft: 26, fontWeight: 700, color: 'var(--navy)' }}>{g} — tổng</td>
+                  {monthFloors.map(mf => {
+                    const f = floorOf(mf, g)
+                    return <td key={mf.month} style={{ textAlign: 'right', fontWeight: 600, background: mf.isCur ? '#E0EDFA' : '#F5F8FC', whiteSpace: 'nowrap' }}>{fmtKwh(f ? waterFloorTotal(f) : 0)}</td>
+                  })}
+                </tr>
+                {WATER_METER_KEYS.map(k => (
+                  <tr key={`${g}-${k}`} style={{ fontSize: 9.5, color: 'var(--muted)' }}>
+                    <td style={{ paddingLeft: 42 }}>{WATER_METER_LABELS[k]}</td>
+                    {monthFloors.map(mf => {
+                      const f = floorOf(mf, g)
+                      return <td key={mf.month} style={{ textAlign: 'right', background: mf.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmtKwh(f ? floorBandKwh(f.bands[k]) : 0)}</td>
+                    })}
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Đồng hồ nước chính (m³)</td>{monthFloors.map(mf => <td key={mf.month} style={{ textAlign: 'right', background: mf.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmtKwh(mf.mainKwh)}</td>)}</tr>
+            <tr><td style={{ fontWeight: 600, color: 'var(--navy)' }}>Chênh lệch (chính − tầng)</td>{monthFloors.map(mf => {
+              const d = mf.mainKwh - sumFloors(mf.floors)
+              return <td key={mf.month} style={{ textAlign: 'right', fontWeight: 700, color: d < 0 ? '#DC2626' : 'var(--navy)', background: mf.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmtKwh(d)}</td>
+            })}</tr>
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }
 

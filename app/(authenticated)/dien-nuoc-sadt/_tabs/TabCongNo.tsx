@@ -1,8 +1,9 @@
 'use client'
 import { useState } from 'react'
 import {
-  MeterReading, Customer, CustomerUsage, Payment, MeterId,
+  MeterReading, Customer, CustomerUsage, Payment, MeterId, PaymentKind,
   meterLabel, meterAllocation, remainderByBand, BAND_KEYS, BAND_LABELS,
+  managementFeeOf,
 } from '@/lib/dien-nuoc-types'
 import { savePayment } from '@/lib/dien-nuoc-store'
 import { exportCongNo } from '@/lib/dien-nuoc-excel'
@@ -10,8 +11,8 @@ import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
-function PaymentModal({ customerId, month, due, paid, onClose }: {
-  customerId: string; month: string; due: number; paid: number; onClose: () => void
+function PaymentModal({ customerId, month, due, paid, kind, label, onClose }: {
+  customerId: string; month: string; due: number; paid: number; kind: PaymentKind; label: string; onClose: () => void
 }) {
   const remain = Math.max(0, due - paid)
   const [amount, setAmount] = useState(remain)
@@ -22,7 +23,7 @@ function PaymentModal({ customerId, month, due, paid, onClose }: {
     if (amount <= 0) return
     setSaving(true)
     const now = new Date().toISOString().slice(0, 10)
-    await savePayment({ id: `p${Date.now()}`, customerId, month, amount, paidAt: now, note, createdAt: now })
+    await savePayment({ id: `p${Date.now()}`, customerId, month, amount, paidAt: now, note, kind, createdAt: now })
     setSaving(false)
     onClose()
   }
@@ -32,7 +33,7 @@ function PaymentModal({ customerId, month, due, paid, onClose }: {
       <div className="so-backdrop" onClick={onClose} />
       <div className="ex-modal">
         <div className="so-header">
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Ghi nhận thu tiền</div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Ghi nhận thu tiền — {label}</div>
           <button className="so-close" onClick={onClose}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
@@ -57,9 +58,11 @@ function PaymentModal({ customerId, month, due, paid, onClose }: {
   )
 }
 
+type CollectArgs = { customerId: string; due: number; paid: number; kind: PaymentKind; label: string }
+
 function MeterAllocationCard({ meterId, reading, customers, usages, payments, month, meterNames, onCollect }: {
   meterId: MeterId; reading: MeterReading | undefined; customers: Customer[]; usages: CustomerUsage[]
-  payments: Payment[]; month: string; meterNames: Record<number, string>; onCollect: (customerId: string, due: number, paid: number) => void
+  payments: Payment[]; month: string; meterNames: Record<number, string>; onCollect: (a: CollectArgs) => void
 }) {
   if (!reading) {
     return (
@@ -72,8 +75,10 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
 
   const alloc = meterAllocation(reading, customers, usages)
   const remBand = meterId !== 3 ? remainderByBand(reading, customers, usages) : null
+  const meterName = meterLabel(meterNames, meterId)
 
-  const paidOf = (customerId: string) => payments.filter(p => p.customerId === customerId && p.month === month).reduce((s, p) => s + p.amount, 0)
+  // Chỉ tính các khoản thu cho ĐỒNG HỒ (không tính khoản thu phí quản lý)
+  const paidOf = (customerId: string) => payments.filter(p => p.customerId === customerId && p.month === month && p.kind !== 'management').reduce((s, p) => s + p.amount, 0)
 
   return (
     <div className="sc">
@@ -97,7 +102,7 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
                   <td style={{ textAlign: 'right' }}>{fmt(r.amount)} đ</td>
                   <td style={{ textAlign: 'right', color: 'var(--green)' }}>{fmt(paid)} đ</td>
                   <td style={{ textAlign: 'right', fontWeight: 700, color: remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(remain)} đ</td>
-                  <td><button className="btn-ghost" onClick={() => onCollect(r.customer.id, r.amount, paid)}>Thu tiền</button></td>
+                  <td><button className="btn-ghost" onClick={() => onCollect({ customerId: r.customer.id, due: r.amount, paid, kind: 'meter', label: meterName })}>Thu tiền</button></td>
                 </tr>
               )
             })}
@@ -124,21 +129,81 @@ function MeterAllocationCard({ meterId, reading, customers, usages, payments, mo
   )
 }
 
+// Thu tiền phí quản lý (độc lập với đồng hồ) — chỉ tính khoản thu kind='management'.
+function ManagementFeeCard({ customers, payments, month, onCollect }: {
+  customers: Customer[]; payments: Payment[]; month: string; onCollect: (a: CollectArgs) => void
+}) {
+  const cmp = { numeric: true, sensitivity: 'base' } as const
+  const feeCustomers = customers.filter(c => managementFeeOf(c, month) > 0)
+    .sort((a, b) => (a.floor?.trim() || '').localeCompare(b.floor?.trim() || '', 'vi', cmp)
+      || (a.kioskCode?.trim() || '').localeCompare(b.kioskCode?.trim() || '', 'vi', cmp)
+      || a.name.localeCompare(b.name, 'vi', cmp))
+  const paidOf = (cid: string) => payments.filter(p => p.customerId === cid && p.month === month && p.kind === 'management').reduce((s, p) => s + p.amount, 0)
+  const total = feeCustomers.reduce((s, c) => s + managementFeeOf(c, month), 0)
+
+  return (
+    <div className="sc">
+      <div className="sc-head">
+        <span className="sc-title">Phí quản lý</span>
+        <span style={{ fontSize: 12, color: 'var(--muted)' }}>Tổng phí: <b style={{ color: 'var(--navy)' }}>{fmt(total)} đ</b></span>
+      </div>
+      <div className="sc-body">
+        <div className="dn-scroll">
+          <table className="dn-table">
+            <thead><tr>
+              <th>Khách hàng</th><th style={{ textAlign: 'right' }}>Phải trả</th><th style={{ textAlign: 'right' }}>Đã thu</th><th style={{ textAlign: 'right' }}>Còn nợ</th><th style={{ width: 100 }}></th>
+            </tr></thead>
+            <tbody>
+              {feeCustomers.map(c => {
+                const due = managementFeeOf(c, month)
+                const paid = paidOf(c.id)
+                const remain = Math.max(0, due - paid)
+                return (
+                  <tr key={c.id}>
+                    <td style={{ fontWeight: 600 }}>{c.name}</td>
+                    <td style={{ textAlign: 'right' }}>{fmt(due)} đ</td>
+                    <td style={{ textAlign: 'right', color: 'var(--green)' }}>{fmt(paid)} đ</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(remain)} đ</td>
+                    <td><button className="btn-ghost" onClick={() => onCollect({ customerId: c.id, due, paid, kind: 'management', label: 'Phí quản lý' })}>Thu tiền</button></td>
+                  </tr>
+                )
+              })}
+              {feeCustomers.length === 0 && (
+                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 16 }}>Chưa có khách nào thu phí quản lý tháng {month}.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Bảng tổng hợp phải trả / đã thu / còn nợ theo NHÓM khách hàng (gộp cả 3 đồng hồ).
 function GroupSummaryCard({ readings, customers, usages, payments, month, meterNames }: {
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]; month: string
   meterNames: Record<number, string>
 }) {
   const monthReadings = readings.filter(r => r.month === month)
-  const allRows = monthReadings.flatMap(r => meterAllocation(r, customers, usages).rows)
   const paidOf = (customerId: string) => payments.filter(p => p.customerId === customerId && p.month === month).reduce((s, p) => s + p.amount, 0)
 
+  // Phải trả mỗi khách = tổng phân bổ các đồng hồ + phí quản lý (gộp mọi loại sử dụng)
+  const dueByCustomer = new Map<string, number>()
+  for (const r of monthReadings) for (const row of meterAllocation(r, customers, usages).rows) {
+    dueByCustomer.set(row.customer.id, (dueByCustomer.get(row.customer.id) ?? 0) + row.amount)
+  }
+  for (const c of customers) {
+    const fee = managementFeeOf(c, month)
+    if (fee > 0) dueByCustomer.set(c.id, (dueByCustomer.get(c.id) ?? 0) + fee)
+  }
+  const custById = new Map(customers.map(c => [c.id, c]))
+
   const groups = new Map<string, { due: number; paid: number; count: number }>()
-  for (const r of allRows) {
-    const g = r.customer.group?.trim() || 'Chưa phân nhóm'
+  for (const [cid, due] of dueByCustomer) {
+    const g = custById.get(cid)?.group?.trim() || 'Chưa phân nhóm'
     const cur = groups.get(g) ?? { due: 0, paid: 0, count: 0 }
-    cur.due += r.amount
-    cur.paid += paidOf(r.customer.id)
+    cur.due += due
+    cur.paid += paidOf(cid)
     cur.count += 1
     groups.set(g, cur)
   }
@@ -198,18 +263,23 @@ export function TabCongNo({ readings, customers, usages, payments, month, meterN
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]; month: string
   meterNames: Record<number, string>
 }) {
-  const [collecting, setCollecting] = useState<{ customerId: string; due: number; paid: number } | null>(null)
+  const [collecting, setCollecting] = useState<CollectArgs | null>(null)
   const byMeter = (id: MeterId) => readings.find(r => r.meterId === id && r.month === month)
+  const hasFeeCustomers = customers.some(c => c.hasManagementFee)
 
   return (
     <div>
       <GroupSummaryCard readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} />
       {([1, 2, 3] as MeterId[]).map(id => (
         <MeterAllocationCard key={id} meterId={id} reading={byMeter(id)} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames}
-          onCollect={(customerId, due, paid) => setCollecting({ customerId, due, paid })} />
+          onCollect={setCollecting} />
       ))}
+      {hasFeeCustomers && (
+        <ManagementFeeCard customers={customers} payments={payments} month={month} onCollect={setCollecting} />
+      )}
       {collecting && (
-        <PaymentModal customerId={collecting.customerId} month={month} due={collecting.due} paid={collecting.paid} onClose={() => setCollecting(null)} />
+        <PaymentModal customerId={collecting.customerId} month={month} due={collecting.due} paid={collecting.paid}
+          kind={collecting.kind} label={collecting.label} onClose={() => setCollecting(null)} />
       )}
     </div>
   )

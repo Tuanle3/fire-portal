@@ -74,6 +74,9 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
     active:     d.active !== false,
     inactiveMonths: Array.isArray(d.inactiveMonths) ? (d.inactiveMonths as string[]) : undefined,
     note:       (d.note as string) ?? '',
+    hasManagementFee: d.hasManagementFee === true,
+    managementFeePrice: d.managementFeePrice != null ? Number(d.managementFeePrice) : undefined,
+    managementFeeHistory: (d.managementFeeHistory as Customer['managementFeeHistory']) ?? undefined,
     createdAt:  (d.createdAt as string) ?? '',
   }
 }
@@ -128,6 +131,7 @@ function parsePayment(id: string, d: Record<string, unknown>): Payment {
     amount:     Number(d.amount ?? 0),
     paidAt:     (d.paidAt as string) ?? '',
     note:       (d.note as string) ?? '',
+    kind:       (d.kind as Payment['kind']) ?? undefined,
     createdAt:  (d.createdAt as string) ?? '',
   }
 }

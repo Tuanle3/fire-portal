@@ -1,0 +1,162 @@
+'use client'
+import { useState, useMemo } from 'react'
+import { Customer, PricePoint, managementFeeOf, isActiveInMonth, resolvePrice } from '@/lib/dien-nuoc-types'
+import { saveCustomer } from '@/lib/dien-nuoc-store'
+import { exportPhiQuanLy } from '@/lib/dien-nuoc-excel'
+import { NumberInput } from '../_components/NumberInput'
+
+const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
+
+// Xếp theo số tầng (giống tab Khách hàng): "Tầng 2" → 2, không số ⇒ cuối.
+function floorSortKey(floor: string): [number, string] {
+  const m = (floor || '').match(/\d+/)
+  return [m ? parseInt(m[0], 10) : Number.POSITIVE_INFINITY, (floor || '').toLowerCase()]
+}
+
+// Đặt/sửa mức phí quản lý áp dụng TỪ tháng `month` (thêm/ghi đè 1 mốc giá cùng fromMonth).
+function upsertFeeForMonth(c: Customer, month: string, price: number): Customer {
+  const hist: PricePoint[] = [...(c.managementFeeHistory ?? [])]
+  const idx = hist.findIndex(p => (p.fromMonth || '') === month)
+  if (idx >= 0) hist[idx] = { fromMonth: month, price }
+  else hist.push({ fromMonth: month, price })
+  const cleaned = hist.filter(p => p.price > 0)
+  const latest = [...cleaned].sort((a, b) => (b.fromMonth || '').localeCompare(a.fromMonth || ''))[0]?.price ?? 0
+  return { ...c, hasManagementFee: true, managementFeeHistory: cleaned, managementFeePrice: latest }
+}
+
+function PhiRow({ c, month }: { c: Customer; month: string }) {
+  const applied = managementFeeOf(c, month)                                  // phải thu (0 nếu tháng này không thu)
+  const configured = resolvePrice(c.managementFeeHistory, c.managementFeePrice ?? 0, month)  // mức phí cấu hình (bỏ qua trạng thái)
+  const [draft, setDraft] = useState(configured)
+  const [saving, setSaving] = useState(false)
+  const active = isActiveInMonth(c, month)
+  const priceCount = c.managementFeeHistory?.filter(p => p.price > 0).length ?? 0
+
+  const saveFee = async () => { setSaving(true); await saveCustomer(upsertFeeForMonth(c, month, draft)); setSaving(false) }
+  const toggleMonth = async () => {
+    const set = new Set(c.inactiveMonths ?? [])
+    if (set.has(month)) set.delete(month); else set.add(month)
+    await saveCustomer({ ...c, inactiveMonths: Array.from(set).sort() })
+  }
+
+  const dirty = draft !== configured
+  return (
+    <tr>
+      <td style={{ fontWeight: 600 }}>{c.name}</td>
+      <td>{c.group?.trim() ? <span className="badge" style={{ background: 'var(--surf2)', color: 'var(--navy)', border: '1px solid var(--border3)' }}>{c.group}</span> : '—'}</td>
+      <td>{c.floor || '—'}</td>
+      <td>{c.kioskCode || '—'}</td>
+      <td>{c.tenantName || c.kioskOwner || '—'}</td>
+      <td style={{ textAlign: 'right' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
+          <NumberInput style={{ width: 130, textAlign: 'right' }} value={draft} onValueChange={setDraft} />
+          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>đ/tháng</span>
+          {dirty && <button className="btn-ghost" onClick={saveFee} disabled={saving}>{saving ? '…' : `Lưu từ ${month}`}</button>}
+        </div>
+        {priceCount > 1 && <div style={{ fontSize: 10, color: 'var(--gold2)' }}>{priceCount} mốc giá</div>}
+      </td>
+      <td style={{ textAlign: 'right', fontWeight: 700, color: applied > 0 ? 'var(--navy)' : 'var(--muted2)' }}>{fmt(applied)} đ</td>
+      <td>
+        {!c.active ? (
+          <span className="badge badge-red">Ngừng</span>
+        ) : (
+          <button onClick={toggleMonth}
+            title={active ? `Bấm để đánh dấu KHÔNG thu tháng ${month}` : `Bấm để thu lại tháng ${month}`}
+            className={`badge ${active ? 'badge-green' : 'badge-amber'}`} style={{ cursor: 'pointer', border: 'none', fontFamily: 'inherit' }}>
+            {active ? 'Có thu' : 'Không thu'}
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; month: string }) {
+  const [floorFilter, setFloorFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'inactive'>('')
+
+  const feeCustomers = useMemo(() => customers.filter(c => c.hasManagementFee), [customers])
+
+  const floorOptions = useMemo(
+    () => Array.from(new Set(feeCustomers.map(c => c.floor?.trim()).filter((f): f is string => !!f)))
+      .sort((a, b) => { const [na, sa] = floorSortKey(a), [nb, sb] = floorSortKey(b); return na - nb || sa.localeCompare(sb, 'vi') }),
+    [feeCustomers],
+  )
+
+  const displayed = useMemo(() => {
+    const filtered = feeCustomers.filter(c =>
+      (!floorFilter || (c.floor?.trim() || '') === floorFilter) &&
+      (!statusFilter || (statusFilter === 'active' ? isActiveInMonth(c, month) : !isActiveInMonth(c, month)))
+    )
+    const col = { numeric: true, sensitivity: 'base' } as const
+    return [...filtered].sort((a, b) => {
+      const [na, sa] = floorSortKey(a.floor?.trim() || ''), [nb, sb] = floorSortKey(b.floor?.trim() || '')
+      return na - nb || sa.localeCompare(sb, 'vi', col)
+        || (a.kioskCode?.trim() || '').localeCompare(b.kioskCode?.trim() || '', 'vi', col)
+        || a.name.localeCompare(b.name, 'vi', col)
+    })
+  }, [feeCustomers, floorFilter, statusFilter, month])
+
+  const total = displayed.reduce((s, c) => s + managementFeeOf(c, month), 0)
+  const countCharged = displayed.filter(c => managementFeeOf(c, month) > 0).length
+
+  return (
+    <div className="sc sc--sticky">
+      <div className="sc-head">
+        <span className="sc-title">Phí quản lý — tháng {month}</span>
+        <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label className="dn-label" style={{ margin: 0 }}>Tầng:</label>
+            <select className="dn-input" style={{ width: 150, padding: '5px 8px' }} value={floorFilter} onChange={e => setFloorFilter(e.target.value)}>
+              <option value="">Tất cả tầng</option>
+              {floorOptions.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label className="dn-label" style={{ margin: 0 }}>Trạng thái ({month}):</label>
+            <select className="dn-input" style={{ width: 150, padding: '5px 8px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value as '' | 'active' | 'inactive')}>
+              <option value="">Tất cả</option>
+              <option value="active">Có thu</option>
+              <option value="inactive">Không thu</option>
+            </select>
+          </span>
+          <button className="btn-ghost" onClick={() => exportPhiQuanLy(displayed, month)}>⬇ Xuất Excel</button>
+        </span>
+      </div>
+      <div className="sc-body">
+        <div style={{ background: '#EEF3FA', border: '1px solid #D0DCE8', borderRadius: 10, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: 'var(--txt2)' }}>
+          Danh sách khách đã bật <b>“Thu phí quản lý”</b>. Sửa mức phí ở đây sẽ áp dụng từ tháng {month} trở đi (thêm mốc giá); muốn thêm/bỏ khách khỏi phí quản lý thì vào tab <b>Khách hàng</b>. Thu tiền &amp; công nợ phí quản lý xem ở tab <b>Công nợ &amp; Thu tiền</b>.
+        </div>
+        <div className="dn-scroll">
+          <table className="dn-table">
+            <thead><tr>
+              <th>Khách hàng</th><th>Nhóm</th><th>Tầng</th><th>Mã ki-ốt</th><th>Khách thuê</th>
+              <th style={{ textAlign: 'right' }}>Mức phí</th><th style={{ textAlign: 'right' }}>Phải thu ({month})</th><th>Trạng thái ({month})</th>
+            </tr></thead>
+            <tbody>
+              {feeCustomers.length === 0 && (
+                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>
+                  Chưa có khách nào bật phí quản lý. Vào tab <b>Khách hàng</b> → Sửa khách → tích “Thu phí quản lý”.
+                </td></tr>
+              )}
+              {feeCustomers.length > 0 && displayed.length === 0 && (
+                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Không có khách khớp bộ lọc đang chọn.</td></tr>
+              )}
+              {displayed.map(c => <PhiRow key={c.id} c={c} month={month} />)}
+            </tbody>
+            {displayed.length > 0 && (
+              <tfoot>
+                <tr style={{ background: '#E0EDFA' }}>
+                  <td style={{ fontWeight: 700 }} colSpan={5}>Tổng cộng ({countCharged} khách có thu)</td>
+                  <td></td>
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmt(total)} đ</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}

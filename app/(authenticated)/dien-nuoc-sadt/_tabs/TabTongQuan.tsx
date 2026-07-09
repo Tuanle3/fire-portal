@@ -1,7 +1,7 @@
 'use client'
 import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId,
-  meterLabel, meterAllocation, meterTotal, isActiveInMonth,
+  meterLabel, meterAllocation, meterTotal, isActiveInMonth, managementFeeOf,
 } from '@/lib/dien-nuoc-types'
 import { exportTongQuan } from '@/lib/dien-nuoc-excel'
 
@@ -16,10 +16,12 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
 
   const allAlloc = monthReadings.map(r => ({ meterId: r.meterId, alloc: meterAllocation(r, customers, usages) }))
   const allRows = allAlloc.flatMap(a => a.alloc.rows)
-  const totalDue = allRows.reduce((s, r) => s + r.amount, 0)
+  const meterDue = allRows.reduce((s, r) => s + r.amount, 0)
+  const managementDue = customers.reduce((s, c) => s + managementFeeOf(c, month), 0)  // phí quản lý
+  const totalDue = meterDue + managementDue
 
-  const paidByCustomer = (customerId: string) => payments.filter(p => p.customerId === customerId && p.month === month).reduce((s, p) => s + p.amount, 0)
-  const totalPaid = allRows.reduce((s, r) => s + paidByCustomer(r.customer.id), 0)
+  // Đã thu = toàn bộ khoản thu trong tháng (cả tiền đồng hồ lẫn phí quản lý)
+  const totalPaid = payments.filter(p => p.month === month).reduce((s, p) => s + p.amount, 0)
   const totalRemain = Math.max(0, totalDue - totalPaid)
 
   const activeCustomers = customers.filter(c => isActiveInMonth(c, month)).length

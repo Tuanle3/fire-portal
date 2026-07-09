@@ -25,6 +25,7 @@ const EMPTY: Omit<Customer, 'id' | 'createdAt'> = {
   flatPriceHistory: [{ fromMonth: '', price: 0 }], areaPriceHistory: [{ fromMonth: '', price: 0 }],
   timebandPriceHistory: [{ ...EMPTY_TIMEBAND_ROW }],
   floor: '', kioskCode: '', kioskOwner: '', tenantName: '', active: true, note: '',
+  hasManagementFee: false, managementFeePrice: 0, managementFeeHistory: [{ fromMonth: '', price: 0 }],
 }
 
 // Chuyển giá tĩnh cũ (nếu có) thành 1 mốc "áp dụng từ đầu" khi mở khách hàng cũ chưa có bảng giá.
@@ -113,6 +114,7 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
           flatPriceHistory: seedHistory(initial.flatPriceHistory, initial.flatUnitPrice),
           areaPriceHistory: seedHistory(initial.areaPriceHistory, initial.pricePerM2),
           timebandPriceHistory: (initial.timebandPriceHistory && initial.timebandPriceHistory.length > 0) ? initial.timebandPriceHistory : [{ ...EMPTY_TIMEBAND_ROW }],
+          managementFeeHistory: seedHistory(initial.managementFeeHistory, initial.managementFeePrice ?? 0),
         }
       : { ...EMPTY }
   )
@@ -126,11 +128,14 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
     const flatH = (form.flatPriceHistory ?? []).filter(p => p.price > 0)
     const areaH = (form.areaPriceHistory ?? []).filter(p => p.price > 0)
     const tbH = (form.timebandPriceHistory ?? []).filter(p => p.caoDiem > 0 || p.thapDiem > 0 || p.binhThuong > 0)
+    const mgmtH = form.hasManagementFee ? (form.managementFeeHistory ?? []).filter(p => p.price > 0) : []
     onSave({
       ...(initial ?? { id: `c${Date.now()}`, createdAt: now }), ...form,
       flatPriceHistory: flatH, areaPriceHistory: areaH, timebandPriceHistory: tbH,
       flatUnitPrice: flatH.length ? latest(flatH) : form.flatUnitPrice,
       pricePerM2:    areaH.length ? latest(areaH) : form.pricePerM2,
+      managementFeeHistory: mgmtH,
+      managementFeePrice: mgmtH.length ? latest(mgmtH) : (form.hasManagementFee ? form.managementFeePrice : 0),
     } as Customer)
   }
 
@@ -219,6 +224,25 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
           Khách này sẽ tự động gánh phần còn lại của đồng hồ sau khi trừ hết các khách khác — không cần nhập sản lượng.
         </div>
       )}
+
+      {/* Loại sử dụng bổ sung: Phí quản lý (độc lập với đồng hồ điện/nước ở trên) */}
+      <div style={{ borderTop: '1px dashed var(--border3)', paddingTop: 10, marginBottom: 10 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>
+          <input type="checkbox" checked={!!form.hasManagementFee} onChange={e => set('hasManagementFee', e.target.checked)} style={{ margin: 0 }} />
+          Thu phí quản lý (dịch vụ)
+        </label>
+        <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', margin: '4px 0 8px' }}>
+          Khoản phí cố định thu hàng tháng, độc lập với tiền điện/nước. Khách bật mục này sẽ hiện ở tab “Phí quản lý” để theo dõi & thu.
+        </div>
+        {form.hasManagementFee && (
+          <PriceHistoryEditor
+            label="Bảng phí quản lý theo thời điểm"
+            unit="đ/tháng"
+            value={form.managementFeeHistory ?? [{ fromMonth: '', price: 0 }]}
+            onChange={v => set('managementFeeHistory', v)}
+          />
+        )}
+      </div>
 
       <div style={{ marginBottom: 10 }}>
         <label className="dn-label">Ghi chú</label>
@@ -317,7 +341,7 @@ export function TabKhachHang({ customers, meterNames, month }: { customers: Cust
           <table className="dn-table">
             <thead><tr>
               <th>Tên khách hàng</th><th>Nhóm</th><th>Tầng</th><th>Mã ki-ốt</th><th>Chủ ki-ốt</th><th>Khách hàng thuê</th>
-              <th>Đồng hồ</th><th>Cách tính tiền</th><th>Thông số</th><th>Trạng thái ({month})</th><th style={{ width: 100 }}></th>
+              <th>Loại sử dụng</th><th>Cách tính tiền</th><th>Thông số</th><th>Trạng thái ({month})</th><th style={{ width: 100 }}></th>
             </tr></thead>
             <tbody>
               {customers.length === 0 && (
@@ -334,7 +358,12 @@ export function TabKhachHang({ customers, meterNames, month }: { customers: Cust
                   <td>{c.kioskCode || '—'}</td>
                   <td>{c.kioskOwner || '—'}</td>
                   <td>{c.tenantName || '—'}</td>
-                  <td>{meterLabel(meterNames, c.meterId)}</td>
+                  <td>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                      <span className="badge" style={{ background: 'var(--surf2)', color: 'var(--navy)', border: '1px solid var(--border3)' }}>{meterLabel(meterNames, c.meterId)}</span>
+                      {c.hasManagementFee && <span className="badge badge-amber">Phí QL</span>}
+                    </div>
+                  </td>
                   <td>{CHARGE_TYPE_LABELS[c.chargeType]}</td>
                   <td style={{ color: 'var(--muted)' }}>
                     {c.chargeType === 'flat_vat_incl' && <>{fmtDec(c.flatUnitPrice)} đ (gồm VAT){(c.flatPriceHistory?.filter(p => p.price > 0).length ?? 0) > 1 && <span style={{ color: 'var(--gold2)' }}> · {c.flatPriceHistory!.filter(p => p.price > 0).length} mốc giá</span>}</>}
