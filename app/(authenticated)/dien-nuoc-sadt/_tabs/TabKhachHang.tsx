@@ -3,13 +3,37 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Customer, ChargeType, PricePoint, TimebandPricePoint,
   ServiceId, ServiceSubscription, SERVICE_IDS, SERVICE_METER, serviceLabel, customerServices,
-  CHARGE_TYPE_LABELS, resolveTimebandPoint, isActiveInMonth,
+  CHARGE_TYPE_LABELS, resolvePrice, resolveTimebandPoint, isActiveInMonth,
 } from '@/lib/dien-nuoc-types'
 import { saveCustomer, deleteCustomer } from '@/lib/dien-nuoc-store'
 import { exportKhachHang } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
 
 const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 20 })  // giữ phần lẻ cho đơn giá
+
+// Thông số giá của 1 dịch vụ (để hiển thị & double-check nhanh ở cột THÔNG SỐ).
+function subPriceInfo(s: ServiceSubscription) {
+  const mocGia = (n: number) => n > 1 ? <span style={{ color: 'var(--gold2)' }}> · {n} mốc giá</span> : null
+  if (s.service === 'phiql') {
+    const n = s.flatPriceHistory?.filter(x => x.price > 0).length ?? 0
+    return <>{fmtDec(resolvePrice(s.flatPriceHistory, s.flatUnitPrice ?? 0, '9999-12'))} đ/tháng{mocGia(n)}</>
+  }
+  if (s.chargeType === 'flat_vat_incl') {
+    const n = s.flatPriceHistory?.filter(x => x.price > 0).length ?? 0
+    return <>{fmtDec(resolvePrice(s.flatPriceHistory, s.flatUnitPrice ?? 0, '9999-12'))} đ{s.service === 'nuoc' ? '/m³' : ''} (gồm VAT){mocGia(n)}</>
+  }
+  if (s.chargeType === 'fixed_area') {
+    const n = s.areaPriceHistory?.filter(x => x.price > 0).length ?? 0
+    return <>{s.areaM2 ?? 0} m² × {fmtDec(resolvePrice(s.areaPriceHistory, s.pricePerM2 ?? 0, '9999-12'))} đ{mocGia(n)}</>
+  }
+  if (s.chargeType === 'timeband_excl_vat') {
+    const pt = resolveTimebandPoint(s.timebandPriceHistory, '9999-12')
+    const n = s.timebandPriceHistory?.filter(x => x.caoDiem > 0 || x.thapDiem > 0 || x.binhThuong > 0).length ?? 0
+    if (!pt) return 'Theo giá đồng hồ'
+    return <>CĐ {fmtDec(pt.caoDiem)} · TĐ {fmtDec(pt.thapDiem)} · BT {fmtDec(pt.binhThuong)}{mocGia(n)}</>
+  }
+  return 'Gánh phần còn lại'
+}
 
 const EMPTY_TIMEBAND_ROW: TimebandPricePoint = { fromMonth: '', caoDiem: 0, thapDiem: 0, binhThuong: 0 }
 
@@ -49,11 +73,11 @@ function PriceHistoryEditor({ label, unit, value, onChange }: {
         Mỗi mốc giá áp dụng từ tháng ghi bên trái đến khi có mốc mới. Để trống tháng = áp dụng từ đầu.
       </div>
       {value.map((p, i) => (
-        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-          <span style={{ fontSize: 11.5, color: 'var(--muted)', minWidth: 70 }}>Áp dụng từ</span>
-          <input type="month" className="dn-input" style={{ width: 150 }} value={p.fromMonth} onChange={e => setRow(i, { fromMonth: e.target.value })} />
-          <NumberInput style={{ width: 140 }} placeholder="Đơn giá" value={p.price} onValueChange={v => setRow(i, { price: v })} />
-          <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>{unit}</span>
+        <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>Áp dụng từ</span>
+          <input type="month" className="dn-input" style={{ width: 118, padding: '5px 6px' }} value={p.fromMonth} onChange={e => setRow(i, { fromMonth: e.target.value })} />
+          <NumberInput style={{ width: 96, padding: '5px 6px' }} placeholder="Đơn giá" value={p.price} onValueChange={v => setRow(i, { price: v })} />
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>{unit}</span>
           {value.length > 1 && <button className="btn-danger" onClick={() => removeRow(i)}>Xoá</button>}
         </div>
       ))}
@@ -123,7 +147,7 @@ function ServiceConfigBlock({ sub, meterNames, onChange }: {
   const isPhiql = sub.service === 'phiql'
   const isWater = sub.service === 'nuoc'
   return (
-    <div style={{ border: '1px solid var(--border3)', borderRadius: 10, padding: 12, marginBottom: 10, background: '#fff' }}>
+    <div style={{ border: '1px solid var(--border3)', borderRadius: 10, padding: 12, background: '#fff', flex: '1 1 320px', minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>⚙ {serviceLabel(sub.service, meterNames)}</div>
       {isPhiql ? (
         <PriceHistoryEditor label="Bảng phí quản lý theo thời điểm" unit="đ/tháng"
@@ -262,6 +286,13 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
           <label className="dn-label">Khách hàng thuê</label>
           <input className="dn-input" value={form.tenantName} onChange={e => set('tenantName', e.target.value)} />
         </div>
+        <div>
+          <label className="dn-label">Trạng thái</label>
+          <select className="dn-input" value={form.active ? 'active' : 'inactive'} onChange={e => set('active', e.target.value === 'active')}>
+            <option value="active">Đang thuê</option>
+            <option value="inactive">Chưa thuê</option>
+          </select>
+        </div>
       </div>
 
       {/* LOẠI SỬ DỤNG: tích nhiều dịch vụ; mỗi dịch vụ có cấu hình tính tiền riêng và hiện ở tab tương ứng */}
@@ -280,9 +311,11 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
             Chưa chọn dịch vụ nào — khách sẽ không xuất hiện ở tab nào. Hãy tích ít nhất 1 loại sử dụng.
           </div>
         )}
-        {SERVICE_IDS.filter(hasSvc).map(s => (
-          <ServiceConfigBlock key={s} sub={services.find(x => x.service === s)!} meterNames={meterNames} onChange={patch => setSvc(s, patch)} />
-        ))}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
+          {SERVICE_IDS.filter(hasSvc).map(s => (
+            <ServiceConfigBlock key={s} sub={services.find(x => x.service === s)!} meterNames={meterNames} onChange={patch => setSvc(s, patch)} />
+          ))}
+        </div>
       </div>
 
       <div style={{ marginBottom: 10 }}>
@@ -411,16 +444,13 @@ export function TabKhachHang({ customers, meterNames, month }: { customers: Cust
                     </div>
                   </td>
                   <td>{CHARGE_TYPE_LABELS[c.chargeType]}</td>
-                  <td style={{ color: 'var(--muted)' }}>
-                    {c.chargeType === 'flat_vat_incl' && <>{fmtDec(c.flatUnitPrice)} đ (gồm VAT){(c.flatPriceHistory?.filter(p => p.price > 0).length ?? 0) > 1 && <span style={{ color: 'var(--gold2)' }}> · {c.flatPriceHistory!.filter(p => p.price > 0).length} mốc giá</span>}</>}
-                    {c.chargeType === 'fixed_area' && <>{c.areaM2} m² × {fmtDec(c.pricePerM2)} đ{(c.areaPriceHistory?.filter(p => p.price > 0).length ?? 0) > 1 && <span style={{ color: 'var(--gold2)' }}> · {c.areaPriceHistory!.filter(p => p.price > 0).length} mốc giá</span>}</>}
-                    {c.chargeType === 'timeband_excl_vat' && (() => {
-                      const pt = resolveTimebandPoint(c.timebandPriceHistory, '9999-12')
-                      const n = c.timebandPriceHistory?.filter(p => p.caoDiem > 0 || p.thapDiem > 0 || p.binhThuong > 0).length ?? 0
-                      if (!pt) return 'Theo giá đồng hồ'
-                      return <>CĐ {fmtDec(pt.caoDiem)} · TĐ {fmtDec(pt.thapDiem)} · BT {fmtDec(pt.binhThuong)}{n > 1 && <span style={{ color: 'var(--gold2)' }}> · {n} mốc giá</span>}</>
-                    })()}
-                    {c.chargeType === 'remainder' && '—'}
+                  <td style={{ color: 'var(--muted)', fontSize: 11.5 }}>
+                    {customerServices(c).map(s => (
+                      <div key={s.service} style={{ whiteSpace: 'nowrap', marginBottom: 1 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--navy)' }}>{serviceLabel(s.service, meterNames)}:</span> {subPriceInfo(s)}
+                      </div>
+                    ))}
+                    {customerServices(c).length === 0 && '—'}
                   </td>
                   <td>
                     {!c.active ? (
