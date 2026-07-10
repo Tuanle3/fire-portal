@@ -64,8 +64,9 @@ function download(wb: XLSX.WorkBook, filename: string) {
 }
 
 // ── Style chuyên nghiệp cho bảng tính (exceljs: font Times New Roman, viền, tô nền) ──
-type StyleKey = 'title' | 'sub' | 'section' | 'colHead' | 'label' | 'labelB' | 'num' | 'numK' | 'numP' | 'totalL' | 'totalN' | 'sonAnL' | 'sonAnN'
-type ECell = { v: Cell; k?: StyleKey } | null
+type StyleKey = 'title' | 'sub' | 'guideH' | 'guide' | 'section' | 'colHead' | 'label' | 'labelB' | 'num' | 'numK' | 'numP' | 'totalL' | 'totalN' | 'sonAnL' | 'sonAnN' | 'note'
+// f = công thức Excel (không có dấu "="); có f thì ô ghi công thức + kết quả (v) ⇒ người xem bấm vào thấy nguồn số.
+type ECell = { v: Cell; k?: StyleKey; f?: string } | null
 type EMerge = [number, number, number]  // [rowIdx0, colStart0, colEnd0]
 interface SheetSpec { name: string; rows: ECell[][]; colW: number[]; merges: EMerge[] }
 
@@ -76,6 +77,8 @@ const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as 
 const EJS: Record<StyleKey, Partial<ExcelJS.Style>> = {
   title:   { font: { name: FONT, size: 14, bold: true, color: { argb: 'FF1C3557' } }, alignment: { vertical: 'middle' } },
   sub:     { font: { name: FONT, size: 10, italic: true, color: { argb: 'FF6B7280' } } },
+  guideH:  { font: { name: FONT, size: 11, bold: true, color: { argb: 'FF8A5A12' } }, fill: fill('FFFFF4E0'), alignment: { vertical: 'middle' } },
+  guide:   { font: { name: FONT, size: 10, color: { argb: 'FF3D3D3D' } }, fill: fill('FFFFFDF6'), alignment: { vertical: 'middle', wrapText: true } },
   section: { font: { name: FONT, size: 11, bold: true, color: { argb: 'FFFFFFFF' } }, fill: fill('FF1C3557'), alignment: { horizontal: 'left', vertical: 'middle' }, border: BOX },
   colHead: { font: { name: FONT, size: 10, bold: true, color: { argb: 'FFFFFFFF' } }, fill: fill('FF2A4D7A'), alignment: { horizontal: 'center', vertical: 'middle', wrapText: true }, border: BOX },
   label:   { font: { name: FONT, size: 10 }, alignment: { vertical: 'middle' }, border: BOX },
@@ -87,27 +90,44 @@ const EJS: Record<StyleKey, Partial<ExcelJS.Style>> = {
   totalN:  { font: { name: FONT, size: 10, bold: true, color: { argb: 'FF1C3557' } }, fill: fill('FFE0EDFA'), numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'middle' }, border: BOX },
   sonAnL:  { font: { name: FONT, size: 10, bold: true, color: { argb: 'FF8A5A12' } }, fill: fill('FFFFF4E0'), alignment: { vertical: 'middle' }, border: BOX },
   sonAnN:  { font: { name: FONT, size: 10, bold: true, color: { argb: 'FF8A5A12' } }, fill: fill('FFFFF4E0'), numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'middle' }, border: BOX },
+  note:    { font: { name: FONT, size: 9, italic: true, color: { argb: 'FF55606E' } }, alignment: { horizontal: 'left', vertical: 'middle', wrapText: true }, border: BOX },
 }
 
-// Dựng & tải workbook bằng exceljs (giữ đầy đủ màu/viền/font) — chạy phía client bằng Blob.
+// Cột số → chữ cái Excel (1→A, 2→B…) để dựng công thức tham chiếu ô.
+function colLetter(n: number): string {
+  let s = '', x = n
+  while (x > 0) { const m = (x - 1) % 26; s = String.fromCharCode(65 + m) + s; x = Math.floor((x - 1) / 26) }
+  return s
+}
+
+// Dựng & tải workbook bằng exceljs (giữ đầy đủ màu/viền/font + công thức) — chạy phía client bằng Blob.
 async function downloadWorkbook(specs: SheetSpec[], filename: string) {
   const wb = new ExcelJS.Workbook()
   for (const spec of specs) {
     const ws = wb.addWorksheet(safeSheetName(spec.name))
     ws.columns = spec.colW.map(w => ({ width: w }))
-    spec.rows.forEach((row, R) => row.forEach((cell, C) => {
-      if (!cell) return
-      const c = ws.getCell(R + 1, C + 1)
-      c.value = cell.v === '' ? null : cell.v
-      const st = cell.k ? EJS[cell.k] : undefined
-      if (st) {
-        if (st.font) c.font = st.font
-        if (st.fill) c.fill = st.fill
-        if (st.border) c.border = st.border
-        if (st.alignment) c.alignment = st.alignment
-        if (st.numFmt) c.numFmt = st.numFmt
-      }
-    }))
+    spec.rows.forEach((row, R) => {
+      let hasNote = false, hasGuide = false
+      row.forEach((cell, C) => {
+        if (!cell) return
+        const c = ws.getCell(R + 1, C + 1)
+        if (cell.f) c.value = { formula: cell.f, result: typeof cell.v === 'number' ? cell.v : undefined }
+        else c.value = cell.v === '' ? null : cell.v
+        const st = cell.k ? EJS[cell.k] : undefined
+        if (st) {
+          if (st.font) c.font = st.font
+          if (st.fill) c.fill = st.fill
+          if (st.border) c.border = st.border
+          if (st.alignment) c.alignment = st.alignment
+          if (st.numFmt) c.numFmt = st.numFmt
+        }
+        if (cell.k === 'note') hasNote = true
+        if (cell.k === 'guide') hasGuide = true
+      })
+      // Dòng có ghi chú dài / hướng dẫn ⇒ cao hơn để chữ xuống dòng đọc được.
+      if (hasGuide) ws.getRow(R + 1).height = 30
+      else if (hasNote) ws.getRow(R + 1).height = 28
+    })
     for (const [r, c1, c2] of spec.merges) ws.mergeCells(r + 1, c1 + 1, r + 1, c2 + 1)
   }
   const buf = await wb.xlsx.writeBuffer()
@@ -125,51 +145,80 @@ function recentMonths(readings: MeterReading[], meterId: MeterId): MeterReading[
 }
 
 // ── Bảng tính trình bày (Điện chiếu sáng / Điện máy lạnh) — tháng là các cột ──
+// Có: ① khối "Cách đọc bảng" (lời văn dễ hiểu), ② cột "Cách tính" giải thích từng dòng,
+// ③ công thức Excel thật ở các ô tổng ⇒ người xem bấm vào ô là thấy số lấy từ đâu.
 function electricPresentation(meterId: MeterId, months: MeterReading[], customers: Customer[], usages: CustomerUsage[], label: string): SheetSpec {
   const b1Bands: BandKey[] = meterId === 1 ? BAND_KEYS : ['caoDiem', 'thapDiem', 'binhThuong']
-  const lastCol = months.length            // cột 0 = nhãn, cột 1..n = tháng
+  const nCols = months.length
+  const noteCol = nCols + 1                  // cột 0 nhãn · 1..n tháng · n+1 "Cách tính"
   const rows: ECell[][] = []
   const merges: EMerge[] = []
-  const mrow = (r: number) => merges.push([r, 0, lastCol])
-  const labelRow = (label: string, vals: Cell[], vk: StyleKey = 'num', lk: StyleKey = 'label'): ECell[] => [{ v: label, k: lk }, ...vals.map(v => ({ v, k: vk }))]
-  const section = (t: string) => { rows.push([{ v: t, k: 'section' }]); mrow(rows.length - 1) }
-  const colHead = (first: string) => rows.push([{ v: first, k: 'colHead' }, ...months.map(m => ({ v: m.month, k: 'colHead' as StyleKey }))])
+  const colL = (j: number) => colLetter(j + 2)                 // tháng j (0-based) → chữ cột Excel
+  const push = (cells: ECell[]) => (rows.push(cells), rows.length)   // trả về số dòng Excel (1-based)
+  const full = (r1: number) => merges.push([r1 - 1, 0, noteCol])
+  const nc = (t: string): ECell => ({ v: t, k: 'note' })
+  const dataRow = (lbl: string, cells: ECell[], note: string, lk: StyleKey = 'label'): ECell[] => [{ v: lbl, k: lk }, ...cells, nc(note)]
+  const valCells = (fn: (m: MeterReading, j: number) => Cell, vk: StyleKey): ECell[] => months.map((m, j) => ({ v: fn(m, j), k: vk }))
+  const fCells = (fn: (m: MeterReading, j: number) => Cell, ff: (L: string, m: MeterReading, j: number) => string, vk: StyleKey): ECell[] =>
+    months.map((m, j) => ({ v: fn(m, j), k: vk, f: ff(colL(j), m, j) }))
+  const section = (t: string) => full(push([{ v: t, k: 'section' }]))
+  const colHead = (first: string) => push([{ v: first, k: 'colHead' }, ...months.map(m => ({ v: m.month, k: 'colHead' as StyleKey })), { v: 'Cách tính', k: 'colHead' }])
 
-  rows.push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, k: 'title' }]); mrow(0)
-  rows.push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), kWh`, k: 'sub' }])
-  rows.push([])
+  full(push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, k: 'title' }]))
+  push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), kWh`, k: 'sub' }])
+  push([])
+  full(push([{ v: '📖 CÁCH ĐỌC BẢNG (đọc là hiểu — không cần là người làm)', k: 'guideH' }]))
+  const guide = meterId === 1 ? [
+    '① BẢNG 1 = hoá đơn điện lực: mỗi tháng dùng bao nhiêu "số điện" (kWh) theo từng loại giờ × "giá 1 số điện", cộng lại + thuế 8% = tiền phải trả cho điện lực.',
+    '② BẢNG 2 chia số tiền đó làm 2 phần: "Sơn An thu hộ" (Sơn An thu giúp các cửa hàng + công ty) và "Ban quản trị" (điện phần chung của cư dân). QUY TẮC VÀNG: Ban quản trị = Tổng cộng − Sơn An thu hộ.',
+    '③ Phần CHI TIẾT cho biết "Sơn An thu hộ" ở đâu ra: điện chung 3 tầng thương mại + điện các công ty có đồng hồ riêng, nhân giá rồi cộng thuế.',
+    '★ Cách tra cứu: bấm vào ô số có nền xanh/vàng (các dòng tổng) sẽ thấy CÔNG THỨC (ví dụ = ô này × ô kia). Cột "Cách tính" ngoài cùng bên phải giải thích từng dòng bằng lời.',
+  ] : [
+    '① BẢNG 1 = hoá đơn điện máy lạnh trung tâm từ điện lực: số điện (kWh) theo từng loại giờ × giá + thuế 8% = tiền phải trả.',
+    '② BẢNG 2 chia tiền đó cho từng khách dùng máy lạnh (theo cách tính riêng của khách); phần chưa chia cho ai gọi là "Sơn An Group chịu" = Tổng cộng − tổng các khách.',
+    '★ Cách tra cứu: bấm vào ô số nền xanh/vàng để xem CÔNG THỨC; cột "Cách tính" bên phải giải thích từng dòng bằng lời.',
+  ]
+  for (const line of guide) full(push([{ v: line, k: 'guide' }]))
+  push([])
 
   // Bảng 1 — tiêu thụ từ điện lực
   section('BẢNG 1: THÔNG TIN TIÊU THỤ ĐIỆN (TỪ ĐIỆN LỰC)')
   colHead('Nội dung')
-  for (const k of b1Bands) rows.push(labelRow(`Kwh · ${BAND_LABELS[k]}`, months.map(m => r2(m.bands[k].kwh)), 'numK'))
-  for (const k of b1Bands) rows.push(labelRow(`Đơn giá · ${BAND_LABELS[k]}`, months.map(m => m.bands[k].donGia), 'numP'))
-  rows.push(labelRow('Tổng tiền chưa VAT', months.map(m => r0(meterSubtotal(m.bands)))))
-  rows.push(labelRow('Thuế VAT', months.map(m => r0(meterVat(m.bands, m.vatPercent)))))
-  rows.push(labelRow('Tổng thanh toán', months.map(m => r0(meterTotal(m.bands, m.vatPercent))), 'totalN', 'totalL'))
-  rows.push([])
+  const rKwh: Partial<Record<BandKey, number>> = {}
+  for (const k of b1Bands) rKwh[k] = push(dataRow(`Kwh · ${BAND_LABELS[k]}`, valCells(m => r2(m.bands[k].kwh), 'numK'), `Số điện dùng loại "${BAND_LABELS[k]}" trong tháng (theo hoá đơn điện lực).`))
+  const rDg: Partial<Record<BandKey, number>> = {}
+  for (const k of b1Bands) rDg[k] = push(dataRow(`Đơn giá · ${BAND_LABELS[k]}`, valCells(m => m.bands[k].donGia, 'numP'), `Giá tiền cho 1 số điện loại "${BAND_LABELS[k]}" (điện lực quy định).`))
+  const subF1 = (L: string) => b1Bands.map(k => `${L}${rKwh[k]}*${L}${rDg[k]}`).join('+')
+  const rSub1 = push(dataRow('Tổng tiền chưa VAT', fCells(m => r0(meterSubtotal(m.bands)), L => `ROUND(${subF1(L)},0)`, 'num'), 'Cộng tất cả (Số điện × Giá) của các loại giờ phía trên.'))
+  const rVat1 = push(dataRow('Thuế VAT', fCells(m => r0(meterVat(m.bands, m.vatPercent)), (L, m) => `ROUND(${L}${rSub1}*${(m.vatPercent || 0) / 100},0)`, 'num'), 'Thuế giá trị gia tăng = Tổng chưa VAT × 8%.'))
+  const rTot1 = push(dataRow('Tổng thanh toán', fCells(m => r0(meterTotal(m.bands, m.vatPercent)), L => `${L}${rSub1}+${L}${rVat1}`, 'totalN'), 'Tổng chưa VAT + Thuế VAT = số tiền phải trả cho điện lực.', 'totalL'))
+  push([])
 
   if (meterId === 1) {
-    // Bảng 2 — tách Sơn An thu hộ / Ban quản trị
     const splits = months.map(m => computeLightingSplit(m, customers, usages, m.bqtRatio ?? DEFAULT_BQT_RATIO))
     section('BẢNG 2: PHÂN BỔ TIỀN ĐIỆN')
     colHead('Nội dung')
-    rows.push(labelRow('Tiền điện Sơn An thu hộ', splits.map(s => r0(s.sonAnTotal)), 'sonAnN', 'sonAnL'))
-    rows.push(labelRow('Tiền điện chung cư (Ban quản trị)', splits.map(s => r0(s.bqtTotal)), 'num', 'labelB'))
-    rows.push(labelRow('Tổng cộng', splits.map(s => r0(s.meterTotal)), 'totalN', 'totalL'))
-    rows.push([])
+    const sonAn2 = fCells((m, j) => r0(splits[j].sonAnTotal), () => '', 'sonAnN')   // công thức gắn sau khi biết dòng CHI TIẾT
+    const rSonAn2 = push(dataRow('Tiền điện Sơn An thu hộ', sonAn2, 'Tiền điện Sơn An thu giúp cho ki-ốt + công ty. Cách tính xem bảng "CHI TIẾT PHẦN SƠN AN THU HỘ" bên dưới.', 'sonAnL'))
+    push(dataRow('Tiền điện chung cư (Ban quản trị)', fCells((m, j) => r0(splits[j].bqtTotal), L => `${L}${rTot1}-${L}${rSonAn2}`, 'num'), 'QUY TẮC VÀNG = Tổng cộng − Sơn An thu hộ. Đây là tiền điện phần chung của cư dân (BQT) chịu.', 'labelB'))
+    push(dataRow('Tổng cộng', fCells((m, j) => r0(splits[j].meterTotal), L => `${L}${rTot1}`, 'totalN'), '= Tổng thanh toán ở Bảng 1 (đúng bằng tiền điện lực).', 'totalL'))
+    push([])
     section('CHI TIẾT PHẦN SƠN AN THU HỘ')
     colHead('Nội dung')
-    rows.push(labelRow('Chung 3 tầng TM (kWh)', splits.map(s => r2(s.commonPoolKwh)), 'numK'))
-    rows.push(labelRow('Công ty đồng hồ riêng (kWh)', splits.map(s => r2(s.companies.reduce((x, c) => x + c.total, 0))), 'numK'))
+    push(dataRow('Chung 3 tầng TM (kWh)', valCells((m, j) => r2(splits[j].commonPoolKwh), 'numK'), 'Tổng số điện của 3 tầng thương mại (các khu đánh dấu "chung"). Nhập trong phần mềm.'))
+    push(dataRow('Công ty đồng hồ riêng (kWh)', valCells((m, j) => r2(splits[j].companies.reduce((x, c) => x + c.total, 0)), 'numK'), 'Tổng số điện các công ty có đồng hồ riêng (VIN, PLT, Meta…).'))
     const B3: [FloorBandKey, string][] = [['caoDiem', 'Cao điểm'], ['thapDiem', 'Thấp điểm'], ['binhThuong', 'Bình thường']]
-    B3.forEach(([, lb], i) => rows.push(labelRow(`Sản lượng thu hộ · ${lb} (kWh)`, splits.map(s => r2(s.bands[i].kwh)), 'numK')))
-    B3.forEach(([, lb], i) => rows.push(labelRow(`Đơn giá · ${lb}`, splits.map(s => s.bands[i].price), 'numP')))
-    rows.push(labelRow('Tổng chưa VAT', splits.map(s => r0(s.sonAnSubtotal))))
-    rows.push(labelRow('Thuế VAT', splits.map(s => r0(s.sonAnVat))))
-    rows.push(labelRow('Sơn An thu hộ', splits.map(s => r0(s.sonAnTotal)), 'sonAnN', 'sonAnL'))
+    const rSl: Partial<Record<FloorBandKey, number>> = {}
+    B3.forEach(([bk, lb], i) => { rSl[bk] = push(dataRow(`Sản lượng thu hộ · ${lb} (kWh)`, valCells((m, j) => r2(splits[j].bands[i].kwh), 'numK'), `= (Chung 3 tầng TM × tỷ lệ giờ ${lb}) + phần công ty dùng giờ ${lb}.`)) })
+    const rDg2: Partial<Record<FloorBandKey, number>> = {}
+    B3.forEach(([bk, lb], i) => { rDg2[bk] = push(dataRow(`Đơn giá · ${lb}`, valCells((m, j) => splits[j].bands[i].price, 'numP'), `Giá 1 số điện giờ ${lb} (lấy theo giá điện lực ở Bảng 1).`)) })
+    const subF2 = (L: string) => B3.map(([bk]) => `${L}${rSl[bk]}*${L}${rDg2[bk]}`).join('+')
+    const rSub2 = push(dataRow('Tổng chưa VAT', fCells((m, j) => r0(splits[j].sonAnSubtotal), L => `ROUND(${subF2(L)},0)`, 'num'), 'Cộng (Sản lượng thu hộ × Giá) của 3 loại giờ.'))
+    const rVat2 = push(dataRow('Thuế VAT', fCells((m, j) => r0(splits[j].sonAnVat), (L, m) => `ROUND(${L}${rSub2}*${(m.vatPercent || 0) / 100},0)`, 'num'), '= Tổng chưa VAT × 8%.'))
+    const rSonAnDetail = push(dataRow('Sơn An thu hộ', fCells((m, j) => r0(splits[j].sonAnTotal), L => `${L}${rSub2}+${L}${rVat2}`, 'sonAnN'), '= Tổng chưa VAT + Thuế VAT. Số này được đưa lên Bảng 2.', 'sonAnL'))
+    // Gắn công thức cho "Sơn An thu hộ" ở Bảng 2 = trỏ tới dòng tổng của bảng CHI TIẾT.
+    sonAn2.forEach((cell, j) => { if (cell) cell.f = `${colL(j)}${rSonAnDetail}` })
   } else {
-    // Đồng hồ 2 — phân bổ cho khách + Sơn An Group chịu
     const allocs = months.map(m => meterAllocation(m, customers, usages))
     const cmp = { numeric: true, sensitivity: 'base' } as const
     const priced = customers.filter(c => customerHasService(c, 'dh2') && subFor(c, 'dh2')?.chargeType !== 'remainder'
@@ -177,30 +226,44 @@ function electricPresentation(meterId: MeterId, months: MeterReading[], customer
       .sort((a, b) => (a.floor?.trim() || '').localeCompare(b.floor?.trim() || '', 'vi', cmp) || a.name.localeCompare(b.name, 'vi', cmp))
     section('BẢNG 2: PHÂN BỔ CHO KHÁCH & SƠN AN GROUP')
     colHead('Khách hàng')
-    for (const c of priced) rows.push(labelRow(c.name, allocs.map(a => r0(a.rows.find(x => x.customer.id === c.id)?.amount ?? 0))))
-    rows.push(labelRow('Sơn An Group chịu (phần còn lại)', allocs.map(a => r0(a.remainderTotal)), 'sonAnN', 'sonAnL'))
-    rows.push(labelRow('Tổng cộng', allocs.map(a => r0(a.total)), 'totalN', 'totalL'))
+    const custRows: number[] = []
+    for (const c of priced) custRows.push(push(dataRow(c.name, valCells((m, j) => r0(allocs[j].rows.find(x => x.customer.id === c.id)?.amount ?? 0), 'num'), `Tiền điện máy lạnh của khách "${c.name}" (theo cách tính riêng của khách).`)))
+    const sumRef = custRows.length ? (L: string) => `${L}${rTot1}-SUM(${L}${custRows[0]}:${L}${custRows[custRows.length - 1]})` : (L: string) => `${L}${rTot1}`
+    push(dataRow('Sơn An Group chịu (phần còn lại)', fCells((m, j) => r0(allocs[j].remainderTotal), sumRef, 'sonAnN'), '= Tổng tiền đồng hồ − tổng đã tính cho các khách ở trên (phần Sơn An Group chịu).', 'sonAnL'))
+    push(dataRow('Tổng cộng', fCells((m, j) => r0(allocs[j].total), L => `${L}${rTot1}`, 'totalN'), '= Tổng thanh toán ở Bảng 1.', 'totalL'))
   }
 
-  return { name: label, rows, colW: [30, ...months.map(() => 14)], merges }
+  return { name: label, rows, colW: [30, ...months.map(() => 14), 46], merges }
 }
 
 // ── Bảng tiêu thụ nước — tháng là các cột ────────────────────────────────────
 function waterPresentation(months: MeterReading[], label: string): SheetSpec {
-  const lastCol = months.length
+  const nCols = months.length
+  const noteCol = nCols + 1
   const rows: ECell[][] = []
-  const merges: EMerge[] = [[0, 0, lastCol]]
-  const labelRow = (label: string, vals: Cell[], vk: StyleKey = 'num', lk: StyleKey = 'label'): ECell[] => [{ v: label, k: lk }, ...vals.map(v => ({ v, k: vk }))]
-  rows.push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, k: 'title' }])
-  rows.push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), m³`, k: 'sub' }])
-  rows.push([])
-  rows.push([{ v: 'Nội dung', k: 'colHead' }, ...months.map(m => ({ v: m.month, k: 'colHead' as StyleKey }))])
-  rows.push(labelRow('Sản lượng (m³)', months.map(m => r2(m.bands.toanThoiGian.kwh)), 'numK'))
-  rows.push(labelRow('Đơn giá (đ/m³)', months.map(m => m.bands.toanThoiGian.donGia), 'numP'))
-  rows.push(labelRow('Tổng tiền chưa VAT', months.map(m => r0(meterSubtotal(m.bands)))))
-  rows.push(labelRow('Thuế VAT', months.map(m => r0(meterVat(m.bands, m.vatPercent)))))
-  rows.push(labelRow('Tổng thanh toán', months.map(m => r0(meterTotal(m.bands, m.vatPercent))), 'totalN', 'totalL'))
-  return { name: label, rows, colW: [26, ...months.map(() => 14)], merges }
+  const merges: EMerge[] = []
+  const colL = (j: number) => colLetter(j + 2)
+  const push = (cells: ECell[]) => (rows.push(cells), rows.length)
+  const full = (r1: number) => merges.push([r1 - 1, 0, noteCol])
+  const nc = (t: string): ECell => ({ v: t, k: 'note' })
+  const dataRow = (lbl: string, cells: ECell[], note: string, lk: StyleKey = 'label'): ECell[] => [{ v: lbl, k: lk }, ...cells, nc(note)]
+  const valCells = (fn: (m: MeterReading) => Cell, vk: StyleKey): ECell[] => months.map(m => ({ v: fn(m), k: vk }))
+  const fCells = (fn: (m: MeterReading) => Cell, ff: (L: string, m: MeterReading) => string, vk: StyleKey): ECell[] => months.map((m, j) => ({ v: fn(m), k: vk, f: ff(colL(j), m) }))
+
+  full(push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, k: 'title' }]))
+  push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), m³`, k: 'sub' }])
+  push([])
+  full(push([{ v: '📖 CÁCH ĐỌC BẢNG', k: 'guideH' }]))
+  full(push([{ v: '① Mỗi tháng dùng bao nhiêu m³ nước × đơn giá 1 m³ = tiền chưa thuế; cộng thuế 8% = tiền nước phải trả.', k: 'guide' }]))
+  full(push([{ v: '★ Bấm vào ô số nền xanh để xem CÔNG THỨC; cột "Cách tính" bên phải giải thích từng dòng.', k: 'guide' }]))
+  push([])
+  push([{ v: 'Nội dung', k: 'colHead' }, ...months.map(m => ({ v: m.month, k: 'colHead' as StyleKey })), { v: 'Cách tính', k: 'colHead' }])
+  const rSl = push(dataRow('Sản lượng (m³)', valCells(m => r2(m.bands.toanThoiGian.kwh), 'numK'), 'Số nước dùng trong tháng (m³) = chỉ số mới − chỉ số cũ.'))
+  const rDg = push(dataRow('Đơn giá (đ/m³)', valCells(m => m.bands.toanThoiGian.donGia, 'numP'), 'Giá tiền cho 1 m³ nước.'))
+  const rSub = push(dataRow('Tổng tiền chưa VAT', fCells(m => r0(meterSubtotal(m.bands)), L => `ROUND(${L}${rSl}*${L}${rDg},0)`, 'num'), '= Sản lượng × Đơn giá.'))
+  const rVat = push(dataRow('Thuế VAT', fCells(m => r0(meterVat(m.bands, m.vatPercent)), (L, m) => `ROUND(${L}${rSub}*${(m.vatPercent || 0) / 100},0)`, 'num'), '= Tổng chưa VAT × 8%.'))
+  push(dataRow('Tổng thanh toán', fCells(m => r0(meterTotal(m.bands, m.vatPercent)), L => `${L}${rSub}+${L}${rVat}`, 'totalN'), '= Tổng chưa VAT + Thuế VAT.', 'totalL'))
+  return { name: label, rows, colW: [26, ...months.map(() => 14), 46], merges }
 }
 
 // ── Sheet dữ liệu chi tiết theo khách (chỉ các cột cần) ───────────────────────
@@ -222,7 +285,15 @@ function customerDetailSheet(meterId: MeterId, months: MeterReading[], customers
   if (isElec) bandCols.forEach(([, lb]) => header.push(`${lb} kWh`))
   header.push(`Sản lượng (${unit})`, 'Đơn giá (đ)', 'Thành tiền (đ)')
 
-  const rows: ECell[][] = [header.map(h => ({ v: h, k: 'colHead' as StyleKey }))]
+  // Dòng hướng dẫn (gộp ô) + dòng tiêu đề cột.
+  const guideText = isElec
+    ? 'Bảng dữ liệu theo từng khách × từng tháng. kWh CĐ/TĐ/BT = số điện từng giờ (khách theo khung giờ: chỉ số mới − cũ; khách giá cố định: chia theo tỷ lệ giờ). Thành tiền tính theo cách tính riêng của mỗi khách.'
+    : 'Bảng dữ liệu theo từng khách × từng tháng. Sản lượng = chỉ số mới − cũ. Thành tiền tính theo cách tính riêng của mỗi khách.'
+  const rows: ECell[][] = [
+    [{ v: guideText, k: 'guide' }],
+    header.map(h => ({ v: h, k: 'colHead' as StyleKey })),
+  ]
+  const merges: EMerge[] = [[0, 0, header.length - 1]]
   for (const c of mCustomers) {
     const sub = subFor(c, service)!
     const ct = sub.chargeType
@@ -256,7 +327,7 @@ function customerDetailSheet(meterId: MeterId, months: MeterReading[], customers
     }
   }
   const colW = [24, 14, 10, 12, 22, 10, ...(isElec ? [10, 10, 10] : []), 14, 14, 16]
-  return { name: 'Chi tiet khach hang', rows, colW, merges: [] }
+  return { name: 'Chi tiet khach hang', rows, colW, merges }
 }
 
 // ── Tab: Đồng hồ (Nhập chỉ số) — 1 file/đồng hồ, trình bày như bảng tính Excel ──
