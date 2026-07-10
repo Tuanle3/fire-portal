@@ -143,7 +143,8 @@ export function exportMeter(
     const usageOf = (c: Customer, m: string) => findUsage(usages, c.id, service, m, primaryService(c))
 
     const header: Cell[] = ['Khách hàng', 'Nhóm', 'Tầng', 'Mã ki-ốt', 'Cách tính tiền', 'Tháng', 'Chỉ số cũ', 'Chỉ số mới']
-    if (isElec) bandCols.forEach(([, lb]) => header.push(`${lb} cũ`, `${lb} mới`))
+    // Với điện: mỗi khung giờ có chỉ số cũ/mới + kWh (= mới − cũ) để nhìn được sản lượng từng khung giờ
+    if (isElec) bandCols.forEach(([, lb]) => header.push(`${lb} cũ`, `${lb} mới`, `${lb} kWh`))
     header.push(`Sản lượng (${unit})`, 'Đơn giá (đ)', 'Thành tiền (đ)')
 
     const detail: Aoa = [header]
@@ -156,8 +157,14 @@ export function exportMeter(
         const row: Cell[] = [c.name, c.group?.trim() || '', c.floor || '', c.kioskCode || '', CHARGE_TYPE_LABELS[ct], r.month]
         row.push(ct === 'flat_vat_incl' ? (u?.indexOld ?? '') : '', ct === 'flat_vat_incl' ? (u?.indexNew ?? '') : '')
         if (isElec) bandCols.forEach(([k]) => {
-          if (ct === 'timeband_excl_vat') row.push(u?.bandsIndexOld?.[k] ?? '', u?.bandsIndexNew?.[k] ?? '')
-          else row.push('', '')
+          if (ct === 'timeband_excl_vat') {
+            const oldI = u?.bandsIndexOld?.[k]
+            const newI = u?.bandsIndexNew?.[k]
+            // kWh khung giờ = chỉ số mới − chỉ số cũ; nếu chưa nhập chỉ số thì lấy sản lượng đã lưu (bandsKwh)
+            const bandKwh: Cell = (oldI != null || newI != null) ? r2(Math.max(0, (newI ?? 0) - (oldI ?? 0)))
+              : (u?.bandsKwh?.[k] != null ? r2(u.bandsKwh[k]!) : '')
+            row.push(oldI ?? '', newI ?? '', bandKwh)
+          } else row.push('', '', '')
         })
         const sl: Cell = (ct === 'flat_vat_incl' || ct === 'timeband_excl_vat') ? r2(usageKwh(sub, u)) : ''
         const dg: Cell = ct === 'flat_vat_incl' ? resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, r.month)
