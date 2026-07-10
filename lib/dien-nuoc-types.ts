@@ -225,16 +225,35 @@ export function resolvePrice(history: PricePoint[] | undefined, fallback: number
   return earliest.price
 }
 
-// Chi tiết phí quản lý 1 khách trong tháng: đơn giá gốc, VAT, tổng phải thu.
-export interface ManagementFeeBreakdown { base: number; vatIncluded: boolean; vatPercent: number; vat: number; total: number }
+// Cách tính phí quản lý của 1 khách: cố định đ/tháng, hay theo diện tích (đơn giá × m²).
+export function managementFeeIsArea(sub: ChargeConfig | undefined): boolean {
+  return sub?.chargeType === 'fixed_area'
+}
+// Đơn giá phí quản lý áp cho tháng `month`:
+//  - Cố định: mức phí đ/tháng (flatPriceHistory / flatUnitPrice).
+//  - Theo diện tích: đơn giá đ/m²/tháng (areaPriceHistory / pricePerM2).
+export function managementFeeUnitPrice(sub: ChargeConfig, month: string): number {
+  return managementFeeIsArea(sub)
+    ? resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, month)
+    : resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, month)
+}
+
+// Chi tiết phí quản lý 1 khách trong tháng: đơn giá gốc, diện tích, VAT, tổng phải thu.
+export interface ManagementFeeBreakdown {
+  isArea: boolean; unitPrice: number; areaM2: number
+  base: number; vatIncluded: boolean; vatPercent: number; vat: number; total: number
+}
 export function managementFeeBreakdown(c: Customer, month: string): ManagementFeeBreakdown {
   const sub = subFor(c, 'phiql')
-  if (!sub || !isActiveInMonth(c, month)) return { base: 0, vatIncluded: true, vatPercent: 0, vat: 0, total: 0 }
-  const base = resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, month)
+  if (!sub || !isActiveInMonth(c, month)) return { isArea: false, unitPrice: 0, areaM2: 0, base: 0, vatIncluded: true, vatPercent: 0, vat: 0, total: 0 }
+  const isArea = managementFeeIsArea(sub)
+  const unitPrice = managementFeeUnitPrice(sub, month)
+  const areaM2 = isArea ? (sub.areaM2 ?? 0) : 0
+  const base = isArea ? areaM2 * unitPrice : unitPrice   // phí quản lý = đơn giá × diện tích (nếu theo m²)
   const vatIncluded = sub.vatIncluded !== false               // mặc định coi như đã gồm VAT (tương thích cũ)
   const vatPercent = vatIncluded ? 0 : (sub.vatPercent ?? 8)
   const vat = vatIncluded ? 0 : base * vatPercent / 100
-  return { base, vatIncluded, vatPercent, vat, total: base + vat }
+  return { isArea, unitPrice, areaM2, base, vatIncluded, vatPercent, vat, total: base + vat }
 }
 // Phí quản lý phải thu (đã gồm VAT) của 1 khách cho tháng `month` (đ). = 0 nếu không đăng ký hoặc trống tháng đó.
 export function managementFeeOf(c: Customer, month: string): number {

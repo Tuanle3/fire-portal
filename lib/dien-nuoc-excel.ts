@@ -7,7 +7,7 @@ import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, BandKey,
   BAND_KEYS, BAND_LABELS, METER_UNIT, meterLabel,
   meterSubtotal, meterVat, meterTotal, meterAllocation,
-  resolvePrice, resolveTimebandPoint, usageKwh, computeBqt, isActiveInMonth, managementFeeOf,
+  resolvePrice, resolveTimebandPoint, usageKwh, computeBqt, isActiveInMonth, managementFeeOf, managementFeeBreakdown,
   customerServices, customerHasService, subFor, findUsage, primaryService, paymentService,
   METER_SERVICE, serviceLabel,
   CHARGE_TYPE_LABELS, DEFAULT_BQT_RATIO,
@@ -329,23 +329,28 @@ export function exportKhachHang(customers: Customer[], meterNames: Record<number
 // ── Tab: Phí quản lý ─────────────────────────────────────────────────────────
 export function exportPhiQuanLy(customers: Customer[], month: string) {
   const feeCustomers = customers.filter(c => c.hasManagementFee)
-  const rows: Row[] = feeCustomers.map((c, i) => ({
-    'STT':            i + 1,
-    'Khách hàng':     c.name,
-    'Nhóm':           c.group?.trim() || '',
-    'Tầng':           c.floor || '',
-    'Mã ki-ốt':       c.kioskCode || '',
-    'Khách thuê':     c.tenantName || c.kioskOwner || '',
-    'Mức phí (đ/tháng)': r0(resolvePrice(c.managementFeeHistory, c.managementFeePrice ?? 0, month)),
-    [`Phải thu (${month}) (đ)`]: r0(managementFeeOf(c, month)),
-    [`Trạng thái (${month})`]: !c.active ? 'Ngừng' : isActiveInMonth(c, month) ? 'Có thu' : 'Không thu',
-  }))
+  const rows: Row[] = feeCustomers.map((c, i) => {
+    const bd = managementFeeBreakdown(c, month)
+    return {
+      'STT':            i + 1,
+      'Khách hàng':     c.name,
+      'Nhóm':           c.group?.trim() || '',
+      'Tầng':           c.floor || '',
+      'Mã ki-ốt':       c.kioskCode || '',
+      'Khách thuê':     c.tenantName || c.kioskOwner || '',
+      'Cách tính':      bd.isArea ? 'Theo diện tích' : 'Cố định',
+      'Diện tích (m²)': bd.isArea ? bd.areaM2 : '',
+      'Đơn giá':        r0(bd.unitPrice),   // đ/m²/tháng nếu theo diện tích, ngược lại đ/tháng
+      [`Phải thu (${month}) (đ)`]: r0(bd.total),
+      [`Trạng thái (${month})`]: !c.active ? 'Ngừng' : isActiveInMonth(c, month) ? 'Có thu' : 'Không thu',
+    }
+  })
   const total = feeCustomers.reduce((s, c) => s + managementFeeOf(c, month), 0)
   if (rows.length === 0) rows.push({ 'STT': '', 'Khách hàng': '(Chưa có khách nào bật phí quản lý)' } as Row)
   else rows.push({ 'Khách hàng': 'TỔNG CỘNG', [`Phải thu (${month}) (đ)`]: r0(total) } as Row)
 
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, sheetFromRows(rows, [5, 26, 18, 12, 12, 20, 18, 20, 16]), safeSheetName(`Phi quan ly ${month}`))
+  XLSX.utils.book_append_sheet(wb, sheetFromRows(rows, [5, 26, 18, 12, 12, 20, 14, 12, 16, 20, 16]), safeSheetName(`Phi quan ly ${month}`))
   download(wb, `dien-nuoc_phi-quan-ly_${month}.xlsx`)
 }
 

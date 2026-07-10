@@ -15,10 +15,16 @@ const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits:
 function subPriceInfo(s: ServiceSubscription) {
   const mocGia = (n: number) => n > 1 ? <span style={{ color: 'var(--gold2)' }}> · {n} mốc giá</span> : null
   if (s.service === 'phiql') {
+    const vp = s.vatPercent ?? 8
+    const vatLabel = s.vatIncluded === false ? `(chưa VAT +${vp}%)` : '(gồm VAT)'
+    if (s.chargeType === 'fixed_area') {
+      const n = s.areaPriceHistory?.filter(x => x.price > 0).length ?? 0
+      const unit = resolvePrice(s.areaPriceHistory, s.pricePerM2 ?? 0, '9999-12')
+      return <>{s.areaM2 ?? 0} m² × {fmtDec(unit)} đ/m²/tháng = {fmtDec(Math.round((s.areaM2 ?? 0) * unit))} đ/tháng {vatLabel}{mocGia(n)}</>
+    }
     const n = s.flatPriceHistory?.filter(x => x.price > 0).length ?? 0
     const base = resolvePrice(s.flatPriceHistory, s.flatUnitPrice ?? 0, '9999-12')
     if (s.vatIncluded === false) {
-      const vp = s.vatPercent ?? 8
       return <>{fmtDec(base)} đ/tháng (chưa VAT) → {fmtDec(Math.round(base * (1 + vp / 100)))} đ (gồm {vp}% VAT){mocGia(n)}</>
     }
     return <>{fmtDec(base)} đ/tháng (gồm VAT){mocGia(n)}</>
@@ -156,23 +162,52 @@ function ServiceConfigBlock({ sub, meterNames, onChange }: {
       <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>⚙ {serviceLabel(sub.service, meterNames)}</div>
       {isPhiql ? (
         <>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
-            <div style={{ minWidth: 190 }}>
-              <label className="dn-label">Đơn giá</label>
-              <select className="dn-input" value={sub.vatIncluded === false ? 'excl' : 'incl'} onChange={e => onChange({ vatIncluded: e.target.value === 'incl' })}>
-                <option value="incl">Đã gồm VAT</option>
-                <option value="excl">Chưa gồm VAT (cộng thêm)</option>
-              </select>
-            </div>
-            {sub.vatIncluded === false && (
-              <div style={{ width: 84 }}>
-                <label className="dn-label">VAT %</label>
-                <input type="number" className="dn-input" value={sub.vatPercent ?? 8} onChange={e => onChange({ vatPercent: Number(e.target.value) })} />
-              </div>
-            )}
-          </div>
-          <PriceHistoryEditor label={sub.vatIncluded === false ? 'Bảng phí quản lý theo thời điểm (chưa VAT)' : 'Bảng phí quản lý theo thời điểm (đã gồm VAT)'}
-            unit="đ/tháng" value={sub.flatPriceHistory ?? [{ fromMonth: '', price: 0 }]} onChange={v => onChange({ flatPriceHistory: v })} />
+          {(() => {
+            const isArea = sub.chargeType === 'fixed_area'
+            const vatSuffix = sub.vatIncluded === false ? '(chưa VAT)' : '(đã gồm VAT)'
+            return (
+              <>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
+                  <div style={{ minWidth: 200 }}>
+                    <label className="dn-label">Cách tính phí</label>
+                    <select className="dn-input" value={isArea ? 'area' : 'flat'} onChange={e => onChange({ chargeType: e.target.value === 'area' ? 'fixed_area' : 'flat_vat_incl' })}>
+                      <option value="flat">Cố định (đ/tháng)</option>
+                      <option value="area">Theo diện tích (đơn giá × m²)</option>
+                    </select>
+                  </div>
+                  <div style={{ minWidth: 180 }}>
+                    <label className="dn-label">Đơn giá</label>
+                    <select className="dn-input" value={sub.vatIncluded === false ? 'excl' : 'incl'} onChange={e => onChange({ vatIncluded: e.target.value === 'incl' })}>
+                      <option value="incl">Đã gồm VAT</option>
+                      <option value="excl">Chưa gồm VAT (cộng thêm)</option>
+                    </select>
+                  </div>
+                  {sub.vatIncluded === false && (
+                    <div style={{ width: 84 }}>
+                      <label className="dn-label">VAT %</label>
+                      <input type="number" className="dn-input" value={sub.vatPercent ?? 8} onChange={e => onChange({ vatPercent: Number(e.target.value) })} />
+                    </div>
+                  )}
+                </div>
+                {isArea ? (
+                  <>
+                    <div style={{ marginBottom: 10, maxWidth: 220 }}>
+                      <label className="dn-label">Diện tích (m²)</label>
+                      <input type="number" className="dn-input" value={sub.areaM2 || ''} onChange={e => onChange({ areaM2: Number(e.target.value) })} placeholder="VD: 45" />
+                    </div>
+                    <PriceHistoryEditor label={`Bảng đơn giá / m² / tháng theo thời điểm ${vatSuffix}`}
+                      unit="đ/m²" value={sub.areaPriceHistory ?? [{ fromMonth: '', price: 0 }]} onChange={v => onChange({ areaPriceHistory: v })} />
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: -2 }}>
+                      Phí quản lý hàng tháng = đơn giá × diện tích = {(sub.areaM2 ?? 0).toLocaleString('vi-VN')} m² × {resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, '9999-12').toLocaleString('vi-VN')} đ = <b style={{ color: 'var(--navy)' }}>{Math.round((sub.areaM2 ?? 0) * resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, '9999-12')).toLocaleString('vi-VN')} đ</b>/tháng {vatSuffix}
+                    </div>
+                  </>
+                ) : (
+                  <PriceHistoryEditor label={`Bảng phí quản lý theo thời điểm ${vatSuffix}`}
+                    unit="đ/tháng" value={sub.flatPriceHistory ?? [{ fromMonth: '', price: 0 }]} onChange={v => onChange({ flatPriceHistory: v })} />
+                )}
+              </>
+            )
+          })()}
         </>
       ) : (
         <>
