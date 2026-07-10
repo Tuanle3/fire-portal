@@ -812,58 +812,82 @@ function AcSplitSection({ reading, readings, month, customers, usages }: {
   const months = hasCur ? saved.map(r => r.month === month ? reading : r) : [...saved, reading].sort((a, b) => a.month.localeCompare(b.month))
   const hist = months.map(r => { const a = meterAllocation(r, customers, usages); return { month: r.month, isCur: r.month === month, total: a.total, allocated: a.allocated, remainder: a.remainderTotal } })
 
+  const allocPct = alloc.total > 0 ? Math.round(alloc.allocated / alloc.total * 100) : 0
+  const remPct = Math.max(0, 100 - allocPct)
+  const cardHead = { padding: '6px 11px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)', fontSize: 10.5, fontWeight: 800, color: '#4B6A8A', textTransform: 'uppercase' as const, letterSpacing: '.04em' }
+  const kpi = (label: string, val: string, sub: string, color: string, bg: string) => (
+    <div style={{ background: bg, borderRadius: 8, padding: '7px 10px' }}>
+      <div style={{ fontSize: 9.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 800, color, whiteSpace: 'nowrap' }}>{val}</div>
+      {sub && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{sub}</div>}
+    </div>
+  )
+
   return (
     <div style={{ marginTop: 20, border: '1px solid var(--border3)', borderRadius: 12, overflow: 'hidden' }}>
       <div style={{ background: '#1C3557', color: '#fff', padding: '9px 14px', fontSize: 12, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase' }}>
         Phân bổ tiền điện máy lạnh trung tâm (đồng hồ điện 2)
       </div>
       <div style={{ padding: 14 }}>
-        {/* Tóm tắt cách tính */}
-        <div style={{ background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, padding: '11px 14px', marginBottom: 14, fontSize: 12.5, lineHeight: 1.65, color: 'var(--txt2)' }}>
-          <div style={{ fontWeight: 800, color: 'var(--navy)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.03em', fontSize: 11.5 }}>📘 Tóm tắt cách tính</div>
-          <div><b>Tổng tiền đồng hồ 2</b> (máy lạnh trung tâm, từ điện lực + VAT) được phân bổ cho các khách dùng máy lạnh:</div>
-          <div style={{ margin: '4px 0 4px 6px' }}>
-            <div>• Khách <b>giá cố định</b> (VD VIN, D01): sản lượng × đơn giá cố định.</div>
-            <div>• Khách <b>theo khung giờ</b> (VD OBE — chưa VAT): kWh từng khung × đơn giá + VAT.</div>
-            <div>• <b style={{ color: 'var(--navy)' }}>Sơn An Group chịu</b> = <b>Tổng tiền đồng hồ − tổng đã phân bổ cho khách</b> (phần còn lại).</div>
+        {/* 3 card ngang: Tóm tắt · Phân bổ tháng · Tỷ trọng — tối ưu diện tích */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 14 }}>
+          {/* Card 1: Tóm tắt cách tính */}
+          <div style={{ flex: '1.5 1 300px', minWidth: 270, background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ ...cardHead, background: '#FBEFCF', color: '#8A5A12', borderColor: '#F1E2BD' }}>📘 Tóm tắt cách tính</div>
+            <div style={{ padding: '9px 12px', fontSize: 12, lineHeight: 1.6, color: 'var(--txt2)' }}>
+              <div><b>Tổng tiền đồng hồ 2</b> (máy lạnh trung tâm, từ điện lực + VAT) phân bổ cho khách dùng máy lạnh:</div>
+              <div style={{ margin: '3px 0 3px 4px' }}>
+                <div>• Khách <b>giá cố định</b> (VIN, D01): sản lượng × đơn giá.</div>
+                <div>• Khách <b>theo khung giờ</b> (OBE — chưa VAT): kWh từng khung × đơn giá + VAT.</div>
+                <div>• <b style={{ color: 'var(--navy)' }}>Sơn An Group chịu</b> = Tổng − tổng đã phân bổ khách (phần còn lại).</div>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Thêm/sửa khách ở tab <b>Khách hàng</b> (dịch vụ “{METER_LABELS[2]}”).</div>
+            </div>
           </div>
-          <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>Thêm/sửa khách &amp; cách tính ở tab <b>Khách hàng</b> (chọn dịch vụ “{METER_LABELS[2]}”).</div>
-        </div>
 
-        {/* Bảng phân bổ tháng hiện tại */}
-        <div className="dn-scroll">
-          <table className="dn-table" style={{ fontSize: 12 }}>
-            <thead><tr>
-              <th>Khách hàng</th><th>Cách tính tiền</th><th style={{ textAlign: 'right' }}>Thành tiền ({month})</th>
-            </tr></thead>
-            <tbody>
+          {/* Card 2: Phân bổ tháng hiện tại */}
+          <div style={{ flex: '1.3 1 260px', minWidth: 250, border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
+            <div style={cardHead}>Phân bổ tháng {month}</div>
+            <div style={{ padding: '8px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {pricedRows.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic' }}>Chưa có khách nào gán cho đồng hồ máy lạnh.</div>}
               {pricedRows.map(r => (
-                <tr key={r.customer.id}>
-                  <td style={{ fontWeight: 600 }}>{r.customer.name}</td>
-                  <td style={{ color: 'var(--muted)' }}>{chargeTypeLabel(r.customer)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(r.amount)} đ</td>
-                </tr>
+                <div key={r.customer.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, borderBottom: '1px dashed var(--border)', paddingBottom: 4 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12.5 }}>{r.customer.name}</div>
+                    <div style={{ fontSize: 10, color: 'var(--muted2)' }}>{chargeTypeLabel(r.customer)}</div>
+                  </div>
+                  <span style={{ fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12.5 }}>{fmt(r.amount)} đ</span>
+                </div>
               ))}
-              {pricedRows.length === 0 && (
-                <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--muted)', padding: 12 }}>Chưa có khách nào gán cho đồng hồ máy lạnh.</td></tr>
-              )}
-              <tr style={{ background: '#FFF4E0' }}>
-                <td style={{ fontWeight: 700, color: '#8A5A12' }}>Sơn An Group chịu</td>
-                <td style={{ color: 'var(--muted)', fontStyle: 'italic' }}>Phần còn lại</td>
-                <td style={{ textAlign: 'right', fontWeight: 800, color: '#8A5A12' }}>{fmt(alloc.remainderTotal)} đ</td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr style={{ background: '#E0EDFA' }}>
-                <td style={{ fontWeight: 800, color: 'var(--navy)' }} colSpan={2}>Tổng tiền đồng hồ 2</td>
-                <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmt(alloc.total)} đ</td>
-              </tr>
-            </tfoot>
-          </table>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#FFF4E0', borderRadius: 7, padding: '5px 8px' }}>
+                <span style={{ fontWeight: 700, color: '#8A5A12', fontSize: 12 }}>Sơn An Group chịu</span>
+                <span style={{ fontWeight: 800, color: '#8A5A12', whiteSpace: 'nowrap' }}>{fmt(alloc.remainderTotal)} đ</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#E0EDFA', borderRadius: 7, padding: '6px 8px', marginTop: 'auto' }}>
+                <span style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 11.5, textTransform: 'uppercase' }}>Tổng đồng hồ 2</span>
+                <span style={{ fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap', fontSize: 14 }}>{fmt(alloc.total)} đ</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Tỷ trọng tháng hiện tại */}
+          <div style={{ flex: '1 1 210px', minWidth: 200, border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
+            <div style={cardHead}>Tỷ trọng tháng {month}</div>
+            <div style={{ padding: '9px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {kpi('Tổng tiền đồng hồ', `${fmt(alloc.total)} đ`, '', 'var(--navy)', '#F8FAFC')}
+              {kpi('Đã phân bổ khách', `${fmt(alloc.allocated)} đ`, `${allocPct}% tổng`, '#1F6B3D', '#EAF6EE')}
+              {kpi('Sơn An Group chịu', `${fmt(alloc.remainderTotal)} đ`, `${remPct}% tổng`, '#8A5A12', '#FFF4E0')}
+              {/* Thanh tỷ trọng */}
+              <div style={{ display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border3)' }} title={`Khách ${allocPct}% · Sơn An ${remPct}%`}>
+                <div style={{ width: `${allocPct}%`, background: '#1F6B3D' }} />
+                <div style={{ width: `${remPct}%`, background: '#D4A64A' }} />
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Thống kê theo tháng */}
-        <div className="dn-col-title" style={{ marginTop: 16 }}><span>Thống kê phân bổ theo tháng</span></div>
+        {/* Thống kê theo tháng (full width) */}
+        <div className="dn-col-title"><span>Thống kê phân bổ theo tháng</span></div>
         <div className="dn-scroll">
           <table className="dn-table" style={{ fontSize: 11 }}>
             <thead><tr>
