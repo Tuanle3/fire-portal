@@ -49,7 +49,8 @@ export const FLOOR_BAND_KEYS: FloorBandKey[] = ['caoDiem', 'thapDiem', 'binhThuo
 export interface FloorBandIndex { indexOld: number; indexNew: number }
 export type FloorBands = Record<FloorBandKey, FloorBandIndex>
 // fixed = khu tính cố định (không theo khung giờ): chỉ dùng 1 chỉ số tổng, lưu ở khung Bình thường.
-export interface FloorReading { group: string; bands: FloorBands; fixed?: boolean }
+// commonTM = khu thuộc "3 tầng thương mại chung" (Tầng 1/2/3) — sản lượng gom vào phần Sơn An thu hộ, chia theo tỷ lệ khung giờ.
+export interface FloorReading { group: string; bands: FloorBands; fixed?: boolean; commonTM?: boolean }
 
 export interface BqtRatio { caoDiem: number; thapDiem: number; binhThuong: number }
 export const DEFAULT_BQT_RATIO: BqtRatio = { binhThuong: 50, caoDiem: 15, thapDiem: 35 }
@@ -100,15 +101,16 @@ export function floorBandKwhSplit(f: FloorReading, k: FloorBandKey, ratio: BqtRa
 export function normalizeFloor(f: unknown): FloorReading {
   const o = (f ?? {}) as Record<string, unknown>
   const fx = o.fixed === true ? { fixed: true as const } : {}  // chỉ gắn key khi thật sự cố định (tránh undefined khi lưu Firestore)
+  const tm = o.commonTM === true ? { commonTM: true as const } : {}  // khu thuộc 3 tầng TM chung
   if (o.bands) {
     const rb = o.bands as Record<string, { indexOld?: number; indexNew?: number }>
     const bands = emptyFloorBands()
     for (const k of FLOOR_BAND_KEYS) bands[k] = { indexOld: Number(rb[k]?.indexOld ?? 0), indexNew: Number(rb[k]?.indexNew ?? 0) }
-    return { group: (o.group as string) ?? '', bands, ...fx }
+    return { group: (o.group as string) ?? '', bands, ...fx, ...tm }
   }
   const bands = emptyFloorBands()
   bands.binhThuong = { indexOld: Number(o.indexOld ?? 0), indexNew: Number(o.indexNew ?? 0) }
-  return { group: (o.group as string) ?? '', bands, ...fx }
+  return { group: (o.group as string) ?? '', bands, ...fx, ...tm }
 }
 
 export interface MeterReading {
@@ -156,6 +158,9 @@ export interface ChargeConfig {
   // Chỉ dùng cho phí quản lý (phiql): đơn giá đã gồm VAT chưa (mặc định true). false ⇒ cộng thêm VAT.
   vatIncluded?: boolean
   vatPercent?: number     // % VAT áp khi vatIncluded = false (mặc định 8)
+  // Chỉ dùng cho điện chiếu sáng (dh1): khách là "công ty dùng đồng hồ riêng" (VD VIN/PLT/Meta) ⇒
+  // sản lượng từng khung giờ được gom vào phần "Sơn An thu hộ" khi tách Sơn An thu hộ / Ban quản trị.
+  ownMeter?: boolean
 }
 // 1 dịch vụ mà khách đăng ký, kèm cấu hình tính tiền riêng của dịch vụ đó.
 export interface ServiceSubscription extends ChargeConfig { service: ServiceId }
@@ -488,4 +493,80 @@ export function computeBqt(
   const subtotal = bands.reduce((s, b) => s + b.amount, 0)
   const vat = subtotal * reading.vatPercent / 100
   return { floors, sumFloorKwh, mainMeterKwh, discrepancy, bqtTotalKwh, bands, subtotal, vat, total: subtotal + vat, ratioSum }
+}
+
+// ── Đồng hồ 1: tách "Sơn An thu hộ" ↔ "Ban quản trị" (theo sheet Điện chiếu sáng) ──
+// Sơn An thu hộ = tiền điện Sơn An thu hộ cho khách, gồm:
+//   ① Chung 3 tầng TM (các khu đánh dấu commonTM): tổng kWh chia theo tỷ lệ khung giờ (CĐ/TĐ/BT).
+//   ② Công ty dùng đồng hồ riêng (ownMeter, VD VIN/PLT/Meta): kWh thực từng khung giờ.
+//   ⇒ (①+②) × đơn giá điện lực từng khung + VAT.
+// Ban quản trị (cư dân) = Tổng tiền đồng hồ − Sơn An thu hộ (gánh cả điện Toàn thời gian + hao hụt).
+
+// kWh từng khung (CĐ/TĐ/BT) của 1 dịch vụ: timeband lấy sản lượng thực từng khung;
+// giá cố định (flat) phân bổ tổng sản lượng theo tỷ lệ khung giờ (giống khu cố định).
+export function customerBandKwh(cfg: ChargeConfig, usage: CustomerUsage | undefined, ratio: BqtRatio): Record<FloorBandKey, number> {
+  const out: Record<FloorBandKey, number> = { caoDiem: 0, thapDiem: 0, binhThuong: 0 }
+  if (!usage) return out
+  if (cfg.chargeType === 'timeband_excl_vat') {
+    const b = usage.bandsKwh ?? {}
+    return { caoDiem: b.caoDiem ?? 0, thapDiem: b.thapDiem ?? 0, binhThuong: b.binhThuong ?? 0 }
+  }
+  if (cfg.chargeType === 'flat_vat_incl') {
+    const total = usage.totalUnit ?? 0
+    const sum = (ratio.caoDiem || 0) + (ratio.thapDiem || 0) + (ratio.binhThuong || 0)
+    if (sum <= 0) return { caoDiem: 0, thapDiem: 0, binhThuong: total }
+    for (const k of FLOOR_BAND_KEYS) out[k] = total * (ratio[k] || 0) / sum
+  }
+  return out
+}
+
+export interface LightingCompanyRow { customer: Customer; caoDiem: number; thapDiem: number; binhThuong: number; total: number }
+export interface LightingBandRow { key: FloorBandKey; commonKwh: number; companyKwh: number; kwh: number; price: number; amount: number }
+export interface LightingSplit {
+  ratio: BqtRatio
+  commonFloors: { group: string; kwh: number }[]  // các khu 3 tầng TM chung
+  commonPoolKwh: number                            // tổng kWh chung 3 tầng TM
+  companies: LightingCompanyRow[]                  // công ty đồng hồ riêng
+  bands: LightingBandRow[]                         // CĐ/TĐ/BT: chung + công ty, × đơn giá
+  sonAnSubtotal: number
+  sonAnVat: number
+  sonAnTotal: number       // Sơn An thu hộ (đã VAT)
+  meterTotal: number       // tổng tiền đồng hồ (đủ 4 khung, đã VAT)
+  bqtTotal: number         // Ban quản trị = meterTotal − sonAnTotal
+  vatPercent: number
+}
+
+export function computeLightingSplit(
+  reading: MeterReading, customers: Customer[], usages: CustomerUsage[],
+  ratio: BqtRatio = reading.bqtRatio ?? DEFAULT_BQT_RATIO,
+): LightingSplit {
+  const service = METER_SERVICE[reading.meterId]  // 'dh1'
+  const sum = (ratio.caoDiem || 0) + (ratio.thapDiem || 0) + (ratio.binhThuong || 0)
+
+  // ① Chung 3 tầng TM
+  const commonFloorReadings = (reading.floorReadings ?? []).map(normalizeFloor).filter(f => f.commonTM)
+  const commonFloors = commonFloorReadings.map(f => ({ group: f.group, kwh: floorTotalKwh(f) }))
+  const commonPoolKwh = commonFloors.reduce((s, f) => s + f.kwh, 0)
+  const commonBand = (k: FloorBandKey) => sum > 0 ? commonPoolKwh * (ratio[k] || 0) / sum : (k === 'binhThuong' ? commonPoolKwh : 0)
+
+  // ② Công ty dùng đồng hồ riêng
+  const companyCustomers = customers.filter(c => customerHasService(c, service) && isActiveInMonth(c, reading.month) && subFor(c, service)?.ownMeter)
+  const companies: LightingCompanyRow[] = companyCustomers.map(c => {
+    const bk = customerBandKwh(subFor(c, service)!, findUsage(usages, c.id, service, reading.month, primaryService(c)), ratio)
+    return { customer: c, caoDiem: bk.caoDiem, thapDiem: bk.thapDiem, binhThuong: bk.binhThuong, total: bk.caoDiem + bk.thapDiem + bk.binhThuong }
+  })
+
+  const bands: LightingBandRow[] = FLOOR_BAND_KEYS.map(k => {
+    const common = commonBand(k)
+    const company = companies.reduce((s, co) => s + co[k], 0)
+    const kwh = common + company
+    const price = reading.bands[k]?.donGia || 0
+    return { key: k, commonKwh: common, companyKwh: company, kwh, price, amount: kwh * price }
+  })
+  const sonAnSubtotal = bands.reduce((s, b) => s + b.amount, 0)
+  const vatPercent = reading.vatPercent
+  const sonAnVat = sonAnSubtotal * vatPercent / 100
+  const sonAnTotal = sonAnSubtotal + sonAnVat
+  const mTotal = meterTotal(reading.bands, reading.vatPercent)
+  return { ratio, commonFloors, commonPoolKwh, companies, bands, sonAnSubtotal, sonAnVat, sonAnTotal, meterTotal: mTotal, bqtTotal: Math.max(0, mTotal - sonAnTotal), vatPercent }
 }

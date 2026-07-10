@@ -7,11 +7,11 @@ import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, BandKey,
   BAND_KEYS, BAND_LABELS, METER_UNIT, meterLabel,
   meterSubtotal, meterVat, meterTotal, meterAllocation,
-  resolvePrice, resolveTimebandPoint, usageKwh, computeBqt, isActiveInMonth, managementFeeOf, managementFeeBreakdown,
+  resolvePrice, resolveTimebandPoint, usageKwh, computeLightingSplit, isActiveInMonth, managementFeeOf, managementFeeBreakdown,
   customerServices, customerHasService, subFor, findUsage, primaryService, paymentService,
   METER_SERVICE, serviceLabel,
   CHARGE_TYPE_LABELS, DEFAULT_BQT_RATIO,
-  FloorBandKey, normalizeFloor, floorBandKwh, floorTotalKwh,
+  FloorBandKey,
 } from './dien-nuoc-types'
 
 const r0 = (n: number) => Math.round(n)                 // tiền: làm tròn đồng
@@ -62,7 +62,188 @@ function download(wb: XLSX.WorkBook, filename: string) {
   XLSX.writeFile(wb, safeFileName(filename), { cellStyles: true })
 }
 
-// ── Tab: Đồng hồ (Nhập chỉ số) — 1 file/đồng hồ ──────────────────────────────
+// ── Style chuyên nghiệp cho bảng tính (font Times New Roman, viền, tô nền) ────
+type SStyle = Record<string, unknown>
+type SCell = { v: Cell; s?: SStyle } | null
+const FONT = 'Times New Roman'
+const BD = { style: 'thin', color: { rgb: 'C7CED8' } }
+const BOX = { top: BD, bottom: BD, left: BD, right: BD }
+const ST: Record<string, SStyle> = {
+  title:   { font: { bold: true, sz: 14, color: { rgb: '1C3557' }, name: FONT }, alignment: { vertical: 'center' } },
+  sub:     { font: { italic: true, sz: 10, color: { rgb: '6B7280' }, name: FONT } },
+  section: { font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' }, name: FONT }, fill: { fgColor: { rgb: '1C3557' } }, alignment: { horizontal: 'left', vertical: 'center' }, border: BOX },
+  colHead: { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' }, name: FONT }, fill: { fgColor: { rgb: '2A4D7A' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: BOX },
+  label:   { font: { sz: 10, name: FONT }, alignment: { vertical: 'center' }, border: BOX },
+  labelB:  { font: { bold: true, sz: 10, name: FONT }, alignment: { vertical: 'center' }, border: BOX },
+  num:     { font: { sz: 10, name: FONT }, numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
+  numK:    { font: { sz: 10, name: FONT }, numFmt: '#,##0.0', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
+  numP:    { font: { sz: 10, name: FONT }, numFmt: '#,##0.##', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
+  totalL:  { font: { bold: true, sz: 10, color: { rgb: '1C3557' }, name: FONT }, fill: { fgColor: { rgb: 'E0EDFA' } }, alignment: { vertical: 'center' }, border: BOX },
+  totalN:  { font: { bold: true, sz: 10, color: { rgb: '1C3557' }, name: FONT }, fill: { fgColor: { rgb: 'E0EDFA' } }, numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
+  sonAnL:  { font: { bold: true, sz: 10, color: { rgb: '8A5A12' }, name: FONT }, fill: { fgColor: { rgb: 'FFF4E0' } }, alignment: { vertical: 'center' }, border: BOX },
+  sonAnN:  { font: { bold: true, sz: 10, color: { rgb: '8A5A12' }, name: FONT }, fill: { fgColor: { rgb: 'FFF4E0' } }, numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
+}
+
+function styledSheet(rows: SCell[][], colW: number[], merges: XLSX.Range[] = []): XLSX.WorkSheet {
+  const ws: XLSX.WorkSheet = {}
+  let maxC = 0
+  rows.forEach((row, R) => row.forEach((cell, C) => {
+    if (!cell) return
+    if (C > maxC) maxC = C
+    const isNum = typeof cell.v === 'number'
+    // numFmt qua `z` để bản cộng đồng của thư viện xlsx ghi được định dạng số (dấu phân cách nghìn…);
+    // còn `.s` (màu/viền/font) chỉ hiển thị nếu dùng bản có hỗ trợ style — vẫn giữ để tương thích.
+    const z = isNum && cell.s?.numFmt ? { z: cell.s.numFmt as string } : {}
+    ws[XLSX.utils.encode_cell({ r: R, c: C })] = { v: cell.v, t: isNum ? 'n' : 's', ...z, ...(cell.s ? { s: cell.s } : {}) }
+  }))
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, rows.length - 1), c: Math.max(maxC, colW.length - 1) } })
+  ws['!cols'] = colW.map(wch => ({ wch }))
+  if (merges.length) ws['!merges'] = merges
+  return ws
+}
+
+// 12 tháng gần nhất của 1 đồng hồ, xếp cũ → mới.
+function recentMonths(readings: MeterReading[], meterId: MeterId): MeterReading[] {
+  return readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
+    .sort((a, b) => a.month.localeCompare(b.month))
+}
+
+// ── Bảng tính trình bày (Điện chiếu sáng / Điện máy lạnh) — tháng là các cột ──
+function electricPresentation(meterId: MeterId, months: MeterReading[], customers: Customer[], usages: CustomerUsage[], label: string): XLSX.WorkSheet {
+  const b1Bands: BandKey[] = meterId === 1 ? BAND_KEYS : ['caoDiem', 'thapDiem', 'binhThuong']
+  const lastCol = months.length            // cột 0 = nhãn, cột 1..n = tháng
+  const rows: SCell[][] = []
+  const merges: XLSX.Range[] = []
+  const mrow = (r: number) => merges.push({ s: { r, c: 0 }, e: { r, c: lastCol } })
+  const labelRow = (label: string, vals: Cell[], vs: SStyle = ST.num, ls: SStyle = ST.label): SCell[] => [{ v: label, s: ls }, ...vals.map(v => ({ v, s: vs }))]
+  const section = (t: string) => { rows.push([{ v: t, s: ST.section }, ...months.map(() => ({ v: '', s: ST.section }))]); mrow(rows.length - 1) }
+  const colHead = (first: string) => rows.push([{ v: first, s: ST.colHead }, ...months.map(m => ({ v: m.month, s: ST.colHead }))])
+
+  rows.push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, s: ST.title }]); mrow(0)
+  rows.push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), kWh`, s: ST.sub }])
+  rows.push([])
+
+  // Bảng 1 — tiêu thụ từ điện lực
+  section('BẢNG 1: THÔNG TIN TIÊU THỤ ĐIỆN (TỪ ĐIỆN LỰC)')
+  colHead('Nội dung')
+  for (const k of b1Bands) rows.push(labelRow(`Kwh · ${BAND_LABELS[k]}`, months.map(m => r2(m.bands[k].kwh)), ST.numK))
+  for (const k of b1Bands) rows.push(labelRow(`Đơn giá · ${BAND_LABELS[k]}`, months.map(m => m.bands[k].donGia), ST.numP))
+  rows.push(labelRow('Tổng tiền chưa VAT', months.map(m => r0(meterSubtotal(m.bands)))))
+  rows.push(labelRow('Thuế VAT', months.map(m => r0(meterVat(m.bands, m.vatPercent)))))
+  rows.push(labelRow('Tổng thanh toán', months.map(m => r0(meterTotal(m.bands, m.vatPercent))), ST.totalN, ST.totalL))
+  rows.push([])
+
+  if (meterId === 1) {
+    // Bảng 2 — tách Sơn An thu hộ / Ban quản trị
+    const splits = months.map(m => computeLightingSplit(m, customers, usages, m.bqtRatio ?? DEFAULT_BQT_RATIO))
+    section('BẢNG 2: PHÂN BỔ TIỀN ĐIỆN')
+    colHead('Nội dung')
+    rows.push(labelRow('Tiền điện Sơn An thu hộ', splits.map(s => r0(s.sonAnTotal)), ST.sonAnN, ST.sonAnL))
+    rows.push(labelRow('Tiền điện chung cư (Ban quản trị)', splits.map(s => r0(s.bqtTotal)), ST.num, ST.labelB))
+    rows.push(labelRow('Tổng cộng', splits.map(s => r0(s.meterTotal)), ST.totalN, ST.totalL))
+    rows.push([])
+    section('CHI TIẾT PHẦN SƠN AN THU HỘ')
+    colHead('Nội dung')
+    rows.push(labelRow('Chung 3 tầng TM (kWh)', splits.map(s => r2(s.commonPoolKwh)), ST.numK))
+    rows.push(labelRow('Công ty đồng hồ riêng (kWh)', splits.map(s => r2(s.companies.reduce((x, c) => x + c.total, 0))), ST.numK))
+    const B3: [FloorBandKey, string][] = [['caoDiem', 'Cao điểm'], ['thapDiem', 'Thấp điểm'], ['binhThuong', 'Bình thường']]
+    B3.forEach(([, lb], i) => rows.push(labelRow(`Sản lượng thu hộ · ${lb} (kWh)`, splits.map(s => r2(s.bands[i].kwh)), ST.numK)))
+    B3.forEach(([, lb], i) => rows.push(labelRow(`Đơn giá · ${lb}`, splits.map(s => s.bands[i].price), ST.numP)))
+    rows.push(labelRow('Tổng chưa VAT', splits.map(s => r0(s.sonAnSubtotal))))
+    rows.push(labelRow('Thuế VAT', splits.map(s => r0(s.sonAnVat))))
+    rows.push(labelRow('Sơn An thu hộ', splits.map(s => r0(s.sonAnTotal)), ST.sonAnN, ST.sonAnL))
+  } else {
+    // Đồng hồ 2 — phân bổ cho khách + Sơn An Group chịu
+    const allocs = months.map(m => meterAllocation(m, customers, usages))
+    const cmp = { numeric: true, sensitivity: 'base' } as const
+    const priced = customers.filter(c => customerHasService(c, 'dh2') && subFor(c, 'dh2')?.chargeType !== 'remainder'
+      && allocs.some(a => a.rows.some(x => x.customer.id === c.id)))
+      .sort((a, b) => (a.floor?.trim() || '').localeCompare(b.floor?.trim() || '', 'vi', cmp) || a.name.localeCompare(b.name, 'vi', cmp))
+    section('BẢNG 2: PHÂN BỔ CHO KHÁCH & SƠN AN GROUP')
+    colHead('Khách hàng')
+    for (const c of priced) rows.push(labelRow(c.name, allocs.map(a => r0(a.rows.find(x => x.customer.id === c.id)?.amount ?? 0))))
+    rows.push(labelRow('Sơn An Group chịu (phần còn lại)', allocs.map(a => r0(a.remainderTotal)), ST.sonAnN, ST.sonAnL))
+    rows.push(labelRow('Tổng cộng', allocs.map(a => r0(a.total)), ST.totalN, ST.totalL))
+  }
+
+  return styledSheet(rows, [30, ...months.map(() => 14)], merges)
+}
+
+// ── Bảng tiêu thụ nước — tháng là các cột ────────────────────────────────────
+function waterPresentation(months: MeterReading[], label: string): XLSX.WorkSheet {
+  const lastCol = months.length
+  const rows: SCell[][] = []
+  const merges: XLSX.Range[] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } }]
+  const labelRow = (label: string, vals: Cell[], vs: SStyle = ST.num, ls: SStyle = ST.label): SCell[] => [{ v: label, s: ls }, ...vals.map(v => ({ v, s: vs }))]
+  rows.push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, s: ST.title }])
+  rows.push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), m³`, s: ST.sub }])
+  rows.push([])
+  rows.push([{ v: 'Nội dung', s: ST.colHead }, ...months.map(m => ({ v: m.month, s: ST.colHead }))])
+  rows.push(labelRow('Sản lượng (m³)', months.map(m => r2(m.bands.toanThoiGian.kwh)), ST.numK))
+  rows.push(labelRow('Đơn giá (đ/m³)', months.map(m => m.bands.toanThoiGian.donGia), ST.numP))
+  rows.push(labelRow('Tổng tiền chưa VAT', months.map(m => r0(meterSubtotal(m.bands)))))
+  rows.push(labelRow('Thuế VAT', months.map(m => r0(meterVat(m.bands, m.vatPercent)))))
+  rows.push(labelRow('Tổng thanh toán', months.map(m => r0(meterTotal(m.bands, m.vatPercent))), ST.totalN, ST.totalL))
+  return styledSheet(rows, [26, ...months.map(() => 14)], merges)
+}
+
+// ── Sheet dữ liệu chi tiết theo khách (chỉ các cột cần) ───────────────────────
+function customerDetailSheet(meterId: MeterId, months: MeterReading[], customers: Customer[], usages: CustomerUsage[], unit: string): XLSX.WorkSheet | null {
+  const service = METER_SERVICE[meterId]
+  const isElec = meterId !== 3
+  const bandCols: [BandKey, string][] = [['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']]
+  const cmp = { numeric: true, sensitivity: 'base' } as const
+  const mCustomers = customers.filter(c => customerHasService(c, service) && c.active).sort((a, b) =>
+    (a.floor?.trim() || '').localeCompare(b.floor?.trim() || '', 'vi', cmp)
+    || (a.kioskCode?.trim() || '').localeCompare(b.kioskCode?.trim() || '', 'vi', cmp)
+    || a.name.localeCompare(b.name, 'vi', cmp))
+  if (!mCustomers.length || !months.length) return null
+
+  const amtByMonth = new Map(months.map(r => [r.month, new Map(meterAllocation(r, customers, usages).rows.map(x => [x.customer.id, x.amount]))]))
+  const usageOf = (c: Customer, m: string) => findUsage(usages, c.id, service, m, primaryService(c))
+
+  const header: string[] = ['Khách hàng', 'Nhóm', 'Tầng', 'Mã ki-ốt', 'Cách tính tiền', 'Tháng']
+  if (isElec) bandCols.forEach(([, lb]) => header.push(`${lb} kWh`))
+  header.push(`Sản lượng (${unit})`, 'Đơn giá (đ)', 'Thành tiền (đ)')
+
+  const rows: SCell[][] = [header.map(h => ({ v: h, s: ST.colHead }))]
+  for (const c of mCustomers) {
+    const sub = subFor(c, service)!
+    const ct = sub.chargeType
+    for (const r of months) {
+      const u = usageOf(c, r.month)
+      const amount = amtByMonth.get(r.month)?.get(c.id) ?? 0
+      const row: SCell[] = [
+        { v: c.name, s: ST.label }, { v: c.group?.trim() || '', s: ST.label }, { v: c.floor || '', s: ST.label },
+        { v: c.kioskCode || '', s: ST.label }, { v: CHARGE_TYPE_LABELS[ct], s: ST.label }, { v: r.month, s: ST.label },
+      ]
+      if (isElec) {
+        const ratio = r.bqtRatio ?? DEFAULT_BQT_RATIO
+        const ratioSum = (ratio.caoDiem || 0) + (ratio.thapDiem || 0) + (ratio.binhThuong || 0)
+        const flatTotal = usageKwh(sub, u)
+        bandCols.forEach(([k]) => {
+          let kwh: Cell = ''
+          if (ct === 'timeband_excl_vat') {
+            const oldI = u?.bandsIndexOld?.[k], newI = u?.bandsIndexNew?.[k]
+            kwh = (oldI != null || newI != null) ? r2(Math.max(0, (newI ?? 0) - (oldI ?? 0))) : (u?.bandsKwh?.[k] != null ? r2(u.bandsKwh[k]!) : '')
+          } else if (ct === 'flat_vat_incl' && meterId === 1) {
+            kwh = r2(ratioSum > 0 ? flatTotal * (ratio[k as FloorBandKey] || 0) / ratioSum : (k === 'binhThuong' ? flatTotal : 0))
+          }
+          row.push({ v: kwh, s: ST.numK })
+        })
+      }
+      const sl: Cell = (ct === 'flat_vat_incl' || ct === 'timeband_excl_vat') ? r2(usageKwh(sub, u)) : ''
+      const dg: Cell = ct === 'flat_vat_incl' ? resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, r.month)
+        : ct === 'fixed_area' ? resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, r.month) : ''
+      row.push({ v: sl, s: ST.numK }, { v: dg, s: ST.numP }, { v: r0(amount), s: ST.num })
+      rows.push(row)
+    }
+  }
+  const colW = [24, 14, 10, 12, 22, 10, ...(isElec ? [10, 10, 10] : []), 14, 14, 16]
+  return styledSheet(rows, colW)
+}
+
+// ── Tab: Đồng hồ (Nhập chỉ số) — 1 file/đồng hồ, trình bày như bảng tính Excel ──
 export function exportMeter(
   meterId: MeterId, month: string,
   readings: MeterReading[], customers: Customer[], usages: CustomerUsage[],
@@ -70,186 +251,20 @@ export function exportMeter(
 ) {
   const label = meterLabel(meterNames, meterId)
   const unit = METER_UNIT[meterId]
-  const isWater = meterId === 3
-  const service = METER_SERVICE[meterId]
-  const visibleBands: BandKey[] = isWater ? ['toanThoiGian'] : BAND_KEYS
+  const months = recentMonths(readings, meterId)
   const wb = XLSX.utils.book_new()
 
-  // Sheet 1 — Chỉ số tháng hiện tại (Bảng 1)
-  const cur = readings.find(r => r.meterId === meterId && r.month === month)
-  const s1: Aoa = [[`Chỉ số ${label} — tháng ${month}`], []]
-  s1.push(['Khung giờ', `Sản lượng (${unit})`, 'Đơn giá (đ)', 'Thành tiền (đ)'])
-  if (cur) {
-    for (const k of visibleBands) {
-      s1.push([isWater ? 'Sử dụng trong tháng' : BAND_LABELS[k], r2(cur.bands[k].kwh), cur.bands[k].donGia, r0(cur.bands[k].kwh * cur.bands[k].donGia)])
-    }
-    s1.push(['Tổng tiền chưa VAT', '', '', r0(meterSubtotal(cur.bands))])
-    s1.push([`Thuế VAT (${cur.vatPercent || 0}%)`, '', '', r0(meterVat(cur.bands, cur.vatPercent))])
-    s1.push(['Tổng thanh toán', '', '', r0(meterTotal(cur.bands, cur.vatPercent))])
-    if (cur.note) s1.push([], ['Ghi chú:', cur.note])
-  } else {
-    s1.push(['(Chưa nhập chỉ số tháng này)'])
+  // Sheet 1 — bảng tính trình bày (tháng là cột)
+  const presentation = meterId === 3 ? waterPresentation(months, label) : electricPresentation(meterId, months, customers, usages, label)
+  XLSX.utils.book_append_sheet(wb, presentation, safeSheetName(label))
+
+  // Sheet 2 — dữ liệu chi tiết theo khách (chỉ cột cần)
+  const detail = customerDetailSheet(meterId, months, customers, usages, unit)
+  if (detail) XLSX.utils.book_append_sheet(wb, detail, 'Chi tiet khach hang')
+
+  if (months.length === 0) {
+    XLSX.utils.book_append_sheet(wb, styledSheet([[{ v: 'Chưa có dữ liệu tháng nào cho đồng hồ này.', s: ST.label }]], [50]), 'Trong')
   }
-  XLSX.utils.book_append_sheet(wb, sheetFromAoa(s1, [26, 16, 16, 18], [2]), safeSheetName(`Chi so ${month}`))
-
-  // Sheet 2 — Lịch sử 12 tháng (Bảng 2)
-  const months = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
-    .sort((a, b) => a.month.localeCompare(b.month))
-  const header: Cell[] = ['Tháng']
-  for (const k of visibleBands) header.push(isWater ? `Sản lượng (${unit})` : `${BAND_LABELS[k]} SL`, isWater ? 'Đơn giá' : `${BAND_LABELS[k]} giá`)
-  header.push('Tổng chưa VAT', 'VAT', 'Tổng thanh toán')
-  const s2: Aoa = [header]
-  for (const r of months) {
-    const row: Cell[] = [r.month]
-    for (const k of visibleBands) row.push(r2(r.bands[k].kwh), r.bands[k].donGia)
-    row.push(r0(meterSubtotal(r.bands)), r0(meterVat(r.bands, r.vatPercent)), r0(meterTotal(r.bands, r.vatPercent)))
-    s2.push(row)
-  }
-  XLSX.utils.book_append_sheet(wb, sheetFromAoa(s2, header.map((_, i) => i === 0 ? 10 : 15), [0]), 'Lich su 12 thang')
-
-  // Sheet 3 — Sản lượng & tiền khách hàng tháng hiện tại
-  if (cur) {
-    const alloc = meterAllocation(cur, customers, usages)
-    const rows: Row[] = alloc.rows.map(({ customer: c, amount }) => {
-      const sub = subFor(c, service)!
-      const u = findUsage(usages, c.id, service, month, primaryService(c))
-      return {
-        'Khách hàng':    c.name,
-        'Nhóm':          c.group?.trim() || '',
-        'Tầng':          c.floor || '',
-        'Mã ki-ốt':      c.kioskCode || '',
-        'Cách tính tiền': CHARGE_TYPE_LABELS[sub.chargeType],
-        [`Sản lượng (${unit})`]: sub.chargeType === 'remainder' ? '' : r2(usageKwh(sub, u)),
-        'Thành tiền (đ)': r0(amount),
-      }
-    })
-    if (rows.length === 0) rows.push({ 'Khách hàng': '(Chưa có khách hàng gán cho đồng hồ này)' } as Row)
-    XLSX.utils.book_append_sheet(wb, sheetFromRows(rows, [26, 18, 12, 12, 26, 16, 18]), safeSheetName(`Khach hang ${month}`))
-  }
-
-  // Sheet 3b — Chi tiết sản lượng từng khách theo TỪNG THÁNG (chỉ số cũ/mới, sản lượng, tiền)
-  {
-    const isElec = meterId !== 3
-    const bandCols: [BandKey, string][] = [['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']]
-    const cmp = { numeric: true, sensitivity: 'base' } as const
-    const mCustomers = customers.filter(c => customerHasService(c, service) && c.active).sort((a, b) =>
-      (a.floor?.trim() || '').localeCompare(b.floor?.trim() || '', 'vi', cmp)
-      || (a.kioskCode?.trim() || '').localeCompare(b.kioskCode?.trim() || '', 'vi', cmp)
-      || a.name.localeCompare(b.name, 'vi', cmp))
-    const dMonths = readings.filter(r => r.meterId === meterId).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
-      .sort((a, b) => a.month.localeCompare(b.month))
-    // Tiền từng tháng lấy qua meterAllocation để đúng cả khách "gánh phần còn lại"
-    const amtByMonth = new Map(dMonths.map(r => [r.month, new Map(meterAllocation(r, customers, usages).rows.map(x => [x.customer.id, x.amount]))]))
-    const usageOf = (c: Customer, m: string) => findUsage(usages, c.id, service, m, primaryService(c))
-
-    const header: Cell[] = ['Khách hàng', 'Nhóm', 'Tầng', 'Mã ki-ốt', 'Cách tính tiền', 'Tháng', 'Chỉ số cũ', 'Chỉ số mới']
-    // Với điện: mỗi khung giờ có chỉ số cũ/mới + kWh (= mới − cũ) để nhìn được sản lượng từng khung giờ
-    if (isElec) bandCols.forEach(([, lb]) => header.push(`${lb} cũ`, `${lb} mới`, `${lb} kWh`))
-    header.push(`Sản lượng (${unit})`, 'Đơn giá (đ)', 'Thành tiền (đ)')
-
-    const detail: Aoa = [header]
-    for (const c of mCustomers) {
-      const sub = subFor(c, service)!
-      const ct = sub.chargeType
-      for (const r of dMonths) {
-        const u = usageOf(c, r.month)
-        const amount = amtByMonth.get(r.month)?.get(c.id) ?? 0
-        const row: Cell[] = [c.name, c.group?.trim() || '', c.floor || '', c.kioskCode || '', CHARGE_TYPE_LABELS[ct], r.month]
-        row.push(ct === 'flat_vat_incl' ? (u?.indexOld ?? '') : '', ct === 'flat_vat_incl' ? (u?.indexNew ?? '') : '')
-        if (isElec) {
-          // Giá cố định (VD: VIN) không có chỉ số từng khung giờ ⇒ phân bổ sản lượng theo tỷ lệ khung giờ
-          // của đồng hồ 1 (mặc định CĐ 15% · TĐ 35% · BT 50%), giống cách khu "cố định" chia cho BQT.
-          const ratio = r.bqtRatio ?? DEFAULT_BQT_RATIO
-          const ratioSum = (ratio.caoDiem || 0) + (ratio.thapDiem || 0) + (ratio.binhThuong || 0)
-          const flatTotal = usageKwh(sub, u)
-          bandCols.forEach(([k]) => {
-            if (ct === 'timeband_excl_vat') {
-              const oldI = u?.bandsIndexOld?.[k]
-              const newI = u?.bandsIndexNew?.[k]
-              // kWh khung giờ = chỉ số mới − chỉ số cũ; nếu chưa nhập chỉ số thì lấy sản lượng đã lưu (bandsKwh)
-              const bandKwh: Cell = (oldI != null || newI != null) ? r2(Math.max(0, (newI ?? 0) - (oldI ?? 0)))
-                : (u?.bandsKwh?.[k] != null ? r2(u.bandsKwh[k]!) : '')
-              row.push(oldI ?? '', newI ?? '', bandKwh)
-            } else if (ct === 'flat_vat_incl' && meterId === 1) {
-              const share = ratioSum > 0 ? flatTotal * (ratio[k as FloorBandKey] || 0) / ratioSum : (k === 'binhThuong' ? flatTotal : 0)
-              row.push('', '', r2(share))   // cũ/mới để trống (không có chỉ số theo khung), chỉ điền kWh đã phân bổ
-            } else row.push('', '', '')
-          })
-        }
-        const sl: Cell = (ct === 'flat_vat_incl' || ct === 'timeband_excl_vat') ? r2(usageKwh(sub, u)) : ''
-        const dg: Cell = ct === 'flat_vat_incl' ? resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, r.month)
-          : ct === 'fixed_area' ? resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, r.month) : ''
-        row.push(sl, dg, r0(amount))
-        detail.push(row)
-      }
-    }
-    if (mCustomers.length && dMonths.length) {
-      XLSX.utils.book_append_sheet(wb, sheetFromAoa(detail, header.map((_, i) => i === 0 ? 24 : i < 6 ? 14 : 12), [0]), 'Chi tiet SL theo thang')
-    }
-  }
-
-  // Sheet 4 & 5 — chỉ đồng hồ 1: BQT
-  if (meterId === 1 && cur) {
-    const calc = computeBqt(cur, customers, usages, cur.bqtRatio ?? DEFAULT_BQT_RATIO)
-    const sb: Aoa = [[`Tính tiền điện Ban quản trị (BQT) — tháng ${month}`], []]
-    sb.push(['Khu (Nhóm KH)', `Ghi tầng (${'kWh'})`, 'Khách dùng (kWh)', 'BQT (kWh)'])
-    calc.floors.forEach(f => sb.push([f.group, r2(f.floorKwh), r2(f.customerKwh), r2(f.bqtKwh)]))
-    sb.push([])
-    sb.push(['Tổng ghi các tầng (kWh)', r2(calc.sumFloorKwh)])
-    sb.push(['Đồng hồ chính C+T+B (kWh)', r2(calc.mainMeterKwh)])
-    sb.push(['Chênh lệch → BQT (kWh)', r2(calc.discrepancy)])
-    sb.push(['Tổng kWh BQT phải chịu', r2(calc.bqtTotalKwh)])
-    sb.push([])
-    sb.push(['Khung giờ', 'Tỷ lệ %', 'kWh', 'Đơn giá (đ)', 'Thành tiền (đ)'])
-    calc.bands.forEach(b => sb.push([BAND_LABELS[b.key], b.ratioPct, r2(b.kwh), b.price, r0(b.amount)]))
-    sb.push(['Tổng chưa VAT', '', '', '', r0(calc.subtotal)])
-    sb.push([`VAT (${cur.vatPercent || 0}%)`, '', '', '', r0(calc.vat)])
-    sb.push(['Tổng thanh toán BQT', '', '', '', r0(calc.total)])
-    XLSX.utils.book_append_sheet(wb, sheetFromAoa(sb, [26, 14, 16, 14, 18], [2]), safeSheetName(`BQT ${month}`))
-
-    // Lịch sử BQT 12 tháng
-    const m1 = readings.filter(r => r.meterId === 1).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
-      .sort((a, b) => a.month.localeCompare(b.month))
-    const hb: Aoa = [['Tháng', 'Tổng ghi tầng (kWh)', 'Đồng hồ chính (kWh)', 'Chênh lệch (kWh)', 'Tổng kWh BQT', 'Chưa VAT', 'VAT', 'Tổng TT BQT']]
-    m1.forEach(r => {
-      const c = computeBqt(r, customers, usages, r.bqtRatio ?? DEFAULT_BQT_RATIO)
-      hb.push([r.month, r2(c.sumFloorKwh), r2(c.mainMeterKwh), r2(c.discrepancy), r2(c.bqtTotalKwh), r0(c.subtotal), r0(c.vat), r0(c.total)])
-    })
-    XLSX.utils.book_append_sheet(wb, sheetFromAoa(hb, [10, 18, 18, 16, 14, 14, 12, 16], [0]), 'BQT lich su')
-
-    // Sheet 6 — Chỉ số ghi điện TỪNG TẦNG theo tháng: số đầu/số cuối × từng khung giờ
-    const fMonths = readings.filter(r => r.meterId === 1).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
-      .sort((a, b) => a.month.localeCompare(b.month))
-    const perMonth = fMonths.map(r => ({ month: r.month, floors: (r.floorReadings ?? []).map(normalizeFloor) }))
-    const bandCols: [FloorBandKey, string][] = [['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']]
-    const groupOrder: string[] = []
-    perMonth.forEach(mf => mf.floors.forEach(f => { const g = (f.group || '').trim(); if (g && !groupOrder.includes(g)) groupOrder.push(g) }))
-    // Bỏ khu không có chỉ số nào (VD "Tầng 3" cũ còn sót sau khi tách A1/A2) — lọc theo chỉ số ≠ 0, KHÔNG lọc theo kWh
-    const groups = groupOrder.filter(g => perMonth.some(mf => {
-      const f = mf.floors.find(x => (x.group || '').trim() === g)
-      return !!f && bandCols.some(([k]) => (f.bands[k]?.indexOld || 0) !== 0 || (f.bands[k]?.indexNew || 0) !== 0)
-    }))
-    if (groups.length) {
-      const fh: Cell[] = ['Tầng (khu)', 'Tháng']
-      bandCols.forEach(([, lb]) => fh.push(`${lb} số đầu`, `${lb} số cuối`, `${lb} kWh`))
-      fh.push('Tổng kWh tầng')
-      const fa: Aoa = [fh]
-      for (const g of groups) {
-        for (const mf of perMonth) {
-          const f = mf.floors.find(x => (x.group || '').trim() === g)
-          const row: Cell[] = [g, mf.month]
-          bandCols.forEach(([k]) => {
-            const b = f?.bands[k]
-            row.push(b?.indexOld ?? '', b?.indexNew ?? '', b ? r2(floorBandKwh(b)) : 0)
-          })
-          row.push(f ? r2(floorTotalKwh(f)) : 0)
-          fa.push(row)
-        }
-      }
-      XLSX.utils.book_append_sheet(wb, sheetFromAoa(fa, fh.map((_, i) => i === 0 ? 20 : i === 1 ? 10 : 11), [0]), 'Ghi dien tung tang')
-    }
-  }
-
   download(wb, `dien-nuoc_${label}_${month}.xlsx`)
 }
 

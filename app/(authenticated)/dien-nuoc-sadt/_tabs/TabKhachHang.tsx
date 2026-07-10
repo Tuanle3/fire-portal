@@ -217,6 +217,15 @@ function ServiceConfigBlock({ sub, meterNames, onChange }: {
               {(Object.keys(CHARGE_TYPE_LABELS) as ChargeType[]).map(k => <option key={k} value={k}>{CHARGE_TYPE_LABELS[k]}</option>)}
             </select>
           </div>
+          {sub.service === 'dh1' && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, cursor: 'pointer', fontSize: 12, marginBottom: 10, background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 8, padding: '7px 9px' }}>
+              <input type="checkbox" checked={!!sub.ownMeter} onChange={e => onChange({ ownMeter: e.target.checked })} style={{ margin: '2px 0 0' }} />
+              <span>
+                <b style={{ color: 'var(--navy)' }}>Công ty dùng đồng hồ riêng</b> (VD: VIN, PLT, Meta)
+                <div style={{ fontSize: 10.5, color: 'var(--muted)' }}>Sản lượng từng khung giờ của khách này được gom vào phần <b>Sơn An thu hộ</b> khi tách Sơn An thu hộ / Ban quản trị ở tab Đồng hồ điện 1.</div>
+              </span>
+            </label>
+          )}
           {sub.chargeType === 'flat_vat_incl' && (
             <PriceHistoryEditor label={isWater ? 'Bảng giá nước theo thời điểm (đã gồm VAT)' : 'Bảng giá cố định theo thời điểm (đã gồm VAT)'}
               unit={isWater ? 'đ/m³' : 'đ/đơn vị'} value={sub.flatPriceHistory ?? [{ fromMonth: '', price: 0 }]} onChange={v => onChange({ flatPriceHistory: v })} />
@@ -287,6 +296,8 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
       }
       // Phí quản lý: luôn lưu cờ VAT ở dạng cụ thể (tránh undefined khi ghi Firestore)
       if (s.service === 'phiql') return { ...base, vatIncluded: s.vatIncluded !== false, vatPercent: s.vatPercent ?? 8 }
+      // Điện chiếu sáng: giữ cờ "công ty dùng đồng hồ riêng" (chỉ gắn khi bật, tránh undefined)
+      if (s.service === 'dh1' && s.ownMeter) return { ...base, ownMeter: true }
       return base
     }
     // Sắp xếp dịch vụ theo thứ tự chuẩn để hiển thị ổn định.

@@ -2,11 +2,11 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import {
   MeterReading, Customer, CustomerUsage, MeterId, Bands,
-  BAND_KEYS, BandKey, BAND_LABELS, meterLabel, METER_UNIT, EMPTY_BANDS,
-  bandMoney, meterSubtotal, meterVat, meterTotal, customerCharge, resolvePrice, resolveTimebandPoint,
+  BAND_KEYS, BandKey, BAND_LABELS, meterLabel, METER_LABELS, METER_UNIT, EMPTY_BANDS, CHARGE_TYPE_LABELS,
+  bandMoney, meterSubtotal, meterVat, meterTotal, customerCharge, meterAllocation, resolvePrice, resolveTimebandPoint,
   lastReadingBefore, bandsWithPriceChange, isAmountAnomalous,
   FloorReading, FloorBandKey, FLOOR_BAND_KEYS, BqtRatio, DEFAULT_BQT_RATIO,
-  defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, floorBandKwhSplit, computeBqt, isActiveInMonth, normalizeFloor,
+  defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, computeLightingSplit, isActiveInMonth, normalizeFloor,
   WATER_METER_KEYS, WATER_METER_LABELS, defaultWaterFloorReadings, waterFloorTotal,
   METER_SERVICE, subFor, findUsage, primaryService, customerHasService,
 } from '@/lib/dien-nuoc-types'
@@ -45,7 +45,7 @@ function prefillFloors(readings: MeterReading[], meterId: MeterId, month: string
     const f = seen.get(g)!
     const bands = emptyFloorBands()
     for (const k of FLOOR_BAND_KEYS) bands[k] = { indexOld: f.bands?.[k]?.indexNew || 0, indexNew: 0 }
-    return { group: f.group, bands, ...(f.fixed ? { fixed: true as const } : {}) }
+    return { group: f.group, bands, ...(f.fixed ? { fixed: true as const } : {}), ...(f.commonTM ? { commonTM: true as const } : {}) }
   })
 }
 
@@ -314,6 +314,10 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
             onSave={save} saving={saving} savedAt={savedAt} />
         )}
 
+        {meterId === 2 && (
+          <AcSplitSection reading={draftReading} readings={readings} month={month} customers={customers} usages={usages} />
+        )}
+
         {meterCustomers.length > 0 && (
           <CustomerUsageTable meterId={meterId} month={month} customers={customers} readings={readings} usages={usages} reading={draftReading} unit={unit} />
         )}
@@ -322,14 +326,15 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
   )
 }
 
-// ── Đồng hồ 1: tính tiền điện BQT theo 3 mục (hướng dẫn · nhập theo tầng · chia khung giờ) ──
+// ── Đồng hồ 1: tách "Sơn An thu hộ" & "Ban quản trị" (theo sheet Điện chiếu sáng) ──
 function BqtSection({ reading, readings, month, customers, usages, floorReadings, setFloorReadings, bqtRatio, setBqtRatio, onSave, saving, savedAt }: {
   reading: MeterReading; readings: MeterReading[]; month: string; customers: Customer[]; usages: CustomerUsage[]
   floorReadings: FloorReading[]; setFloorReadings: (v: FloorReading[]) => void
   bqtRatio: BqtRatio; setBqtRatio: (v: BqtRatio) => void
   onSave: () => void; saving: boolean; savedAt: string | null
 }) {
-  const calc = computeBqt(reading, customers, usages, bqtRatio)
+  const split = computeLightingSplit(reading, customers, usages, bqtRatio)
+  const ratioSum = (bqtRatio.caoDiem || 0) + (bqtRatio.thapDiem || 0) + (bqtRatio.binhThuong || 0)
   const groupSuggestions = Array.from(new Set(customers.filter(c => customerHasService(c, 'dh1') && c.active).map(c => (c.group || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'))
 
   const [dragIdx, setDragIdx] = useState<number | null>(null)  // kéo-thả đổi vị trí khu
@@ -352,148 +357,169 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
     idx !== i ? f
       : fixed ? { ...f, fixed: true, bands: { ...f.bands, caoDiem: { indexOld: 0, indexNew: 0 }, thapDiem: { indexOld: 0, indexNew: 0 } } }
       : { ...f, fixed: false }))
+  // Bật/tắt "thuộc 3 tầng TM chung" (chỉ gắn key khi bật ⇒ tránh undefined khi lưu Firestore)
+  const setFloorCommonTM = (i: number, on: boolean) => setFloorReadings(floorReadings.map((f, idx) => {
+    if (idx !== i) return f
+    if (on) return { ...f, commonTM: true }
+    const rest = { ...f }; delete rest.commonTM; return rest  // gỡ hẳn key khi tắt (tránh undefined khi lưu Firestore)
+  }))
 
   return (
     <div style={{ marginTop: 20, border: '1px solid var(--border3)', borderRadius: 12, overflow: 'hidden' }}>
       <div style={{ background: '#1C3557', color: '#fff', padding: '9px 14px', fontSize: 12, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase' }}>
-        Tính tiền điện Ban quản trị (BQT) — đồng hồ điện 1
+        Phân bổ tiền điện chiếu sáng — Sơn An thu hộ &amp; Ban quản trị (đồng hồ điện 1)
       </div>
 
       <div style={{ padding: 14 }}>
-        {/* a. Hướng dẫn */}
-        <div style={{ background: '#EEF3FA', border: '1px solid #D0DCE8', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12.5, lineHeight: 1.6, color: 'var(--txt2)' }}>
-          <div style={{ fontWeight: 700, color: 'var(--navy)', marginBottom: 4 }}>a. Cách tính tiền điện BQT</div>
-          <div>① Mỗi khu (theo <b>Nhóm khách hàng</b>): <b>kWh ghi tầng</b> = tổng 3 khung giờ (mới − cũ); trừ đi sản lượng khách trong nhóm ⇒ <b>kWh BQT của khu</b>.</div>
-          <div>② <b>Chênh lệch</b> = tổng kWh đồng hồ chính (cao+thấp+bình) − tổng kWh ghi các tầng ⇒ cộng hết vào cho BQT.</div>
-          <div>③ <b>Tổng kWh BQT</b> chia theo tỷ lệ khung giờ (mặc định BT 50% · CĐ 15% · TĐ 35%), rồi × đơn giá từng khung của đồng hồ 1 + VAT ⇒ tiền BQT phải chịu.</div>
+        {/* a. Tóm tắt cách tính */}
+        <div style={{ background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, padding: '11px 14px', marginBottom: 16, fontSize: 12.5, lineHeight: 1.65, color: 'var(--txt2)' }}>
+          <div style={{ fontWeight: 800, color: 'var(--navy)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.03em', fontSize: 11.5 }}>📘 Tóm tắt cách tính</div>
+          <div><b>Tổng tiền đồng hồ 1</b> (từ điện lực, gồm cả khung <b>Toàn thời gian</b> + VAT) được tách làm 2 phần:</div>
+          <div style={{ margin: '5px 0 5px 6px' }}>
+            <div><b style={{ color: '#8A5A12' }}>① Sơn An thu hộ</b> = tiền điện Sơn An thu hộ cho khách, gồm:</div>
+            <div style={{ marginLeft: 14 }}>• <b>Chung 3 tầng TM</b> (các khu đánh dấu “Thuộc 3 tầng TM chung”): tổng kWh, chia theo tỷ lệ khung giờ (mặc định CĐ 15% · TĐ 35% · BT 50%).</div>
+            <div style={{ marginLeft: 14 }}>• <b>Công ty dùng đồng hồ riêng</b> (VD VIN/PLT/Meta — bật cờ ở tab Khách hàng): kWh thực từng khung giờ.</div>
+            <div style={{ marginLeft: 14 }}>• (①chung + ①công ty) × đơn giá điện lực từng khung + VAT.</div>
+            <div><b style={{ color: 'var(--navy)' }}>② Ban quản trị (cư dân)</b> = <b>Tổng tiền đồng hồ − Sơn An thu hộ</b> (gánh phần điện Toàn thời gian &amp; hao hụt).</div>
+          </div>
         </div>
 
-        {/* b + c: các card cùng hàng (mặc định 4 khu + 2 tổng hợp = 6 card trên PC), cao bằng nhau; tự xuống dòng ở tablet/điện thoại */}
+        {/* b. Nhập số ghi điện từng khu */}
         <div className="dn-col-title">
-          <span>b. Nhập số ghi điện từng khu ⇒ kWh BQT  ·  c. Chia BQT theo khung giờ × đơn giá</span>
+          <span>b. Nhập số ghi điện từng khu — đánh dấu khu <b>“Thuộc 3 tầng TM chung”</b> để gom vào Sơn An thu hộ</span>
           <button className="btn-ghost" style={{ textTransform: 'none', fontWeight: 600 }} onClick={addFloor}>+ Thêm khu</button>
         </div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
-          {/* 3 card khu (tầng) */}
-          {floorReadings.map((f, i) => {
-            const row = calc.floors[i]
-            return (
-              <div key={i}
-                onDragOver={e => { if (dragIdx !== null && dragIdx !== i) e.preventDefault() }}
-                onDrop={e => { e.preventDefault(); moveFloor(dragIdx, i); setDragIdx(null) }}
-                style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', border: dragIdx !== null && dragIdx !== i ? '1px dashed var(--navy3)' : '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', opacity: dragIdx === i ? 0.45 : 1, transition: 'opacity .12s' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)' }}>
-                  {floorReadings.length > 1 && (
-                    <span draggable onDragStart={() => setDragIdx(i)} onDragEnd={() => setDragIdx(null)} title="Kéo để đổi vị trí khu"
-                      style={{ flexShrink: 0, cursor: 'grab', color: 'var(--muted2)', fontSize: 14, lineHeight: 1, userSelect: 'none' }}>⠿</span>
-                  )}
-                  <input className="dn-input" list="dn-bqt-groups" style={{ flex: 1, fontWeight: 600 }} value={f.group} placeholder="Tên khu (Nhóm KH)" onChange={e => setFloorGroup(i, e.target.value)} />
-                  {floorReadings.length > 1 && (
-                    <button onClick={() => removeFloor(i)} title="Xoá khu này" style={{ flexShrink: 0, width: 22, height: 22, padding: 0, lineHeight: '20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', border: '1px solid #FECACA', borderRadius: 6, background: '#fff', color: '#DC2626' }}>×</button>
-                  )}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 14 }}>
+          {floorReadings.map((f, i) => (
+            <div key={i}
+              onDragOver={e => { if (dragIdx !== null && dragIdx !== i) e.preventDefault() }}
+              onDrop={e => { e.preventDefault(); moveFloor(dragIdx, i); setDragIdx(null) }}
+              style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', border: dragIdx !== null && dragIdx !== i ? '1px dashed var(--navy3)' : f.commonTM ? '1.5px solid #D4A64A' : '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', opacity: dragIdx === i ? 0.45 : 1, transition: 'opacity .12s' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', background: f.commonTM ? '#FFF4E0' : '#EEF3FA', borderBottom: '1px solid var(--border3)' }}>
+                {floorReadings.length > 1 && (
+                  <span draggable onDragStart={() => setDragIdx(i)} onDragEnd={() => setDragIdx(null)} title="Kéo để đổi vị trí khu"
+                    style={{ flexShrink: 0, cursor: 'grab', color: 'var(--muted2)', fontSize: 14, lineHeight: 1, userSelect: 'none' }}>⠿</span>
+                )}
+                <input className="dn-input" list="dn-bqt-groups" style={{ flex: 1, fontWeight: 600 }} value={f.group} placeholder="Tên khu (Nhóm KH)" onChange={e => setFloorGroup(i, e.target.value)} />
+                {floorReadings.length > 1 && (
+                  <button onClick={() => removeFloor(i)} title="Xoá khu này" style={{ flexShrink: 0, width: 22, height: 22, padding: 0, lineHeight: '20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', border: '1px solid #FECACA', borderRadius: 6, background: '#fff', color: '#DC2626' }}>×</button>
+                )}
+              </div>
+              <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 700, color: f.commonTM ? '#8A5A12' : 'var(--muted)', marginBottom: 4, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!f.commonTM} onChange={e => setFloorCommonTM(i, e.target.checked)} style={{ margin: 0 }} />
+                  Thuộc 3 tầng TM chung (→ Sơn An thu hộ)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--muted)', marginBottom: 6, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!f.fixed} onChange={e => setFloorFixed(i, e.target.checked)} style={{ margin: 0 }} />
+                  Cố định (không theo khung giờ)
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 1fr 44px', gap: 4, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
+                  <span>{f.fixed ? 'Loại' : 'Khung'}</span><span style={{ textAlign: 'right' }}>Cũ</span><span style={{ textAlign: 'right' }}>Mới</span><span style={{ textAlign: 'right' }}>kWh</span>
                 </div>
-                <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--muted)', marginBottom: 6, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={!!f.fixed} onChange={e => setFloorFixed(i, e.target.checked)} style={{ margin: 0 }} />
-                    Cố định (không theo khung giờ)
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 1fr 44px', gap: 4, alignItems: 'center', fontSize: 9.5, color: 'var(--muted2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 }}>
-                    <span>{f.fixed ? 'Loại' : 'Khung'}</span><span style={{ textAlign: 'right' }}>Cũ</span><span style={{ textAlign: 'right' }}>Mới</span><span style={{ textAlign: 'right' }}>kWh</span>
+                {(f.fixed ? (['binhThuong'] as FloorBandKey[]) : FLOOR_BAND_KEYS).map(k => (
+                  <div key={k} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 1fr 44px', gap: 4, alignItems: 'center', marginBottom: 5 }}>
+                    <span style={{ fontSize: 9.5, color: 'var(--muted)' }}>{f.fixed ? 'Cố định' : BAND_LABELS[k]}</span>
+                    <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
+                    <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
+                    <span style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>
                   </div>
-                  {(f.fixed ? (['binhThuong'] as FloorBandKey[]) : FLOOR_BAND_KEYS).map(k => (
-                    <div key={k} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 1fr 44px', gap: 4, alignItems: 'center', marginBottom: 5 }}>
-                      <span style={{ fontSize: 9.5, color: 'var(--muted)' }}>{f.fixed ? 'Cố định' : BAND_LABELS[k]}</span>
-                      <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexOld} onValueChange={v => setFloorBand(i, k, 'indexOld', v)} />
-                      <NumberInput style={{ textAlign: 'right', padding: '5px 5px' }} placeholder="0" value={f.bands[k].indexNew} onValueChange={v => setFloorBand(i, k, 'indexNew', v)} />
-                      <span style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'right' }}>{fmtKwh(floorBandKwh(f.bands[k]))}</span>
-                    </div>
-                  ))}
-                  {f.fixed && (
-                    <div style={{ background: '#F8FAFC', border: '1px dashed var(--border3)', borderRadius: 7, padding: '6px 8px', marginBottom: 6, fontSize: 9.5, color: 'var(--muted)' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--navy)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.02em' }}>Tự phân bổ khung giờ</div>
-                      {([['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']] as [FloorBandKey, string][]).map(([k, lb]) => (
-                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>{lb} {bqtRatio[k] || 0}%</span>
-                          <span style={{ fontWeight: 600, color: 'var(--txt)' }}>{fmtKwh(floorBandKwhSplit(f, k, bqtRatio))} kWh</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 6, marginTop: 'auto', borderTop: '1px dashed var(--border3)', paddingTop: 8 }}>
-                    {([['Ghi tầng', fmtKwh(row?.floorKwh ?? floorTotalKwh(f)), 'var(--txt)', false],
-                       ['Khách dùng', fmtKwh(row?.customerKwh ?? 0), '#2563EB', false],
-                       ['BQT', fmtKwh(row?.bqtKwh ?? 0), 'var(--navy)', true]] as [string, string, string, boolean][]).map(([lb, v, col, bold]) => (
-                      <div key={lb} style={{ flex: 1, textAlign: 'center', background: bold ? '#E0EDFA' : '#F8FAFC', borderRadius: 7, padding: '5px 4px' }}>
-                        <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>{lb}</div>
-                        <div style={{ fontSize: 12.5, fontWeight: bold ? 800 : 600, color: col }}>{v}</div>
-                      </div>
-                    ))}
+                ))}
+                <div style={{ display: 'flex', gap: 6, marginTop: 'auto', borderTop: '1px dashed var(--border3)', paddingTop: 8 }}>
+                  <div style={{ flex: 1, textAlign: 'center', background: '#E0EDFA', borderRadius: 7, padding: '5px 4px' }}>
+                    <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>Ghi tầng (kWh)</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--navy)' }}>{fmtKwh(floorTotalKwh(f))}</div>
                   </div>
                 </div>
               </div>
-            )
-          })}
+            </div>
+          ))}
+        </div>
+        <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
 
-          {/* Card 5: Tổng hợp kWh */}
-          <div style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-            <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tổng hợp kWh</div>
-            <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {([['Tổng ghi các tầng', fmtKwh(calc.sumFloorKwh), 'var(--navy)', false],
-                 ['Đồng hồ chính (C+T+B)', fmtKwh(calc.mainMeterKwh), 'var(--navy)', false],
-                 ['Chênh lệch → BQT', fmtKwh(calc.discrepancy), calc.discrepancy < 0 ? '#DC2626' : 'var(--navy)', false],
-                 ['Tổng kWh BQT phải chịu', fmtKwh(calc.bqtTotalKwh), 'var(--navy)', true]] as [string, string, string, boolean][]).map(([lb, v, col, hi]) => (
-                <div key={lb} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, background: hi ? '#E0EDFA' : '#F8FAFC', borderRadius: 7, padding: '6px 9px' }}>
-                  <span style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>{lb}</span>
-                  <span style={{ fontSize: hi ? 15 : 13.5, fontWeight: hi ? 800 : 700, color: col, whiteSpace: 'nowrap' }}>{v} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>kWh</span></span>
+        {/* Tỷ lệ chia khung giờ cho phần chung 3 tầng TM */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--navy)' }}>Tỷ lệ chia khung giờ (phần chung 3 tầng TM):</span>
+          {([['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']] as [keyof BqtRatio, string][]).map(([k, label]) => (
+            <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <label className="dn-label" style={{ margin: 0 }}>{label}%</label>
+              <input type="number" className="dn-input" style={{ width: 56, padding: '4px 6px' }} value={bqtRatio[k] || ''} onChange={e => setRatio(k, Number(e.target.value))} />
+            </span>
+          ))}
+          <span style={{ fontSize: 10.5, color: ratioSum === 100 ? 'var(--green)' : '#DC2626', fontWeight: 600 }}>Σ {ratioSum}%{ratioSum === 100 ? ' ✓' : ''}</span>
+        </div>
+
+        {/* c. Bảng phân bổ Sơn An thu hộ + Ban quản trị */}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
+          {/* Sơn An thu hộ */}
+          <div style={{ flex: '2 1 460px', minWidth: 300, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '7px 12px', background: '#8A5A12', color: '#fff', fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>① Sơn An thu hộ</div>
+            <div style={{ padding: '10px 12px', flex: 1 }}>
+              <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 6 }}>
+                Chung 3 tầng TM: <b style={{ color: 'var(--navy)' }}>{fmtKwh(split.commonPoolKwh)} kWh</b>
+                {split.commonFloors.length > 0 && <span> ({split.commonFloors.map(f => `${f.group || '—'}: ${fmtKwh(f.kwh)}`).join(' · ')})</span>}
+              </div>
+              {split.companies.length > 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 8 }}>
+                  Công ty đồng hồ riêng: {split.companies.map(co => <span key={co.customer.id}><b style={{ color: 'var(--navy)' }}>{co.customer.name}</b> {fmtKwh(co.total)} kWh{'  '}</span>)}
                 </div>
-              ))}
+              )}
+              <table className="dn-table" style={{ fontSize: 11.5 }}>
+                <thead><tr>
+                  <th>Khung giờ</th><th style={{ textAlign: 'right' }}>Chung (kWh)</th><th style={{ textAlign: 'right' }}>Công ty (kWh)</th>
+                  <th style={{ textAlign: 'right' }}>Tổng kWh</th><th style={{ textAlign: 'right' }}>Đơn giá</th><th style={{ textAlign: 'right' }}>Thành tiền</th>
+                </tr></thead>
+                <tbody>
+                  {split.bands.map(b => (
+                    <tr key={b.key}>
+                      <td>{BAND_LABELS[b.key]}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtKwh(b.commonKwh)}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtKwh(b.companyKwh)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtKwh(b.kwh)}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtDec(b.price)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(b.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr><td colSpan={5} style={{ textAlign: 'right', color: 'var(--muted)' }}>Chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(split.sonAnSubtotal)}</td></tr>
+                  <tr><td colSpan={5} style={{ textAlign: 'right', color: 'var(--muted)' }}>VAT ({split.vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(split.sonAnVat)}</td></tr>
+                  <tr style={{ background: '#FFF4E0' }}><td colSpan={5} style={{ textAlign: 'right', fontWeight: 800, color: '#8A5A12' }}>Sơn An thu hộ</td><td style={{ textAlign: 'right', fontWeight: 800, color: '#8A5A12' }}>{fmt(split.sonAnTotal)} đ</td></tr>
+                </tfoot>
+              </table>
             </div>
           </div>
 
-          {/* Card 6: c. Chia kWh BQT theo khung giờ (dạng danh sách gọn) */}
-          <div style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-            <div style={{ padding: '7px 9px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>c. Chia kWh BQT × đơn giá</div>
-            <div style={{ padding: '9px 10px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-                {([['binhThuong', 'BT'], ['caoDiem', 'CĐ'], ['thapDiem', 'TĐ']] as [keyof BqtRatio, string][]).map(([k, label]) => (
-                  <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <label className="dn-label" style={{ margin: 0 }}>{label}%</label>
-                    <input type="number" className="dn-input" style={{ width: 52, padding: '4px 6px' }} value={bqtRatio[k] || ''} onChange={e => setRatio(k, Number(e.target.value))} />
-                  </span>
-                ))}
-                <span style={{ fontSize: 10.5, color: calc.ratioSum === 100 ? 'var(--green)' : '#DC2626', fontWeight: 600 }}>Σ {calc.ratioSum}%{calc.ratioSum === 100 ? ' ✓' : ''}</span>
+          {/* Ban quản trị */}
+          <div style={{ flex: '1 1 240px', minWidth: 220, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '7px 12px', background: '#1C3557', color: '#fff', fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>② Ban quản trị (cư dân)</div>
+            <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: '#F8FAFC', borderRadius: 7, padding: '8px 10px' }}>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>Tổng tiền đồng hồ 1</span>
+                <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(split.meterTotal)} đ</span>
               </div>
-              {calc.bands.map(b => (
-                <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 600 }}>{BAND_LABELS[b.key]} <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 400 }}>{b.ratioPct}%</span></div>
-                    <div style={{ fontSize: 10, color: 'var(--muted2)' }}>{fmtKwh(b.kwh)} × {fmtDec(b.price)}</div>
-                  </div>
-                  <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(b.amount)} đ</span>
-                </div>
-              ))}
-              <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border3)', paddingTop: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)' }}><span>Chưa VAT</span><span style={{ fontWeight: 700 }}>{fmt(calc.subtotal)} đ</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)', marginTop: 2 }}><span>VAT ({reading.vatPercent || 0}%)</span><span style={{ fontWeight: 700 }}>{fmt(calc.vat)} đ</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#E0EDFA', borderRadius: 7, padding: '6px 9px', marginTop: 6 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase' }}>Tổng TT BQT</span>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(calc.total)} đ</span>
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '0 10px' }}>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>− Sơn An thu hộ</span>
+                <span style={{ fontWeight: 700, color: '#8A5A12', whiteSpace: 'nowrap' }}>{fmt(split.sonAnTotal)} đ</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, background: '#E0EDFA', borderRadius: 7, padding: '10px', marginTop: 'auto' }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase' }}>= Ban quản trị</span>
+                <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(split.bqtTotal)} đ</span>
               </div>
             </div>
           </div>
         </div>
-        <datalist id="dn-bqt-groups">{groupSuggestions.map(g => <option key={g} value={g} />)}</datalist>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button className="btn-primary" style={{ background: '#D4A64A' }} onClick={onSave} disabled={saving}>{saving ? 'Đang lưu…' : '💾 Lưu tháng này'}</button>
           {savedAt && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)' }}>✓ Đã lưu</span>}
         </div>
 
         <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 4 }}>
-          * Bấm “💾 Lưu tháng này” để lưu số ghi từng tầng &amp; tỷ lệ cho tháng {month}. (Cũng được lưu chung khi bấm “Lưu chỉ số” ở Bảng 1.)
+          * Bấm “💾 Lưu tháng này” để lưu số ghi từng khu, cờ “3 tầng TM chung” &amp; tỷ lệ cho tháng {month}. (Cũng được lưu chung khi bấm “Lưu chỉ số” ở Bảng 1.)
         </div>
 
-        {/* d. Thống kê BQT theo tháng — đối chiếu tăng giảm */}
+        {/* d. Thống kê Sơn An thu hộ / BQT theo tháng */}
         <div style={{ marginTop: 18 }}>
           <BqtHistoryTable reading={reading} readings={readings} month={month} customers={customers} usages={usages} />
         </div>
@@ -713,8 +739,6 @@ function WaterFloorHistoryTable({ readings, month, floorReadings }: {
 function BqtHistoryTable({ reading, readings, month, customers, usages }: {
   reading: MeterReading; readings: MeterReading[]; month: string; customers: Customer[]; usages: CustomerUsage[]
 }) {
-  const [showFloors, setShowFloors] = useState(false)  // bung chi tiết ghi tầng theo khung giờ
-
   // 12 tháng gần nhất của đồng hồ 1, cũ → mới; tháng hiện tại thay bằng số liệu live (reading)
   const saved = readings.filter(r => r.meterId === 1).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12)
     .sort((a, b) => a.month.localeCompare(b.month))
@@ -723,37 +747,26 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
 
   if (months.length === 0) return null
 
-  const calcs = months.map(r => ({ month: r.month, isCur: r.month === month, c: computeBqt(r, customers, usages, r.bqtRatio ?? DEFAULT_BQT_RATIO) }))
-  const totalOf = (i: number) => calcs[i].c.total
-
-  // Chi tiết ghi tầng theo khung giờ cho từng tháng (để bung dưới dòng "Tổng ghi các tầng")
-  const monthFloors = months.map(r => ({ month: r.month, isCur: r.month === month, ratio: r.bqtRatio ?? DEFAULT_BQT_RATIO, floors: (r.floorReadings ?? []).map(normalizeFloor) }))
-  const allGroups: string[] = []
-  monthFloors.forEach(mf => mf.floors.forEach(f => { const g = (f.group || '').trim(); if (g && !allGroups.includes(g)) allGroups.push(g) }))
-  // Bỏ khu không có chỉ số nào (VD "Tầng 3" cũ còn sót sau khi tách A1/A2) — lọc theo chỉ số ≠ 0, không theo kWh
-  const groupOrder = allGroups.filter(g => monthFloors.some(mf => {
-    const f = mf.floors.find(x => (x.group || '').trim() === g)
-    return !!f && FLOOR_BAND_KEYS.some(k => (f.bands[k]?.indexOld || 0) !== 0 || (f.bands[k]?.indexNew || 0) !== 0)
-  }))
-  const floorOf = (mf: typeof monthFloors[number], g: string) => mf.floors.find(f => (f.group || '').trim() === g)
-  // % thay đổi tổng thanh toán so với tháng liền trước
+  const calcs = months.map(r => ({ month: r.month, isCur: r.month === month, c: computeLightingSplit(r, customers, usages, r.bqtRatio ?? DEFAULT_BQT_RATIO) }))
+  const companyKwh = (c: ReturnType<typeof computeLightingSplit>) => c.companies.reduce((s, co) => s + co.total, 0)
+  // % thay đổi Ban quản trị so với tháng liền trước
   const delta = (i: number): { pct: number; up: boolean } | null => {
     if (i === 0) return null
-    const prev = totalOf(i - 1), cur = totalOf(i)
+    const prev = calcs[i - 1].c.bqtTotal, cur = calcs[i].c.bqtTotal
     if (prev === 0) return null
     const pct = (cur - prev) / prev * 100
     if (Math.abs(pct) < 0.05) return null
     return { pct, up: pct > 0 }
   }
 
-  const rowCells = (fn: (c: ReturnType<typeof computeBqt>) => number, opts?: { bold?: boolean; bg?: string; kwh?: boolean }) =>
+  const rowCells = (fn: (c: ReturnType<typeof computeLightingSplit>) => number, opts?: { bold?: boolean; bg?: string; kwh?: boolean }) =>
     calcs.map(x => (
       <td key={x.month} style={{ textAlign: 'right', fontWeight: opts?.bold ? 700 : undefined, background: x.isCur ? '#E0EDFA' : opts?.bg, whiteSpace: 'nowrap' }}>{(opts?.kwh ? fmtKwh : fmt)(fn(x.c))}</td>
     ))
 
   return (
     <>
-      <div className="dn-col-title"><span>d. Thống kê BQT theo tháng (đối chiếu tăng giảm)</span></div>
+      <div className="dn-col-title"><span>d. Thống kê Sơn An thu hộ / Ban quản trị theo tháng (đối chiếu tăng giảm)</span></div>
       <div className="dn-scroll">
         <table className="dn-table" style={{ fontSize: 11 }}>
           <thead><tr>
@@ -761,49 +774,16 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
             {calcs.map(x => <th key={x.month} style={{ textAlign: 'right', background: x.isCur ? '#E0EDFA' : undefined }}>{x.month}{x.isCur ? ' ★' : ''}</th>)}
           </tr></thead>
           <tbody>
-            <tr style={{ fontSize: 10 }}>
-              <td style={{ fontWeight: 400 }}>
-                {groupOrder.length > 0 && (
-                  <button onClick={() => setShowFloors(v => !v)} title={showFloors ? 'Thu gọn chi tiết tầng' : 'Xem chi tiết từng tầng × khung giờ'}
-                    style={{ width: 16, height: 16, marginRight: 6, padding: 0, lineHeight: '14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border3)', borderRadius: 4, background: '#fff', color: 'var(--navy)' }}>
-                    {showFloors ? '−' : '+'}
-                  </button>
-                )}
-                Tổng ghi các tầng (kWh)
-              </td>
-              {rowCells(c => c.sumFloorKwh, { kwh: true })}
-            </tr>
-            {showFloors && groupOrder.map(g => (
-              <Fragment key={g}>
-                <tr style={{ fontSize: 9.5 }}>
-                  <td style={{ paddingLeft: 26, fontWeight: 700, color: 'var(--navy)' }}>{g} — tổng</td>
-                  {monthFloors.map(mf => {
-                    const f = floorOf(mf, g)
-                    return <td key={mf.month} style={{ textAlign: 'right', fontWeight: 600, background: mf.isCur ? '#E0EDFA' : '#F5F8FC', whiteSpace: 'nowrap' }}>{fmtKwh(f ? floorTotalKwh(f) : 0)}</td>
-                  })}
-                </tr>
-                {FLOOR_BAND_KEYS.map(k => (
-                  <tr key={`${g}-${k}`} style={{ fontSize: 9.5, color: 'var(--muted)' }}>
-                    <td style={{ paddingLeft: 42 }}>{BAND_LABELS[k]}</td>
-                    {monthFloors.map(mf => {
-                      const f = floorOf(mf, g)
-                      return <td key={mf.month} style={{ textAlign: 'right', background: mf.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmtKwh(f ? floorBandKwhSplit(f, k, mf.ratio) : 0)}</td>
-                    })}
-                  </tr>
-                ))}
-              </Fragment>
-            ))}
-            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Đồng hồ chính (kWh)</td>{rowCells(c => c.mainMeterKwh, { kwh: true })}</tr>
-            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Chênh lệch → BQT (kWh)</td>{rowCells(c => c.discrepancy, { kwh: true })}</tr>
-            <tr><td style={{ fontWeight: 600, color: 'var(--navy)' }}>Tổng kWh BQT</td>{rowCells(c => c.bqtTotalKwh, { bold: true, kwh: true })}</tr>
-            <tr className="dn-sum-top"><td style={{ fontWeight: 600 }}>Chưa VAT</td>{rowCells(c => c.subtotal)}</tr>
-            <tr><td style={{ fontWeight: 600 }}>VAT</td>{rowCells(c => c.vat)}</tr>
-            <tr style={{ background: '#E0EDFA' }}><td style={{ fontWeight: 700 }}>Tổng thanh toán BQT</td>
+            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Chung 3 tầng TM (kWh)</td>{rowCells(c => c.commonPoolKwh, { kwh: true })}</tr>
+            <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Công ty đồng hồ riêng (kWh)</td>{rowCells(companyKwh, { kwh: true })}</tr>
+            <tr className="dn-sum-top" style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Tổng tiền đồng hồ (đ)</td>{rowCells(c => c.meterTotal)}</tr>
+            <tr><td style={{ fontWeight: 600, color: '#8A5A12' }}>Sơn An thu hộ (đ)</td>{rowCells(c => c.sonAnTotal, { bold: true, bg: '#FFF9EC' })}</tr>
+            <tr style={{ background: '#E0EDFA' }}><td style={{ fontWeight: 700, color: 'var(--navy)' }}>Ban quản trị (đ)</td>
               {calcs.map((x, i) => {
                 const d = delta(i)
                 return (
                   <td key={x.month} style={{ textAlign: 'right', fontWeight: 700, background: '#E0EDFA', whiteSpace: 'nowrap' }}>
-                    {fmt(x.c.total)}
+                    {fmt(x.c.bqtTotal)}
                     {d && <div style={{ fontSize: 9, fontWeight: 700, color: d.up ? '#DC2626' : 'var(--green)' }}>{d.up ? '▲' : '▼'} {Math.abs(d.pct).toFixed(1)}%</div>}
                   </td>
                 )
@@ -813,6 +793,92 @@ function BqtHistoryTable({ reading, readings, month, customers, usages }: {
         </table>
       </div>
     </>
+  )
+}
+
+// ── Đồng hồ 2: phân bổ tiền điện máy lạnh trung tâm cho khách + Sơn An Group chịu (phần còn lại) ──
+function AcSplitSection({ reading, readings, month, customers, usages }: {
+  reading: MeterReading; readings: MeterReading[]; month: string; customers: Customer[]; usages: CustomerUsage[]
+}) {
+  const service = METER_SERVICE[2]  // 'dh2'
+  const alloc = meterAllocation(reading, customers, usages)
+  const isRemainder = (c: Customer) => subFor(c, service)?.chargeType === 'remainder'
+  const pricedRows = alloc.rows.filter(r => !isRemainder(r.customer))
+  const chargeTypeLabel = (c: Customer) => CHARGE_TYPE_LABELS[subFor(c, service)?.chargeType ?? 'flat_vat_incl']
+
+  // Lịch sử 12 tháng: Tổng đồng hồ / Σ khách / Sơn An Group chịu
+  const saved = readings.filter(r => r.meterId === 2).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12).sort((a, b) => a.month.localeCompare(b.month))
+  const hasCur = saved.some(r => r.month === month)
+  const months = hasCur ? saved.map(r => r.month === month ? reading : r) : [...saved, reading].sort((a, b) => a.month.localeCompare(b.month))
+  const hist = months.map(r => { const a = meterAllocation(r, customers, usages); return { month: r.month, isCur: r.month === month, total: a.total, allocated: a.allocated, remainder: a.remainderTotal } })
+
+  return (
+    <div style={{ marginTop: 20, border: '1px solid var(--border3)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: '#1C3557', color: '#fff', padding: '9px 14px', fontSize: 12, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase' }}>
+        Phân bổ tiền điện máy lạnh trung tâm (đồng hồ điện 2)
+      </div>
+      <div style={{ padding: 14 }}>
+        {/* Tóm tắt cách tính */}
+        <div style={{ background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, padding: '11px 14px', marginBottom: 14, fontSize: 12.5, lineHeight: 1.65, color: 'var(--txt2)' }}>
+          <div style={{ fontWeight: 800, color: 'var(--navy)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.03em', fontSize: 11.5 }}>📘 Tóm tắt cách tính</div>
+          <div><b>Tổng tiền đồng hồ 2</b> (máy lạnh trung tâm, từ điện lực + VAT) được phân bổ cho các khách dùng máy lạnh:</div>
+          <div style={{ margin: '4px 0 4px 6px' }}>
+            <div>• Khách <b>giá cố định</b> (VD VIN, D01): sản lượng × đơn giá cố định.</div>
+            <div>• Khách <b>theo khung giờ</b> (VD OBE — chưa VAT): kWh từng khung × đơn giá + VAT.</div>
+            <div>• <b style={{ color: 'var(--navy)' }}>Sơn An Group chịu</b> = <b>Tổng tiền đồng hồ − tổng đã phân bổ cho khách</b> (phần còn lại).</div>
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>Thêm/sửa khách &amp; cách tính ở tab <b>Khách hàng</b> (chọn dịch vụ “{METER_LABELS[2]}”).</div>
+        </div>
+
+        {/* Bảng phân bổ tháng hiện tại */}
+        <div className="dn-scroll">
+          <table className="dn-table" style={{ fontSize: 12 }}>
+            <thead><tr>
+              <th>Khách hàng</th><th>Cách tính tiền</th><th style={{ textAlign: 'right' }}>Thành tiền ({month})</th>
+            </tr></thead>
+            <tbody>
+              {pricedRows.map(r => (
+                <tr key={r.customer.id}>
+                  <td style={{ fontWeight: 600 }}>{r.customer.name}</td>
+                  <td style={{ color: 'var(--muted)' }}>{chargeTypeLabel(r.customer)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(r.amount)} đ</td>
+                </tr>
+              ))}
+              {pricedRows.length === 0 && (
+                <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--muted)', padding: 12 }}>Chưa có khách nào gán cho đồng hồ máy lạnh.</td></tr>
+              )}
+              <tr style={{ background: '#FFF4E0' }}>
+                <td style={{ fontWeight: 700, color: '#8A5A12' }}>Sơn An Group chịu</td>
+                <td style={{ color: 'var(--muted)', fontStyle: 'italic' }}>Phần còn lại</td>
+                <td style={{ textAlign: 'right', fontWeight: 800, color: '#8A5A12' }}>{fmt(alloc.remainderTotal)} đ</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr style={{ background: '#E0EDFA' }}>
+                <td style={{ fontWeight: 800, color: 'var(--navy)' }} colSpan={2}>Tổng tiền đồng hồ 2</td>
+                <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmt(alloc.total)} đ</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* Thống kê theo tháng */}
+        <div className="dn-col-title" style={{ marginTop: 16 }}><span>Thống kê phân bổ theo tháng</span></div>
+        <div className="dn-scroll">
+          <table className="dn-table" style={{ fontSize: 11 }}>
+            <thead><tr>
+              <th>Chỉ tiêu</th>
+              {hist.map(h => <th key={h.month} style={{ textAlign: 'right', background: h.isCur ? '#E0EDFA' : undefined }}>{h.month}{h.isCur ? ' ★' : ''}</th>)}
+            </tr></thead>
+            <tbody>
+              <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Tổng tiền đồng hồ (đ)</td>{hist.map(h => <td key={h.month} style={{ textAlign: 'right', background: h.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmt(h.total)}</td>)}</tr>
+              <tr style={{ fontSize: 10 }}><td style={{ fontWeight: 400 }}>Đã phân bổ khách (đ)</td>{hist.map(h => <td key={h.month} style={{ textAlign: 'right', background: h.isCur ? '#E0EDFA' : undefined, whiteSpace: 'nowrap' }}>{fmt(h.allocated)}</td>)}</tr>
+              <tr style={{ background: '#E0EDFA' }}><td style={{ fontWeight: 700, color: '#8A5A12' }}>Sơn An Group chịu (đ)</td>{hist.map(h => <td key={h.month} style={{ textAlign: 'right', fontWeight: 700, background: '#E0EDFA', whiteSpace: 'nowrap' }}>{fmt(h.remainder)}</td>)}</tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   )
 }
 
