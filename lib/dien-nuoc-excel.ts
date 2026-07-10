@@ -3,6 +3,7 @@
 // Mỗi tab có 1 hàm export riêng, dựng workbook từ dữ liệu đã tải sẵn ở client
 // (Firestore subscriptions) rồi tải xuống trực tiếp — không cần gọi API.
 import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, BandKey,
   BAND_KEYS, BAND_LABELS, METER_UNIT, meterLabel,
@@ -62,44 +63,59 @@ function download(wb: XLSX.WorkBook, filename: string) {
   XLSX.writeFile(wb, safeFileName(filename), { cellStyles: true })
 }
 
-// ── Style chuyên nghiệp cho bảng tính (font Times New Roman, viền, tô nền) ────
-type SStyle = Record<string, unknown>
-type SCell = { v: Cell; s?: SStyle } | null
+// ── Style chuyên nghiệp cho bảng tính (exceljs: font Times New Roman, viền, tô nền) ──
+type StyleKey = 'title' | 'sub' | 'section' | 'colHead' | 'label' | 'labelB' | 'num' | 'numK' | 'numP' | 'totalL' | 'totalN' | 'sonAnL' | 'sonAnN'
+type ECell = { v: Cell; k?: StyleKey } | null
+type EMerge = [number, number, number]  // [rowIdx0, colStart0, colEnd0]
+interface SheetSpec { name: string; rows: ECell[][]; colW: number[]; merges: EMerge[] }
+
 const FONT = 'Times New Roman'
-const BD = { style: 'thin', color: { rgb: 'C7CED8' } }
+const BD = { style: 'thin' as const, color: { argb: 'FFC7CED8' } }
 const BOX = { top: BD, bottom: BD, left: BD, right: BD }
-const ST: Record<string, SStyle> = {
-  title:   { font: { bold: true, sz: 14, color: { rgb: '1C3557' }, name: FONT }, alignment: { vertical: 'center' } },
-  sub:     { font: { italic: true, sz: 10, color: { rgb: '6B7280' }, name: FONT } },
-  section: { font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' }, name: FONT }, fill: { fgColor: { rgb: '1C3557' } }, alignment: { horizontal: 'left', vertical: 'center' }, border: BOX },
-  colHead: { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' }, name: FONT }, fill: { fgColor: { rgb: '2A4D7A' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: BOX },
-  label:   { font: { sz: 10, name: FONT }, alignment: { vertical: 'center' }, border: BOX },
-  labelB:  { font: { bold: true, sz: 10, name: FONT }, alignment: { vertical: 'center' }, border: BOX },
-  num:     { font: { sz: 10, name: FONT }, numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
-  numK:    { font: { sz: 10, name: FONT }, numFmt: '#,##0.0', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
-  numP:    { font: { sz: 10, name: FONT }, numFmt: '#,##0.##', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
-  totalL:  { font: { bold: true, sz: 10, color: { rgb: '1C3557' }, name: FONT }, fill: { fgColor: { rgb: 'E0EDFA' } }, alignment: { vertical: 'center' }, border: BOX },
-  totalN:  { font: { bold: true, sz: 10, color: { rgb: '1C3557' }, name: FONT }, fill: { fgColor: { rgb: 'E0EDFA' } }, numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
-  sonAnL:  { font: { bold: true, sz: 10, color: { rgb: '8A5A12' }, name: FONT }, fill: { fgColor: { rgb: 'FFF4E0' } }, alignment: { vertical: 'center' }, border: BOX },
-  sonAnN:  { font: { bold: true, sz: 10, color: { rgb: '8A5A12' }, name: FONT }, fill: { fgColor: { rgb: 'FFF4E0' } }, numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'center' }, border: BOX },
+const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } })
+const EJS: Record<StyleKey, Partial<ExcelJS.Style>> = {
+  title:   { font: { name: FONT, size: 14, bold: true, color: { argb: 'FF1C3557' } }, alignment: { vertical: 'middle' } },
+  sub:     { font: { name: FONT, size: 10, italic: true, color: { argb: 'FF6B7280' } } },
+  section: { font: { name: FONT, size: 11, bold: true, color: { argb: 'FFFFFFFF' } }, fill: fill('FF1C3557'), alignment: { horizontal: 'left', vertical: 'middle' }, border: BOX },
+  colHead: { font: { name: FONT, size: 10, bold: true, color: { argb: 'FFFFFFFF' } }, fill: fill('FF2A4D7A'), alignment: { horizontal: 'center', vertical: 'middle', wrapText: true }, border: BOX },
+  label:   { font: { name: FONT, size: 10 }, alignment: { vertical: 'middle' }, border: BOX },
+  labelB:  { font: { name: FONT, size: 10, bold: true }, alignment: { vertical: 'middle' }, border: BOX },
+  num:     { font: { name: FONT, size: 10 }, numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'middle' }, border: BOX },
+  numK:    { font: { name: FONT, size: 10 }, numFmt: '#,##0.0', alignment: { horizontal: 'right', vertical: 'middle' }, border: BOX },
+  numP:    { font: { name: FONT, size: 10 }, numFmt: '#,##0.##', alignment: { horizontal: 'right', vertical: 'middle' }, border: BOX },
+  totalL:  { font: { name: FONT, size: 10, bold: true, color: { argb: 'FF1C3557' } }, fill: fill('FFE0EDFA'), alignment: { vertical: 'middle' }, border: BOX },
+  totalN:  { font: { name: FONT, size: 10, bold: true, color: { argb: 'FF1C3557' } }, fill: fill('FFE0EDFA'), numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'middle' }, border: BOX },
+  sonAnL:  { font: { name: FONT, size: 10, bold: true, color: { argb: 'FF8A5A12' } }, fill: fill('FFFFF4E0'), alignment: { vertical: 'middle' }, border: BOX },
+  sonAnN:  { font: { name: FONT, size: 10, bold: true, color: { argb: 'FF8A5A12' } }, fill: fill('FFFFF4E0'), numFmt: '#,##0', alignment: { horizontal: 'right', vertical: 'middle' }, border: BOX },
 }
 
-function styledSheet(rows: SCell[][], colW: number[], merges: XLSX.Range[] = []): XLSX.WorkSheet {
-  const ws: XLSX.WorkSheet = {}
-  let maxC = 0
-  rows.forEach((row, R) => row.forEach((cell, C) => {
-    if (!cell) return
-    if (C > maxC) maxC = C
-    const isNum = typeof cell.v === 'number'
-    // numFmt qua `z` để bản cộng đồng của thư viện xlsx ghi được định dạng số (dấu phân cách nghìn…);
-    // còn `.s` (màu/viền/font) chỉ hiển thị nếu dùng bản có hỗ trợ style — vẫn giữ để tương thích.
-    const z = isNum && cell.s?.numFmt ? { z: cell.s.numFmt as string } : {}
-    ws[XLSX.utils.encode_cell({ r: R, c: C })] = { v: cell.v, t: isNum ? 'n' : 's', ...z, ...(cell.s ? { s: cell.s } : {}) }
-  }))
-  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, rows.length - 1), c: Math.max(maxC, colW.length - 1) } })
-  ws['!cols'] = colW.map(wch => ({ wch }))
-  if (merges.length) ws['!merges'] = merges
-  return ws
+// Dựng & tải workbook bằng exceljs (giữ đầy đủ màu/viền/font) — chạy phía client bằng Blob.
+async function downloadWorkbook(specs: SheetSpec[], filename: string) {
+  const wb = new ExcelJS.Workbook()
+  for (const spec of specs) {
+    const ws = wb.addWorksheet(safeSheetName(spec.name))
+    ws.columns = spec.colW.map(w => ({ width: w }))
+    spec.rows.forEach((row, R) => row.forEach((cell, C) => {
+      if (!cell) return
+      const c = ws.getCell(R + 1, C + 1)
+      c.value = cell.v === '' ? null : cell.v
+      const st = cell.k ? EJS[cell.k] : undefined
+      if (st) {
+        if (st.font) c.font = st.font
+        if (st.fill) c.fill = st.fill
+        if (st.border) c.border = st.border
+        if (st.alignment) c.alignment = st.alignment
+        if (st.numFmt) c.numFmt = st.numFmt
+      }
+    }))
+    for (const [r, c1, c2] of spec.merges) ws.mergeCells(r + 1, c1 + 1, r + 1, c2 + 1)
+  }
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = safeFileName(filename); a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1500)
 }
 
 // 12 tháng gần nhất của 1 đồng hồ, xếp cũ → mới.
@@ -109,28 +125,28 @@ function recentMonths(readings: MeterReading[], meterId: MeterId): MeterReading[
 }
 
 // ── Bảng tính trình bày (Điện chiếu sáng / Điện máy lạnh) — tháng là các cột ──
-function electricPresentation(meterId: MeterId, months: MeterReading[], customers: Customer[], usages: CustomerUsage[], label: string): XLSX.WorkSheet {
+function electricPresentation(meterId: MeterId, months: MeterReading[], customers: Customer[], usages: CustomerUsage[], label: string): SheetSpec {
   const b1Bands: BandKey[] = meterId === 1 ? BAND_KEYS : ['caoDiem', 'thapDiem', 'binhThuong']
   const lastCol = months.length            // cột 0 = nhãn, cột 1..n = tháng
-  const rows: SCell[][] = []
-  const merges: XLSX.Range[] = []
-  const mrow = (r: number) => merges.push({ s: { r, c: 0 }, e: { r, c: lastCol } })
-  const labelRow = (label: string, vals: Cell[], vs: SStyle = ST.num, ls: SStyle = ST.label): SCell[] => [{ v: label, s: ls }, ...vals.map(v => ({ v, s: vs }))]
-  const section = (t: string) => { rows.push([{ v: t, s: ST.section }, ...months.map(() => ({ v: '', s: ST.section }))]); mrow(rows.length - 1) }
-  const colHead = (first: string) => rows.push([{ v: first, s: ST.colHead }, ...months.map(m => ({ v: m.month, s: ST.colHead }))])
+  const rows: ECell[][] = []
+  const merges: EMerge[] = []
+  const mrow = (r: number) => merges.push([r, 0, lastCol])
+  const labelRow = (label: string, vals: Cell[], vk: StyleKey = 'num', lk: StyleKey = 'label'): ECell[] => [{ v: label, k: lk }, ...vals.map(v => ({ v, k: vk }))]
+  const section = (t: string) => { rows.push([{ v: t, k: 'section' }]); mrow(rows.length - 1) }
+  const colHead = (first: string) => rows.push([{ v: first, k: 'colHead' }, ...months.map(m => ({ v: m.month, k: 'colHead' as StyleKey }))])
 
-  rows.push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, s: ST.title }]); mrow(0)
-  rows.push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), kWh`, s: ST.sub }])
+  rows.push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, k: 'title' }]); mrow(0)
+  rows.push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), kWh`, k: 'sub' }])
   rows.push([])
 
   // Bảng 1 — tiêu thụ từ điện lực
   section('BẢNG 1: THÔNG TIN TIÊU THỤ ĐIỆN (TỪ ĐIỆN LỰC)')
   colHead('Nội dung')
-  for (const k of b1Bands) rows.push(labelRow(`Kwh · ${BAND_LABELS[k]}`, months.map(m => r2(m.bands[k].kwh)), ST.numK))
-  for (const k of b1Bands) rows.push(labelRow(`Đơn giá · ${BAND_LABELS[k]}`, months.map(m => m.bands[k].donGia), ST.numP))
+  for (const k of b1Bands) rows.push(labelRow(`Kwh · ${BAND_LABELS[k]}`, months.map(m => r2(m.bands[k].kwh)), 'numK'))
+  for (const k of b1Bands) rows.push(labelRow(`Đơn giá · ${BAND_LABELS[k]}`, months.map(m => m.bands[k].donGia), 'numP'))
   rows.push(labelRow('Tổng tiền chưa VAT', months.map(m => r0(meterSubtotal(m.bands)))))
   rows.push(labelRow('Thuế VAT', months.map(m => r0(meterVat(m.bands, m.vatPercent)))))
-  rows.push(labelRow('Tổng thanh toán', months.map(m => r0(meterTotal(m.bands, m.vatPercent))), ST.totalN, ST.totalL))
+  rows.push(labelRow('Tổng thanh toán', months.map(m => r0(meterTotal(m.bands, m.vatPercent))), 'totalN', 'totalL'))
   rows.push([])
 
   if (meterId === 1) {
@@ -138,20 +154,20 @@ function electricPresentation(meterId: MeterId, months: MeterReading[], customer
     const splits = months.map(m => computeLightingSplit(m, customers, usages, m.bqtRatio ?? DEFAULT_BQT_RATIO))
     section('BẢNG 2: PHÂN BỔ TIỀN ĐIỆN')
     colHead('Nội dung')
-    rows.push(labelRow('Tiền điện Sơn An thu hộ', splits.map(s => r0(s.sonAnTotal)), ST.sonAnN, ST.sonAnL))
-    rows.push(labelRow('Tiền điện chung cư (Ban quản trị)', splits.map(s => r0(s.bqtTotal)), ST.num, ST.labelB))
-    rows.push(labelRow('Tổng cộng', splits.map(s => r0(s.meterTotal)), ST.totalN, ST.totalL))
+    rows.push(labelRow('Tiền điện Sơn An thu hộ', splits.map(s => r0(s.sonAnTotal)), 'sonAnN', 'sonAnL'))
+    rows.push(labelRow('Tiền điện chung cư (Ban quản trị)', splits.map(s => r0(s.bqtTotal)), 'num', 'labelB'))
+    rows.push(labelRow('Tổng cộng', splits.map(s => r0(s.meterTotal)), 'totalN', 'totalL'))
     rows.push([])
     section('CHI TIẾT PHẦN SƠN AN THU HỘ')
     colHead('Nội dung')
-    rows.push(labelRow('Chung 3 tầng TM (kWh)', splits.map(s => r2(s.commonPoolKwh)), ST.numK))
-    rows.push(labelRow('Công ty đồng hồ riêng (kWh)', splits.map(s => r2(s.companies.reduce((x, c) => x + c.total, 0))), ST.numK))
+    rows.push(labelRow('Chung 3 tầng TM (kWh)', splits.map(s => r2(s.commonPoolKwh)), 'numK'))
+    rows.push(labelRow('Công ty đồng hồ riêng (kWh)', splits.map(s => r2(s.companies.reduce((x, c) => x + c.total, 0))), 'numK'))
     const B3: [FloorBandKey, string][] = [['caoDiem', 'Cao điểm'], ['thapDiem', 'Thấp điểm'], ['binhThuong', 'Bình thường']]
-    B3.forEach(([, lb], i) => rows.push(labelRow(`Sản lượng thu hộ · ${lb} (kWh)`, splits.map(s => r2(s.bands[i].kwh)), ST.numK)))
-    B3.forEach(([, lb], i) => rows.push(labelRow(`Đơn giá · ${lb}`, splits.map(s => s.bands[i].price), ST.numP)))
+    B3.forEach(([, lb], i) => rows.push(labelRow(`Sản lượng thu hộ · ${lb} (kWh)`, splits.map(s => r2(s.bands[i].kwh)), 'numK')))
+    B3.forEach(([, lb], i) => rows.push(labelRow(`Đơn giá · ${lb}`, splits.map(s => s.bands[i].price), 'numP')))
     rows.push(labelRow('Tổng chưa VAT', splits.map(s => r0(s.sonAnSubtotal))))
     rows.push(labelRow('Thuế VAT', splits.map(s => r0(s.sonAnVat))))
-    rows.push(labelRow('Sơn An thu hộ', splits.map(s => r0(s.sonAnTotal)), ST.sonAnN, ST.sonAnL))
+    rows.push(labelRow('Sơn An thu hộ', splits.map(s => r0(s.sonAnTotal)), 'sonAnN', 'sonAnL'))
   } else {
     // Đồng hồ 2 — phân bổ cho khách + Sơn An Group chịu
     const allocs = months.map(m => meterAllocation(m, customers, usages))
@@ -162,33 +178,33 @@ function electricPresentation(meterId: MeterId, months: MeterReading[], customer
     section('BẢNG 2: PHÂN BỔ CHO KHÁCH & SƠN AN GROUP')
     colHead('Khách hàng')
     for (const c of priced) rows.push(labelRow(c.name, allocs.map(a => r0(a.rows.find(x => x.customer.id === c.id)?.amount ?? 0))))
-    rows.push(labelRow('Sơn An Group chịu (phần còn lại)', allocs.map(a => r0(a.remainderTotal)), ST.sonAnN, ST.sonAnL))
-    rows.push(labelRow('Tổng cộng', allocs.map(a => r0(a.total)), ST.totalN, ST.totalL))
+    rows.push(labelRow('Sơn An Group chịu (phần còn lại)', allocs.map(a => r0(a.remainderTotal)), 'sonAnN', 'sonAnL'))
+    rows.push(labelRow('Tổng cộng', allocs.map(a => r0(a.total)), 'totalN', 'totalL'))
   }
 
-  return styledSheet(rows, [30, ...months.map(() => 14)], merges)
+  return { name: label, rows, colW: [30, ...months.map(() => 14)], merges }
 }
 
 // ── Bảng tiêu thụ nước — tháng là các cột ────────────────────────────────────
-function waterPresentation(months: MeterReading[], label: string): XLSX.WorkSheet {
+function waterPresentation(months: MeterReading[], label: string): SheetSpec {
   const lastCol = months.length
-  const rows: SCell[][] = []
-  const merges: XLSX.Range[] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } }]
-  const labelRow = (label: string, vals: Cell[], vs: SStyle = ST.num, ls: SStyle = ST.label): SCell[] => [{ v: label, s: ls }, ...vals.map(v => ({ v, s: vs }))]
-  rows.push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, s: ST.title }])
-  rows.push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), m³`, s: ST.sub }])
+  const rows: ECell[][] = []
+  const merges: EMerge[] = [[0, 0, lastCol]]
+  const labelRow = (label: string, vals: Cell[], vk: StyleKey = 'num', lk: StyleKey = 'label'): ECell[] => [{ v: label, k: lk }, ...vals.map(v => ({ v, k: vk }))]
+  rows.push([{ v: `BẢNG TÍNH TIỀN ${label.toUpperCase()}`, k: 'title' }])
+  rows.push([{ v: `Số liệu ${months.length} tháng gần nhất · Đơn vị: đồng (đ), m³`, k: 'sub' }])
   rows.push([])
-  rows.push([{ v: 'Nội dung', s: ST.colHead }, ...months.map(m => ({ v: m.month, s: ST.colHead }))])
-  rows.push(labelRow('Sản lượng (m³)', months.map(m => r2(m.bands.toanThoiGian.kwh)), ST.numK))
-  rows.push(labelRow('Đơn giá (đ/m³)', months.map(m => m.bands.toanThoiGian.donGia), ST.numP))
+  rows.push([{ v: 'Nội dung', k: 'colHead' }, ...months.map(m => ({ v: m.month, k: 'colHead' as StyleKey }))])
+  rows.push(labelRow('Sản lượng (m³)', months.map(m => r2(m.bands.toanThoiGian.kwh)), 'numK'))
+  rows.push(labelRow('Đơn giá (đ/m³)', months.map(m => m.bands.toanThoiGian.donGia), 'numP'))
   rows.push(labelRow('Tổng tiền chưa VAT', months.map(m => r0(meterSubtotal(m.bands)))))
   rows.push(labelRow('Thuế VAT', months.map(m => r0(meterVat(m.bands, m.vatPercent)))))
-  rows.push(labelRow('Tổng thanh toán', months.map(m => r0(meterTotal(m.bands, m.vatPercent))), ST.totalN, ST.totalL))
-  return styledSheet(rows, [26, ...months.map(() => 14)], merges)
+  rows.push(labelRow('Tổng thanh toán', months.map(m => r0(meterTotal(m.bands, m.vatPercent))), 'totalN', 'totalL'))
+  return { name: label, rows, colW: [26, ...months.map(() => 14)], merges }
 }
 
 // ── Sheet dữ liệu chi tiết theo khách (chỉ các cột cần) ───────────────────────
-function customerDetailSheet(meterId: MeterId, months: MeterReading[], customers: Customer[], usages: CustomerUsage[], unit: string): XLSX.WorkSheet | null {
+function customerDetailSheet(meterId: MeterId, months: MeterReading[], customers: Customer[], usages: CustomerUsage[], unit: string): SheetSpec | null {
   const service = METER_SERVICE[meterId]
   const isElec = meterId !== 3
   const bandCols: [BandKey, string][] = [['caoDiem', 'CĐ'], ['thapDiem', 'TĐ'], ['binhThuong', 'BT']]
@@ -206,16 +222,16 @@ function customerDetailSheet(meterId: MeterId, months: MeterReading[], customers
   if (isElec) bandCols.forEach(([, lb]) => header.push(`${lb} kWh`))
   header.push(`Sản lượng (${unit})`, 'Đơn giá (đ)', 'Thành tiền (đ)')
 
-  const rows: SCell[][] = [header.map(h => ({ v: h, s: ST.colHead }))]
+  const rows: ECell[][] = [header.map(h => ({ v: h, k: 'colHead' as StyleKey }))]
   for (const c of mCustomers) {
     const sub = subFor(c, service)!
     const ct = sub.chargeType
     for (const r of months) {
       const u = usageOf(c, r.month)
       const amount = amtByMonth.get(r.month)?.get(c.id) ?? 0
-      const row: SCell[] = [
-        { v: c.name, s: ST.label }, { v: c.group?.trim() || '', s: ST.label }, { v: c.floor || '', s: ST.label },
-        { v: c.kioskCode || '', s: ST.label }, { v: CHARGE_TYPE_LABELS[ct], s: ST.label }, { v: r.month, s: ST.label },
+      const row: ECell[] = [
+        { v: c.name, k: 'label' }, { v: c.group?.trim() || '', k: 'label' }, { v: c.floor || '', k: 'label' },
+        { v: c.kioskCode || '', k: 'label' }, { v: CHARGE_TYPE_LABELS[ct], k: 'label' }, { v: r.month, k: 'label' },
       ]
       if (isElec) {
         const ratio = r.bqtRatio ?? DEFAULT_BQT_RATIO
@@ -229,22 +245,22 @@ function customerDetailSheet(meterId: MeterId, months: MeterReading[], customers
           } else if (ct === 'flat_vat_incl' && meterId === 1) {
             kwh = r2(ratioSum > 0 ? flatTotal * (ratio[k as FloorBandKey] || 0) / ratioSum : (k === 'binhThuong' ? flatTotal : 0))
           }
-          row.push({ v: kwh, s: ST.numK })
+          row.push({ v: kwh, k: 'numK' })
         })
       }
       const sl: Cell = (ct === 'flat_vat_incl' || ct === 'timeband_excl_vat') ? r2(usageKwh(sub, u)) : ''
       const dg: Cell = ct === 'flat_vat_incl' ? resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, r.month)
         : ct === 'fixed_area' ? resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, r.month) : ''
-      row.push({ v: sl, s: ST.numK }, { v: dg, s: ST.numP }, { v: r0(amount), s: ST.num })
+      row.push({ v: sl, k: 'numK' }, { v: dg, k: 'numP' }, { v: r0(amount), k: 'num' })
       rows.push(row)
     }
   }
   const colW = [24, 14, 10, 12, 22, 10, ...(isElec ? [10, 10, 10] : []), 14, 14, 16]
-  return styledSheet(rows, colW)
+  return { name: 'Chi tiet khach hang', rows, colW, merges: [] }
 }
 
 // ── Tab: Đồng hồ (Nhập chỉ số) — 1 file/đồng hồ, trình bày như bảng tính Excel ──
-export function exportMeter(
+export async function exportMeter(
   meterId: MeterId, month: string,
   readings: MeterReading[], customers: Customer[], usages: CustomerUsage[],
   meterNames: Record<number, string>,
@@ -252,20 +268,16 @@ export function exportMeter(
   const label = meterLabel(meterNames, meterId)
   const unit = METER_UNIT[meterId]
   const months = recentMonths(readings, meterId)
-  const wb = XLSX.utils.book_new()
-
-  // Sheet 1 — bảng tính trình bày (tháng là cột)
-  const presentation = meterId === 3 ? waterPresentation(months, label) : electricPresentation(meterId, months, customers, usages, label)
-  XLSX.utils.book_append_sheet(wb, presentation, safeSheetName(label))
-
-  // Sheet 2 — dữ liệu chi tiết theo khách (chỉ cột cần)
-  const detail = customerDetailSheet(meterId, months, customers, usages, unit)
-  if (detail) XLSX.utils.book_append_sheet(wb, detail, 'Chi tiet khach hang')
 
   if (months.length === 0) {
-    XLSX.utils.book_append_sheet(wb, styledSheet([[{ v: 'Chưa có dữ liệu tháng nào cho đồng hồ này.', s: ST.label }]], [50]), 'Trong')
+    await downloadWorkbook([{ name: label, rows: [[{ v: 'Chưa có dữ liệu tháng nào cho đồng hồ này.', k: 'label' }]], colW: [50], merges: [] }], `dien-nuoc_${label}_${month}.xlsx`)
+    return
   }
-  download(wb, `dien-nuoc_${label}_${month}.xlsx`)
+
+  const presentation = meterId === 3 ? waterPresentation(months, label) : electricPresentation(meterId, months, customers, usages, label)
+  const detail = customerDetailSheet(meterId, months, customers, usages, unit)
+  const specs = detail ? [presentation, detail] : [presentation]
+  await downloadWorkbook(specs, `dien-nuoc_${label}_${month}.xlsx`)
 }
 
 // ── Tab: Tổng quan ───────────────────────────────────────────────────────────
