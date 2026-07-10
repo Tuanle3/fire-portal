@@ -156,16 +156,26 @@ export function exportMeter(
         const amount = amtByMonth.get(r.month)?.get(c.id) ?? 0
         const row: Cell[] = [c.name, c.group?.trim() || '', c.floor || '', c.kioskCode || '', CHARGE_TYPE_LABELS[ct], r.month]
         row.push(ct === 'flat_vat_incl' ? (u?.indexOld ?? '') : '', ct === 'flat_vat_incl' ? (u?.indexNew ?? '') : '')
-        if (isElec) bandCols.forEach(([k]) => {
-          if (ct === 'timeband_excl_vat') {
-            const oldI = u?.bandsIndexOld?.[k]
-            const newI = u?.bandsIndexNew?.[k]
-            // kWh khung giờ = chỉ số mới − chỉ số cũ; nếu chưa nhập chỉ số thì lấy sản lượng đã lưu (bandsKwh)
-            const bandKwh: Cell = (oldI != null || newI != null) ? r2(Math.max(0, (newI ?? 0) - (oldI ?? 0)))
-              : (u?.bandsKwh?.[k] != null ? r2(u.bandsKwh[k]!) : '')
-            row.push(oldI ?? '', newI ?? '', bandKwh)
-          } else row.push('', '', '')
-        })
+        if (isElec) {
+          // Giá cố định (VD: VIN) không có chỉ số từng khung giờ ⇒ phân bổ sản lượng theo tỷ lệ khung giờ
+          // của đồng hồ 1 (mặc định CĐ 15% · TĐ 35% · BT 50%), giống cách khu "cố định" chia cho BQT.
+          const ratio = r.bqtRatio ?? DEFAULT_BQT_RATIO
+          const ratioSum = (ratio.caoDiem || 0) + (ratio.thapDiem || 0) + (ratio.binhThuong || 0)
+          const flatTotal = usageKwh(sub, u)
+          bandCols.forEach(([k]) => {
+            if (ct === 'timeband_excl_vat') {
+              const oldI = u?.bandsIndexOld?.[k]
+              const newI = u?.bandsIndexNew?.[k]
+              // kWh khung giờ = chỉ số mới − chỉ số cũ; nếu chưa nhập chỉ số thì lấy sản lượng đã lưu (bandsKwh)
+              const bandKwh: Cell = (oldI != null || newI != null) ? r2(Math.max(0, (newI ?? 0) - (oldI ?? 0)))
+                : (u?.bandsKwh?.[k] != null ? r2(u.bandsKwh[k]!) : '')
+              row.push(oldI ?? '', newI ?? '', bandKwh)
+            } else if (ct === 'flat_vat_incl' && meterId === 1) {
+              const share = ratioSum > 0 ? flatTotal * (ratio[k as FloorBandKey] || 0) / ratioSum : (k === 'binhThuong' ? flatTotal : 0)
+              row.push('', '', r2(share))   // cũ/mới để trống (không có chỉ số theo khung), chỉ điền kWh đã phân bổ
+            } else row.push('', '', '')
+          })
+        }
         const sl: Cell = (ct === 'flat_vat_incl' || ct === 'timeband_excl_vat') ? r2(usageKwh(sub, u)) : ''
         const dg: Cell = ct === 'flat_vat_incl' ? resolvePrice(sub.flatPriceHistory, sub.flatUnitPrice ?? 0, r.month)
           : ct === 'fixed_area' ? resolvePrice(sub.areaPriceHistory, sub.pricePerM2 ?? 0, r.month) : ''
