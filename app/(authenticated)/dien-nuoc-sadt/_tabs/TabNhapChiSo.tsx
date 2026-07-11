@@ -335,6 +335,8 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
 }) {
   const split = computeLightingSplit(reading, customers, usages, bqtRatio)
   const ratioSum = (bqtRatio.caoDiem || 0) + (bqtRatio.thapDiem || 0) + (bqtRatio.binhThuong || 0)
+  const sonAnPct = split.meterTotal > 0 ? Math.round(split.sonAnTotal / split.meterTotal * 100) : 0
+  const bqtPct = Math.max(0, 100 - sonAnPct)
   const groupSuggestions = Array.from(new Set(customers.filter(c => customerHasService(c, 'dh1') && c.active).map(c => (c.group || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'))
 
   const [dragIdx, setDragIdx] = useState<number | null>(null)  // kéo-thả đổi vị trí khu
@@ -371,22 +373,9 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
       </div>
 
       <div style={{ padding: 14 }}>
-        {/* a. Tóm tắt cách tính */}
-        <div style={{ background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, padding: '11px 14px', marginBottom: 16, fontSize: 12.5, lineHeight: 1.65, color: 'var(--txt2)' }}>
-          <div style={{ fontWeight: 800, color: 'var(--navy)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.03em', fontSize: 11.5 }}>📘 Tóm tắt cách tính</div>
-          <div><b>Tổng tiền đồng hồ 1</b> (từ điện lực, gồm cả khung <b>Toàn thời gian</b> + VAT) được tách làm 2 phần:</div>
-          <div style={{ margin: '5px 0 5px 6px' }}>
-            <div><b style={{ color: '#8A5A12' }}>① Sơn An thu hộ</b> = tiền điện Sơn An thu hộ cho khách, gồm:</div>
-            <div style={{ marginLeft: 14 }}>• <b>Chung 3 tầng TM</b> (các khu đánh dấu “Thuộc 3 tầng TM chung”): tổng kWh, chia theo tỷ lệ khung giờ (mặc định CĐ 15% · TĐ 35% · BT 50%).</div>
-            <div style={{ marginLeft: 14 }}>• <b>Công ty dùng đồng hồ riêng</b> (VD VIN/PLT/Meta — bật cờ ở tab Khách hàng): kWh thực từng khung giờ.</div>
-            <div style={{ marginLeft: 14 }}>• (①chung + ①công ty) × đơn giá điện lực từng khung + VAT.</div>
-            <div><b style={{ color: 'var(--navy)' }}>② Ban quản trị (cư dân)</b> = <b>Tổng tiền đồng hồ − Sơn An thu hộ</b> (gánh phần điện Toàn thời gian &amp; hao hụt).</div>
-          </div>
-        </div>
-
-        {/* b. Nhập số ghi điện từng khu */}
+        {/* Nhập số ghi điện từng khu */}
         <div className="dn-col-title">
-          <span>b. Nhập số ghi điện từng khu — đánh dấu khu <b>“Thuộc 3 tầng TM chung”</b> để gom vào Sơn An thu hộ</span>
+          <span>Nhập số ghi điện từng khu — đánh dấu khu <b>“Thuộc 3 tầng TM chung”</b> để gom vào Sơn An thu hộ</span>
           <button className="btn-ghost" style={{ textTransform: 'none', fontWeight: 600 }} onClick={addFloor}>+ Thêm khu</button>
         </div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 14 }}>
@@ -449,24 +438,31 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           <span style={{ fontSize: 10.5, color: ratioSum === 100 ? 'var(--green)' : '#DC2626', fontWeight: 600 }}>Σ {ratioSum}%{ratioSum === 100 ? ' ✓' : ''}</span>
         </div>
 
-        {/* c. Bảng phân bổ Sơn An thu hộ + Ban quản trị */}
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
-          {/* Sơn An thu hộ */}
-          <div style={{ flex: '2 1 460px', minWidth: 300, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-            <div style={{ padding: '7px 12px', background: '#8A5A12', color: '#fff', fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>① Sơn An thu hộ</div>
-            <div style={{ padding: '10px 12px', flex: 1 }}>
-              <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 6 }}>
-                Chung 3 tầng TM: <b style={{ color: 'var(--navy)' }}>{fmtKwh(split.commonPoolKwh)} kWh</b>
-                {split.commonFloors.length > 0 && <span> ({split.commonFloors.map(f => `${f.group || '—'}: ${fmtKwh(f.kwh)}`).join(' · ')})</span>}
+        {/* Kết quả: 3 card ngang — Tóm tắt · Sơn An thu hộ · Ban quản trị + tỷ trọng (tối ưu diện tích) */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
+          {/* Card 1: Tóm tắt cách tính */}
+          <div style={{ flex: '1.2 1 250px', minWidth: 240, background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '6px 11px', background: '#FBEFCF', color: '#8A5A12', fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', borderBottom: '1px solid #F1E2BD' }}>📘 Tóm tắt cách tính</div>
+            <div style={{ padding: '9px 12px', fontSize: 11.5, lineHeight: 1.55, color: 'var(--txt2)' }}>
+              <div><b>Tổng tiền đồng hồ 1</b> (điện lực, gồm khung Toàn thời gian + VAT) tách 2 phần:</div>
+              <div style={{ margin: '4px 0 0 3px' }}>
+                <div style={{ marginBottom: 3 }}><b style={{ color: '#8A5A12' }}>① Sơn An thu hộ</b> = chung 3 tầng TM (khu đánh dấu, chia theo tỷ lệ giờ) + công ty đồng hồ riêng (kWh thực) × đơn giá + VAT.</div>
+                <div><b style={{ color: 'var(--navy)' }}>② Ban quản trị</b> = Tổng − Sơn An thu hộ (gánh điện Toàn thời gian &amp; hao hụt).</div>
               </div>
-              {split.companies.length > 0 && (
-                <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 8 }}>
-                  Công ty đồng hồ riêng: {split.companies.map(co => <span key={co.customer.id}><b style={{ color: 'var(--navy)' }}>{co.customer.name}</b> {fmtKwh(co.total)} kWh{'  '}</span>)}
-                </div>
-              )}
-              <table className="dn-table" style={{ fontSize: 11.5 }}>
+            </div>
+          </div>
+
+          {/* Card 2: Sơn An thu hộ (bảng khung giờ) */}
+          <div style={{ flex: '1.8 1 360px', minWidth: 330, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '6px 12px', background: '#8A5A12', color: '#fff', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>① Sơn An thu hộ</div>
+            <div style={{ padding: '8px 12px', flex: 1 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 5 }}>
+                Chung 3 tầng TM: <b style={{ color: 'var(--navy)' }}>{fmtKwh(split.commonPoolKwh)} kWh</b>
+                {split.companies.length > 0 && <> · Công ty: {split.companies.map(co => `${co.customer.name} ${fmtKwh(co.total)}`).join(', ')} kWh</>}
+              </div>
+              <table className="dn-table" style={{ fontSize: 11 }}>
                 <thead><tr>
-                  <th>Khung giờ</th><th style={{ textAlign: 'right' }}>Chung (kWh)</th><th style={{ textAlign: 'right' }}>Công ty (kWh)</th>
+                  <th>Khung giờ</th><th style={{ textAlign: 'right' }}>Chung</th><th style={{ textAlign: 'right' }}>Công ty</th>
                   <th style={{ textAlign: 'right' }}>Tổng kWh</th><th style={{ textAlign: 'right' }}>Đơn giá</th><th style={{ textAlign: 'right' }}>Thành tiền</th>
                 </tr></thead>
                 <tbody>
@@ -490,21 +486,25 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
             </div>
           </div>
 
-          {/* Ban quản trị */}
-          <div style={{ flex: '1 1 240px', minWidth: 220, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-            <div style={{ padding: '7px 12px', background: '#1C3557', color: '#fff', fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>② Ban quản trị (cư dân)</div>
-            <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: '#F8FAFC', borderRadius: 7, padding: '8px 10px' }}>
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>Tổng tiền đồng hồ 1</span>
-                <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(split.meterTotal)} đ</span>
+          {/* Card 3: Ban quản trị + tỷ trọng */}
+          <div style={{ flex: '1 1 210px', minWidth: 200, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ padding: '6px 12px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>② Ban quản trị (cư dân)</div>
+            <div style={{ padding: '9px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <div style={{ background: '#F8FAFC', borderRadius: 8, padding: '7px 10px' }}>
+                <div style={{ fontSize: 9.5, color: 'var(--muted)', textTransform: 'uppercase' }}>Tổng tiền đồng hồ 1</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(split.meterTotal)} đ</div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '0 10px' }}>
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>− Sơn An thu hộ</span>
-                <span style={{ fontWeight: 700, color: '#8A5A12', whiteSpace: 'nowrap' }}>{fmt(split.sonAnTotal)} đ</span>
+              <div style={{ background: '#FFF4E0', borderRadius: 8, padding: '7px 10px' }}>
+                <div style={{ fontSize: 9.5, color: 'var(--muted)', textTransform: 'uppercase' }}>− Sơn An thu hộ</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#8A5A12', whiteSpace: 'nowrap' }}>{fmt(split.sonAnTotal)} đ <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)' }}>({sonAnPct}%)</span></div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, background: '#E0EDFA', borderRadius: 7, padding: '10px', marginTop: 'auto' }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase' }}>= Ban quản trị</span>
-                <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(split.bqtTotal)} đ</span>
+              <div style={{ background: '#E0EDFA', borderRadius: 8, padding: '8px 10px', marginTop: 'auto' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase' }}>= Ban quản trị</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(split.bqtTotal)} đ <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)' }}>({bqtPct}%)</span></div>
+              </div>
+              <div style={{ display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border3)' }} title={`Sơn An thu hộ ${sonAnPct}% · Ban quản trị ${bqtPct}%`}>
+                <div style={{ width: `${sonAnPct}%`, background: '#D4A64A' }} />
+                <div style={{ width: `${bqtPct}%`, background: '#1C3557' }} />
               </div>
             </div>
           </div>
