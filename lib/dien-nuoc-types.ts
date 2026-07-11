@@ -191,7 +191,20 @@ export interface Customer {
   hasManagementFee?: boolean            // khách này có bị thu phí quản lý không
   managementFeePrice?: number           // (tương thích) mức phí tĩnh mới nhất (đ/tháng)
   managementFeeHistory?: PricePoint[]   // bảng phí quản lý theo thời điểm (đ/tháng)
+  // ── Trạng thái tính phí quản lý theo từng tháng (ĐỘC LẬP với việc thuê ki-ốt) ──
+  // Mặc định (không nằm trong list nào) = "Có tính phí" (thu trong tháng).
+  feeInactiveMonths?: string[]  // Các tháng KHÔNG tính phí quản lý (phí = 0).
+  feeAccruedMonths?: string[]   // Các tháng "tính dồn" (chưa có khách thuê nhưng vẫn tính phí cho chủ ki-ốt, thu bù sau).
   createdAt: string
+}
+
+// Trạng thái tính phí quản lý của 1 khách trong tháng.
+//  charge = có khách thuê, thu trong tháng · accrue = chưa có khách, tính dồn cho chủ (thu bù sau) · none = không tính phí.
+export type FeeStatus = 'charge' | 'accrue' | 'none'
+export function feeStatus(c: Customer, month: string): FeeStatus {
+  if ((c.feeInactiveMonths ?? []).includes(month)) return 'none'
+  if ((c.feeAccruedMonths ?? []).includes(month)) return 'accrue'
+  return 'charge'
 }
 
 // Ki-ốt có "đang thuê" trong tháng không: tắt hẳn (active=false) ⇒ luôn trống;
@@ -250,7 +263,9 @@ export interface ManagementFeeBreakdown {
 }
 export function managementFeeBreakdown(c: Customer, month: string): ManagementFeeBreakdown {
   const sub = subFor(c, 'phiql')
-  if (!sub || !isActiveInMonth(c, month)) return { isArea: false, unitPrice: 0, areaM2: 0, base: 0, vatIncluded: true, vatPercent: 0, vat: 0, total: 0 }
+  // Phí quản lý tính trên CHỦ ki-ốt, độc lập với việc có khách thuê hay không.
+  // Chỉ = 0 khi tháng đó được đánh dấu "Không tính phí" (feeInactiveMonths); "tính dồn" vẫn tính phí.
+  if (!sub || feeStatus(c, month) === 'none') return { isArea: false, unitPrice: 0, areaM2: 0, base: 0, vatIncluded: true, vatPercent: 0, vat: 0, total: 0 }
   const isArea = managementFeeIsArea(sub)
   const unitPrice = managementFeeUnitPrice(sub, month)
   const areaM2 = isArea ? (sub.areaM2 ?? 0) : 0

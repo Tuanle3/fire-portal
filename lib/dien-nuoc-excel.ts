@@ -8,7 +8,7 @@ import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, BandKey,
   BAND_KEYS, BAND_LABELS, METER_UNIT, meterLabel,
   meterSubtotal, meterVat, meterTotal, meterAllocation,
-  resolvePrice, resolveTimebandPoint, usageKwh, computeLightingSplit, isActiveInMonth, managementFeeOf, managementFeeBreakdown,
+  resolvePrice, resolveTimebandPoint, usageKwh, computeLightingSplit, isActiveInMonth, feeStatus, managementFeeOf, managementFeeBreakdown,
   customerServices, customerHasService, subFor, findUsage, primaryService, paymentService,
   METER_SERVICE, serviceLabel,
   CHARGE_TYPE_LABELS, DEFAULT_BQT_RATIO,
@@ -457,7 +457,7 @@ export function exportPhiQuanLy(customers: Customer[], month: string) {
       'Diện tích (m²)': bd.isArea ? bd.areaM2 : '',
       'Đơn giá':        r0(bd.unitPrice),   // đ/m²/tháng nếu theo diện tích, ngược lại đ/tháng
       [`Phải thu (${month}) (đ)`]: r0(bd.total),
-      [`Trạng thái (${month})`]: !c.active ? 'Ngừng' : isActiveInMonth(c, month) ? 'Có thu' : 'Không thu',
+      [`Trạng thái (${month})`]: feeStatus(c, month) === 'none' ? 'Không tính phí' : feeStatus(c, month) === 'accrue' ? 'Tính dồn (thu bù)' : 'Có tính phí',
     }
   })
   const total = feeCustomers.reduce((s, c) => s + managementFeeOf(c, month), 0)
