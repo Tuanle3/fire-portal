@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react'
 import {
   Customer, PricePoint, ServiceSubscription,
-  managementFeeOf, managementFeeBreakdown, managementFeeIsArea, managementFeeUnitPrice,
+  managementFeeOf, managementFeeIsArea, managementFeeUnitPrice,
   isActiveInMonth, subFor,
 } from '@/lib/dien-nuoc-types'
 import { saveCustomer } from '@/lib/dien-nuoc-store'
@@ -10,6 +10,7 @@ import { exportPhiQuanLy } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
+const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 20 })
 
 // Xếp theo số tầng (giống tab Khách hàng): "Tầng 2" → 2, không số ⇒ cuối.
 function floorSortKey(floor: string): [number, string] {
@@ -26,7 +27,7 @@ function addMonths(month: string, delta: number): string {
   return `${ny}-${String(nm + 1).padStart(2, '0')}`
 }
 // Danh sách tháng YYYY-MM từ start đến end (bao gồm 2 đầu), có chặn tối đa để an toàn.
-function monthRange(start: string, end: string, cap = 36): string[] {
+function monthRange(start: string, end: string, cap = 15): string[] {
   const out: string[] = []
   let cur = start
   while (cur <= end && out.length < cap) { out.push(cur); cur = addMonths(cur, 1) }
@@ -67,124 +68,83 @@ function upsertPhiqlPriceForMonth(c: Customer, month: string, price: number, isA
   return { ...c, services: newServices, hasManagementFee: true, managementFeeHistory: legacyHist, managementFeePrice: latestOf(legacyHist) }
 }
 
-function PhiRow({ c, month }: { c: Customer; month: string }) {
-  const bd = managementFeeBreakdown(c, month)                                 // phải thu, đã gồm VAT (0 nếu tháng này không thu)
+// 1 dòng khách: bên trái nhập mức phí + chọn "có/không tính phí", bên phải đối chiếu phí theo tháng + lũy kế.
+// key theo (khách, tháng) ⇒ đổi tháng thì remount, state nhập tự khởi tạo lại (khỏi dùng useEffect).
+function PhiCURow({ c, month, months }: { c: Customer; month: string; months: string[] }) {
   const sub = subFor(c, 'phiql')
   const isArea = managementFeeIsArea(sub)
   const areaM2 = sub?.areaM2 ?? 0
-  const configuredUnit = sub ? managementFeeUnitPrice(sub, month) : 0          // đơn giá gốc (bỏ qua trạng thái)
+  const configuredUnit = sub ? managementFeeUnitPrice(sub, month) : 0   // đơn giá gốc (bỏ qua trạng thái thu)
   const vatExcl = sub?.vatIncluded === false
   const vp = sub?.vatPercent ?? 8
-  const [draft, setDraft] = useState(configuredUnit)
-  const [saving, setSaving] = useState(false)
-  const active = isActiveInMonth(c, month)
-  const priceCount = (isArea ? sub?.areaPriceHistory : sub?.flatPriceHistory)?.filter(p => p.price > 0).length ?? 0
-  const applied = bd.total
+  const activeSaved = isActiveInMonth(c, month)
 
-  const saveFee = async () => { setSaving(true); await saveCustomer(upsertPhiqlPriceForMonth(c, month, draft, isArea)); setSaving(false) }
-  const toggleMonth = async () => {
-    const set = new Set(c.inactiveMonths ?? [])
-    if (set.has(month)) set.delete(month); else set.add(month)
-    await saveCustomer({ ...c, inactiveMonths: Array.from(set).sort() })
+  const [draft, setDraft] = useState(configuredUnit)
+  const [charge, setCharge] = useState(activeSaved)
+  const [saving, setSaving] = useState(false)
+  const priceCount = (isArea ? sub?.areaPriceHistory : sub?.flatPriceHistory)?.filter(p => p.price > 0).length ?? 0
+
+  // Xem trước phải thu tháng đang chọn theo giá trị đang nhập (chưa lưu)
+  const previewBase = isArea ? areaM2 * draft : draft
+  const previewTotal = charge ? (vatExcl ? previewBase * (1 + vp / 100) : previewBase) : 0
+
+  const dirtyPrice = draft !== configuredUnit
+  const dirtyCharge = charge !== activeSaved
+  const dirty = dirtyPrice || dirtyCharge
+
+  const save = async () => {
+    setSaving(true)
+    let cust = c
+    if (dirtyPrice) cust = upsertPhiqlPriceForMonth(cust, month, draft, isArea)
+    const set = new Set(cust.inactiveMonths ?? [])
+    if (charge) set.delete(month); else set.add(month)         // có tính phí ⇒ bỏ khỏi danh sách "không thu"
+    cust = { ...cust, inactiveMonths: Array.from(set).sort() }
+    await saveCustomer(cust)
+    setSaving(false)
   }
 
-  const dirty = draft !== configuredUnit
+  const feeOf = (m: string) => m === month ? previewTotal : managementFeeOf(c, m)
+  const cumulative = months.reduce((s, m) => s + feeOf(m), 0)
+
   return (
     <tr>
-      <td style={{ fontWeight: 600 }}>{c.name}</td>
-      <td>{c.group?.trim() ? <span className="badge" style={{ background: 'var(--surf2)', color: 'var(--navy)', border: '1px solid var(--border3)' }}>{c.group}</span> : '—'}</td>
-      <td>{c.floor || '—'}</td>
-      <td>{c.kioskCode || '—'}</td>
-      <td>{c.tenantName || c.kioskOwner || '—'}</td>
-      <td style={{ textAlign: 'right' }}>{isArea ? `${areaM2.toLocaleString('vi-VN')} m²` : '—'}</td>
-      <td style={{ textAlign: 'right' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
-          {isArea && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{areaM2.toLocaleString('vi-VN')} m² ×</span>}
-          <NumberInput style={{ width: 120, textAlign: 'right' }} value={draft} onValueChange={setDraft} />
-          <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>{isArea ? 'đ/m²/tháng' : 'đ/tháng'} {vatExcl ? `(chưa VAT +${vp}%)` : '(gồm VAT)'}</span>
-          {dirty && <button className="btn-ghost" onClick={saveFee} disabled={saving}>{saving ? '…' : `Lưu từ ${month}`}</button>}
+      <td className="dn-sticky-col" style={{ fontWeight: 600, verticalAlign: 'top' }}>
+        {c.name}
+        <div style={{ fontSize: 10.5, color: 'var(--muted)', fontWeight: 400 }}>{c.floor || '—'}{c.kioskCode ? ` · ${c.kioskCode}` : ''}</div>
+      </td>
+      <td className="dn-sticky-col dn-sticky-input" style={{ verticalAlign: 'top' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', flexWrap: 'wrap' }}>
+          {isArea && <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>{fmtDec(areaM2)} m² ×</span>}
+          <NumberInput style={{ width: 92 }} value={draft} onValueChange={setDraft} />
+          <span style={{ fontSize: 10, color: 'var(--muted)' }}>{isArea ? 'đ/m²' : 'đ/tháng'} {vatExcl ? `(chưa VAT +${vp}%)` : '(gồm VAT)'}</span>
+          {!c.active ? (
+            <span className="badge badge-red">Ngừng</span>
+          ) : (
+            <select className="dn-input" style={{ width: 96, padding: '3px 4px', fontSize: 11 }} value={charge ? '1' : '0'} onChange={e => setCharge(e.target.value === '1')}>
+              <option value="1">Có tính phí</option>
+              <option value="0">Không tính phí</option>
+            </select>
+          )}
         </div>
         {priceCount > 1 && <div style={{ fontSize: 10, color: 'var(--gold2)' }}>{priceCount} mốc giá</div>}
       </td>
-      <td style={{ textAlign: 'right', fontWeight: 700, color: applied > 0 ? 'var(--navy)' : 'var(--muted2)' }}>{fmt(applied)} đ</td>
-      <td>
-        {!c.active ? (
-          <span className="badge badge-red">Ngừng</span>
-        ) : (
-          <button onClick={toggleMonth}
-            title={active ? `Bấm để đánh dấu KHÔNG thu tháng ${month}` : `Bấm để thu lại tháng ${month}`}
-            className={`badge ${active ? 'badge-green' : 'badge-amber'}`} style={{ cursor: 'pointer', border: 'none', fontFamily: 'inherit' }}>
-            {active ? 'Có thu' : 'Không thu'}
-          </button>
-        )}
+      <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right', verticalAlign: 'top' }}>
+        <b style={{ color: previewTotal > 0 ? 'var(--navy)' : 'var(--muted2)' }}>{fmt(previewTotal)} đ</b>
       </td>
+      <td className="dn-sticky-col dn-sticky-btn" style={{ verticalAlign: 'top' }}>
+        <button className="btn-ghost" onClick={save} disabled={!dirty || saving} title={dirty ? `Lưu mức phí & trạng thái từ tháng ${month}` : 'Chưa có thay đổi'}>{saving ? '…' : 'Lưu'}</button>
+      </td>
+      {months.map(m => {
+        const isCur = m === month
+        const v = feeOf(m)
+        return (
+          <td key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap', background: isCur ? '#E0EDFA' : undefined }}>
+            <span style={{ fontWeight: isCur ? 700 : undefined, color: v > 0 ? 'var(--navy)' : 'var(--muted2)' }}>{fmt(v)}</span>
+          </td>
+        )
+      })}
+      <td style={{ textAlign: 'right', whiteSpace: 'nowrap', background: '#F3F7FC', fontWeight: 700, color: 'var(--navy)' }}>{fmt(cumulative)}</td>
     </tr>
-  )
-}
-
-// Bảng tích lũy phí quản lý từng tháng + tổng hợp lũy kế (cộng dồn) — giống thống kê theo tháng của điện.
-function PhiLuyKeCard({ customers, month }: { customers: Customer[]; month: string }) {
-  const rows = useMemo(() => {
-    // Tháng bắt đầu = mốc giá phí quản lý sớm nhất (có ghi tháng) trong nhóm khách; nếu không có ⇒ 11 tháng trước tháng đang chọn.
-    const froms = customers.flatMap(c => {
-      const sub = subFor(c, 'phiql')
-      return [...(sub?.flatPriceHistory ?? []), ...(sub?.areaPriceHistory ?? [])].map(p => p.fromMonth).filter((m): m is string => !!m)
-    }).filter(m => m <= month)
-    const start = froms.length ? froms.sort()[0] : addMonths(month, -11)
-    const months = monthRange(start < month ? start : addMonths(month, -11), month)
-
-    return months.reduce<{ month: string; monthTotal: number; count: number; cumulative: number }[]>((acc, m) => {
-      const monthTotal = customers.reduce((s, c) => s + managementFeeOf(c, m), 0)
-      const count = customers.filter(c => managementFeeOf(c, m) > 0).length
-      const cumulative = (acc.length ? acc[acc.length - 1].cumulative : 0) + monthTotal
-      return [...acc, { month: m, monthTotal, count, cumulative }]
-    }, [])
-  }, [customers, month])
-
-  const grand = rows.length ? rows[rows.length - 1].cumulative : 0
-
-  return (
-    <div className="sc">
-      <div className="sc-head">
-        <span className="sc-title">Tích lũy phí quản lý theo tháng — lũy kế đến {month}</span>
-      </div>
-      <div className="sc-body">
-        <div style={{ background: '#EEF3FA', border: '1px solid #D0DCE8', borderRadius: 10, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: 'var(--txt2)' }}>
-          Mỗi dòng là tổng phí quản lý phải thu của một tháng; cột <b>Lũy kế</b> là tổng cộng dồn từ tháng đầu đến tháng đó. Áp dụng bộ lọc tầng ở trên.
-        </div>
-        <div className="dn-scroll">
-          <table className="dn-table">
-            <thead><tr>
-              <th>Tháng</th>
-              <th style={{ textAlign: 'right' }}>Số khách có thu</th>
-              <th style={{ textAlign: 'right' }}>Phí quản lý tháng</th>
-              <th style={{ textAlign: 'right' }}>Lũy kế</th>
-            </tr></thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--muted)', padding: 16 }}>Chưa có dữ liệu.</td></tr>
-              )}
-              {rows.map(r => (
-                <tr key={r.month} style={r.month === month ? { background: '#E0EDFA' } : undefined}>
-                  <td style={{ fontWeight: r.month === month ? 700 : 600 }}>{r.month}{r.month === month ? ' ★' : ''}</td>
-                  <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{r.count}</td>
-                  <td style={{ textAlign: 'right' }}>{fmt(r.monthTotal)} đ</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--navy)' }}>{fmt(r.cumulative)} đ</td>
-                </tr>
-              ))}
-            </tbody>
-            {rows.length > 0 && (
-              <tfoot>
-                <tr style={{ background: '#DDE6F0' }}>
-                  <td style={{ fontWeight: 800 }} colSpan={3}>Tổng lũy kế {rows[0].month} → {month}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmt(grand)} đ</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -200,11 +160,20 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     [feeCustomers],
   )
 
-  // Lọc theo tầng (dùng cho cả bảng tháng hiện tại lẫn bảng lũy kế)
   const floorCustomers = useMemo(
     () => feeCustomers.filter(c => !floorFilter || (c.floor?.trim() || '') === floorFilter),
     [feeCustomers, floorFilter],
   )
+
+  // Các tháng hiển thị (cột đối chiếu): từ mốc phí sớm nhất đến tháng đang chọn.
+  const months = useMemo(() => {
+    const froms = feeCustomers.flatMap(c => {
+      const sub = subFor(c, 'phiql')
+      return [...(sub?.flatPriceHistory ?? []), ...(sub?.areaPriceHistory ?? [])].map(p => p.fromMonth).filter((m): m is string => !!m)
+    }).filter(m => m <= month)
+    const start = froms.length ? froms.sort()[0] : addMonths(month, -11)
+    return monthRange(start < month ? start : addMonths(month, -11), month)
+  }, [feeCustomers, month])
 
   const displayed = useMemo(() => {
     const filtered = floorCustomers.filter(c =>
@@ -219,7 +188,10 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     })
   }, [floorCustomers, statusFilter, month])
 
-  const total = displayed.reduce((s, c) => s + managementFeeOf(c, month), 0)
+  // Tổng theo tháng (đã lưu) + lũy kế cộng dồn cho hàng tổng.
+  const monthTotals = months.map(m => displayed.reduce((s, c) => s + managementFeeOf(c, m), 0))
+  const cumTotals = monthTotals.reduce<number[]>((acc, v) => [...acc, (acc.length ? acc[acc.length - 1] : 0) + v], [])
+  const totalThisMonth = displayed.reduce((s, c) => s + managementFeeOf(c, month), 0)
   const countCharged = displayed.filter(c => managementFeeOf(c, month) > 0).length
 
   return (
@@ -247,40 +219,50 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
       </div>
       <div className="sc-body">
         <div style={{ background: '#EEF3FA', border: '1px solid #D0DCE8', borderRadius: 10, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: 'var(--txt2)' }}>
-          Danh sách khách đã bật <b>“Thu phí quản lý”</b>. Sửa mức phí ở đây sẽ áp dụng từ tháng {month} trở đi (thêm mốc giá); muốn thêm/bỏ khách hoặc chuyển sang tính <b>theo diện tích</b> thì vào tab <b>Khách hàng</b>. Thu tiền &amp; công nợ phí quản lý xem ở tab <b>Công nợ &amp; Thu tiền</b>.
+          Nhập mức phí bên trái, chọn <b>“Có tính phí / Không tính phí”</b> cho tháng {month} rồi bấm <b>Lưu</b> (mức phí áp dụng từ tháng {month} trở đi). Bên phải đối chiếu phí quản lý từng tháng &amp; cột <b>Lũy kế</b> (cộng dồn). Muốn thêm/bỏ khách hoặc chuyển tính <b>theo diện tích</b> thì vào tab <b>Khách hàng</b>.
         </div>
-        <div className="dn-scroll">
+
+        <div className="dn-usage-wrap">
           <table className="dn-table">
-            <thead><tr>
-              <th>Khách hàng</th><th>Nhóm</th><th>Tầng</th><th>Mã ki-ốt</th><th>Khách thuê</th>
-              <th style={{ textAlign: 'right' }}>Diện tích</th>
-              <th style={{ textAlign: 'right' }}>Mức phí</th><th style={{ textAlign: 'right' }}>Phải thu ({month})</th><th>Trạng thái ({month})</th>
-            </tr></thead>
+            <thead>
+              <tr className="dn-section-hdr">
+                <th className="dn-sticky-col" style={{ left: 0, minWidth: 574, textAlign: 'left', fontSize: 11, letterSpacing: '.05em', borderRight: '2px solid var(--border3)' }} colSpan={4}>Nhập mức phí quản lý</th>
+                <th colSpan={months.length + 1} style={{ textAlign: 'center', fontSize: 11, letterSpacing: '.05em' }}>Đối chiếu phí quản lý theo tháng &amp; lũy kế</th>
+              </tr>
+              <tr>
+                <th className="dn-sticky-col">Khách hàng</th>
+                <th className="dn-sticky-col dn-sticky-input">Mức phí · Tính phí ({month})</th>
+                <th className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right' }}>Phải thu</th>
+                <th className="dn-sticky-col dn-sticky-btn"></th>
+                {months.map(m => <th key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap', background: m === month ? '#E0EDFA' : undefined }}>{m}{m === month ? ' ★' : ''}</th>)}
+                <th style={{ textAlign: 'right', background: '#DDE6F0' }}>Lũy kế</th>
+              </tr>
+            </thead>
             <tbody>
               {feeCustomers.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>
+                <tr><td colSpan={5 + months.length} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>
                   Chưa có khách nào bật phí quản lý. Vào tab <b>Khách hàng</b> → Sửa khách → tích “Thu phí quản lý”.
                 </td></tr>
               )}
               {feeCustomers.length > 0 && displayed.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Không có khách khớp bộ lọc đang chọn.</td></tr>
+                <tr><td colSpan={5 + months.length} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Không có khách khớp bộ lọc đang chọn.</td></tr>
               )}
-              {displayed.map(c => <PhiRow key={c.id} c={c} month={month} />)}
+              {displayed.map(c => <PhiCURow key={`${c.id}_${month}`} c={c} month={month} months={months} />)}
             </tbody>
             {displayed.length > 0 && (
               <tfoot>
                 <tr style={{ background: '#E0EDFA' }}>
-                  <td style={{ fontWeight: 700 }} colSpan={6}>Tổng cộng ({countCharged} khách có thu)</td>
-                  <td></td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmt(total)} đ</td>
-                  <td></td>
+                  <td className="dn-sticky-col" style={{ background: '#E0EDFA', fontWeight: 700 }}>Tổng cộng</td>
+                  <td className="dn-sticky-col dn-sticky-input" style={{ background: '#E0EDFA', color: 'var(--muted)' }}>{countCharged} khách có thu</td>
+                  <td className="dn-sticky-col dn-sticky-amt" style={{ background: '#E0EDFA', textAlign: 'right', fontWeight: 800, color: 'var(--navy)' }}>{fmt(totalThisMonth)} đ</td>
+                  <td className="dn-sticky-col dn-sticky-btn" style={{ background: '#E0EDFA' }}></td>
+                  {monthTotals.map((v, i) => <td key={months[i]} style={{ textAlign: 'right', fontWeight: 700, background: months[i] === month ? '#CFE0F5' : '#E0EDFA', whiteSpace: 'nowrap' }}>{fmt(v)}</td>)}
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--navy)', background: '#CFE0F5', whiteSpace: 'nowrap' }}>{fmt(cumTotals[cumTotals.length - 1] ?? 0)}</td>
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
-
-        {feeCustomers.length > 0 && <div style={{ marginTop: 16 }}><PhiLuyKeCard customers={floorCustomers} month={month} /></div>}
       </div>
     </div>
   )
