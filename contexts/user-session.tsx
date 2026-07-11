@@ -16,6 +16,7 @@ function resolvePerms(role: string, tabs: string[] | null | undefined): string[]
 
 interface Session {
   name: string
+  username: string
   role: string
   perms: string[]
   loading: boolean
@@ -23,23 +24,23 @@ interface Session {
 }
 
 const Ctx = createContext<Session>({
-  name: '', role: '', perms: [], loading: true, can: () => true,
+  name: '', username: '', role: '', perms: [], loading: true, can: () => true,
 })
 
 export function UserSessionProvider({ children }: { children: React.ReactNode }) {
   const [sess, setSess] = useState<Session>({
-    name: '', role: '', perms: [], loading: true, can: () => true,
+    name: '', username: '', role: '', perms: [], loading: true, can: () => true,
   })
 
   useEffect(() => {
     fetch('/api/me', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
       .then(s => {
-        if (!s) { setSess({ name: '', role: '', perms: [], loading: false, can: () => false }); return }
+        if (!s) { setSess({ name: '', username: '', role: '', perms: [], loading: false, can: () => false }); return }
         const perms = resolvePerms(s.role, s.tabs)
-        setSess({ name: s.full_name || '', role: s.role || '', perms, loading: false, can: (m) => perms.includes(m) })
+        setSess({ name: s.full_name || '', username: s.username || '', role: s.role || '', perms, loading: false, can: (m) => perms.includes(m) })
       })
-      .catch(() => setSess({ name: '', role: '', perms: [], loading: false, can: () => false }))
+      .catch(() => setSess({ name: '', username: '', role: '', perms: [], loading: false, can: () => false }))
   }, [])
 
   return <Ctx.Provider value={sess}>{children}</Ctx.Provider>

@@ -13,6 +13,7 @@ import {
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
 import { exportMeter } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
+import { DashArea } from '../_components/DashArea'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 const fmtDec = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 20 })  // giữ phần lẻ cho đơn giá
@@ -438,10 +439,11 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           <span style={{ fontSize: 10.5, color: ratioSum === 100 ? 'var(--green)' : '#DC2626', fontWeight: 600 }}>Σ {ratioSum}%{ratioSum === 100 ? ' ✓' : ''}</span>
         </div>
 
-        {/* Kết quả: 3 card ngang — Tóm tắt · Sơn An thu hộ · Ban quản trị + tỷ trọng (tối ưu diện tích) */}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
+        {/* Kết quả: 3 card — người dùng tự kéo-thả & co giãn (DashArea), lưu theo tài khoản */}
+        <div style={{ marginBottom: 12 }}>
+        <DashArea gridKey="dh1-ketqua" minWidth={210}>
           {/* Card 1: Tóm tắt cách tính */}
-          <div style={{ flex: '1.2 1 250px', minWidth: 240, background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div key="tomtat" style={{ height: '100%', background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '6px 11px', background: '#FBEFCF', color: '#8A5A12', fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', borderBottom: '1px solid #F1E2BD' }}>📘 Tóm tắt cách tính</div>
             <div style={{ padding: '9px 12px', fontSize: 11.5, lineHeight: 1.55, color: 'var(--txt2)' }}>
               <div><b>Tổng tiền đồng hồ 1</b> (điện lực, gồm khung Toàn thời gian + VAT) tách 2 phần:</div>
@@ -453,7 +455,7 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           </div>
 
           {/* Card 2: Sơn An thu hộ (bảng khung giờ) */}
-          <div style={{ flex: '1.8 1 360px', minWidth: 330, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+          <div key="sonan" style={{ height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
             <div style={{ padding: '6px 12px', background: '#8A5A12', color: '#fff', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>① Sơn An thu hộ</div>
             <div style={{ padding: '8px 12px', flex: 1 }}>
               <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 5 }}>
@@ -487,7 +489,7 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
           </div>
 
           {/* Card 3: Ban quản trị + tỷ trọng */}
-          <div style={{ flex: '1 1 210px', minWidth: 200, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+          <div key="bqt" style={{ height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
             <div style={{ padding: '6px 12px', background: '#1C3557', color: '#fff', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>② Ban quản trị (cư dân)</div>
             <div style={{ padding: '9px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
               <div style={{ background: '#F8FAFC', borderRadius: 8, padding: '7px 10px' }}>
@@ -508,6 +510,7 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
               </div>
             </div>
           </div>
+        </DashArea>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -829,10 +832,11 @@ function AcSplitSection({ reading, readings, month, customers, usages }: {
         Phân bổ tiền điện máy lạnh trung tâm (đồng hồ điện 2)
       </div>
       <div style={{ padding: 14 }}>
-        {/* 3 card ngang: Tóm tắt · Phân bổ tháng · Tỷ trọng — tối ưu diện tích */}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 14 }}>
+        {/* 3 card ngang: Tóm tắt · Phân bổ tháng · Tỷ trọng — người dùng tự kéo-thả & co giãn (DashArea) */}
+        <div style={{ marginBottom: 14 }}>
+        <DashArea gridKey="dh2-ketqua" minWidth={210}>
           {/* Card 1: Tóm tắt cách tính */}
-          <div style={{ flex: '1.5 1 300px', minWidth: 270, background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div key="tomtat" style={{ height: '100%', background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ ...cardHead, background: '#FBEFCF', color: '#8A5A12', borderColor: '#F1E2BD' }}>📘 Tóm tắt cách tính</div>
             <div style={{ padding: '9px 12px', fontSize: 12, lineHeight: 1.6, color: 'var(--txt2)' }}>
               <div><b>Tổng tiền đồng hồ 2</b> (máy lạnh trung tâm, từ điện lực + VAT) phân bổ cho khách dùng máy lạnh:</div>
@@ -846,7 +850,7 @@ function AcSplitSection({ reading, readings, month, customers, usages }: {
           </div>
 
           {/* Card 2: Phân bổ tháng hiện tại */}
-          <div style={{ flex: '1.3 1 260px', minWidth: 250, border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
+          <div key="phanbo" style={{ height: '100%', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
             <div style={cardHead}>Phân bổ tháng {month}</div>
             <div style={{ padding: '8px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
               {pricedRows.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic' }}>Chưa có khách nào gán cho đồng hồ máy lạnh.</div>}
@@ -871,7 +875,7 @@ function AcSplitSection({ reading, readings, month, customers, usages }: {
           </div>
 
           {/* Card 3: Tỷ trọng tháng hiện tại */}
-          <div style={{ flex: '1 1 210px', minWidth: 200, border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
+          <div key="tytrong" style={{ height: '100%', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
             <div style={cardHead}>Tỷ trọng tháng {month}</div>
             <div style={{ padding: '9px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
               {kpi('Tổng tiền đồng hồ', `${fmt(alloc.total)} đ`, '', 'var(--navy)', '#F8FAFC')}
@@ -884,6 +888,7 @@ function AcSplitSection({ reading, readings, month, customers, usages }: {
               </div>
             </div>
           </div>
+        </DashArea>
         </div>
 
         {/* Thống kê theo tháng (full width) */}

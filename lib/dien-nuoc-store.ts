@@ -151,6 +151,21 @@ export function subscribePayments(cb: (rows: Payment[]) => void): Unsubscribe {
   })
 }
 
+// ── Bố cục dashboard tùy biến (kéo-thả/co-giãn card) — lưu theo user ─────────
+// 1 doc / user (id = username). Nội dung: { [gridKey]: { order: string[], size: {[panelKey]: {w?,h?}} } }
+const COL_DASH = 'dn_dash_layouts'
+export interface DashGridState { order: string[]; size: Record<string, { w?: number; h?: number }> }
+export type DashLayouts = Record<string, DashGridState>
+
+export function subscribeDashLayouts(username: string, cb: (all: DashLayouts) => void): Unsubscribe {
+  if (!username) { cb({}); return () => {} }
+  return onSnapshot(doc(diennuocDb, COL_DASH, username), snap => cb((snap.data() as DashLayouts) ?? {}))
+}
+export async function saveDashLayout(username: string, gridKey: string, state: DashGridState): Promise<void> {
+  if (!username) return
+  await setDoc(doc(diennuocDb, COL_DASH, username), { [gridKey]: state }, { merge: true })
+}
+
 // ── Tên đồng hồ tùy chỉnh (chỉ admin được sửa) ───────────────────────────────
 export async function saveMeterNames(names: Record<number, string>): Promise<void> {
   await setDoc(doc(diennuocDb, COL_CONFIG, DOC_METER_NAMES), clean(names as Record<string, unknown>))
