@@ -172,8 +172,19 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
   const items: Item[] = Array.from(dueByMonth.entries()).map(([m, due]) => {
     const history = histByMonth.get(m) ?? []
     const paid = history.reduce((s, p) => s + p.amount, 0)
-    return { month: m, due, paid, remain: Math.max(0, due - paid), history }
-  }).sort((a, b) => (b.remain > 0 ? 1 : 0) - (a.remain > 0 ? 1 : 0) || b.month.localeCompare(a.month))
+    return { month: m, due, paid, remain: 0, history }
+  })
+
+  // Gộp toàn bộ tiền đã thu rồi trả nợ theo thứ tự tháng cũ → mới (pool approach)
+  // Tiền dư 1 tháng tự động bù sang tháng khác còn thiếu
+  const itemsByDate = [...items].sort((a, b) => a.month.localeCompare(b.month))
+  let pool = items.reduce((s, it) => s + it.paid, 0)
+  for (const it of itemsByDate) {
+    if (pool >= it.due) { it.remain = 0; pool -= it.due }
+    else { it.remain = it.due - pool; pool = 0 }
+  }
+
+  items.sort((a, b) => (b.remain > 0 ? 1 : 0) - (a.remain > 0 ? 1 : 0) || b.month.localeCompare(a.month))
 
   return (
     <>
@@ -303,14 +314,19 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
     const cell = R.m.get(p.month); if (!cell) continue
     cell.paid += p.amount
   }
-  // Chốt còn nợ + tổng + đếm số tháng chưa thu đủ
+  // Chốt còn nợ: gộp toàn bộ tiền đã thu → trả nợ theo thứ tự tháng cũ→mới
   for (const R of rowMap.values()) {
-    for (const cell of R.m.values()) {
-      cell.remain = Math.max(0, cell.due - cell.paid)
-      R.totalDue += cell.due; R.totalRemain += cell.remain
+    const sortedMonths = Array.from(R.m.keys()).sort()
+    let pool = Array.from(R.m.values()).reduce((s, c) => s + c.paid, 0)
+    for (const m of sortedMonths) {
+      const cell = R.m.get(m)!
+      R.totalDue += cell.due
+      if (pool >= cell.due) { cell.remain = 0; pool -= cell.due }
+      else { cell.remain = cell.due - pool; pool = 0 }
+      R.totalRemain += cell.remain
       if (cell.due > 0 && cell.remain > 0) R.unpaid += 1
     }
-    R.totalPaid = R.totalDue - R.totalRemain
+    R.totalPaid = Array.from(R.m.values()).reduce((s, c) => s + c.paid, 0)
   }
 
   const cmp = { numeric: true, sensitivity: 'base' } as const
