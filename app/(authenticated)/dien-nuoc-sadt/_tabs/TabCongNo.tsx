@@ -178,7 +178,7 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
   return (
     <>
       <div className="so-backdrop" onClick={onClose} />
-      <div className="ex-modal" style={{ maxWidth: 560 }}>
+      <div className="ex-modal" style={{ maxWidth: 700, width: '96vw' }}>
         <div className="so-header">
           <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Thu tiền — {customer.name}</div>
           <button className="so-close" onClick={onClose}>
