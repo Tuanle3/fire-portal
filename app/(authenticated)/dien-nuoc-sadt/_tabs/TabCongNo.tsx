@@ -4,33 +4,35 @@ import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, ServiceId,
   meterAllocation, managementFeeOf, METER_SERVICE, primaryService, paymentService,
 } from '@/lib/dien-nuoc-types'
-import { savePayment } from '@/lib/dien-nuoc-store'
+import { savePayment, deletePayment, saveCustomer } from '@/lib/dien-nuoc-store'
 import { exportCongNo } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
 import { PhieuThongBaoModal } from './PhieuThongBao'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
-function PaymentModal({ customerId, customerName, month, due, paid, service, label, onClose }: {
-  customerId: string; customerName: string; month: string; due: number; paid: number; service: ServiceId; label: string; onClose: () => void
+function PaymentModal({ customerId, customerName, month, due, paid, service, label, editPayment, onClose }: {
+  customerId: string; customerName: string; month: string; due: number; paid: number; service: ServiceId; label: string
+  editPayment?: Payment; onClose: () => void
 }) {
   const remain = Math.max(0, due - paid)
   const today = new Date().toISOString().slice(0, 10)
-  const [amount, setAmount] = useState(remain)
-  const [paidAt, setPaidAt] = useState(today)
-  const [method, setMethod] = useState<'transfer' | 'cash'>('transfer')
-  const [bankAccount, setBankAccount] = useState('')
-  const [transactionRef, setTransactionRef] = useState('')
-  const [note, setNote] = useState('')
+  const [amount, setAmount] = useState(editPayment?.amount ?? remain)
+  const [paidAt, setPaidAt] = useState(editPayment?.paidAt ?? today)
+  const [method, setMethod] = useState<'transfer' | 'cash'>(editPayment?.paymentMethod ?? 'transfer')
+  const [bankAccount, setBankAccount] = useState(editPayment?.bankAccount ?? '')
+  const [transactionRef, setTransactionRef] = useState(editPayment?.transactionRef ?? '')
+  const [note, setNote] = useState(editPayment?.note ?? '')
   const [saving, setSaving] = useState(false)
-  const isOver = amount > remain && remain > 0
+  const isEdit = !!editPayment
+  const isOver = !isEdit && amount > remain && remain > 0
 
   const submit = async () => {
     if (amount <= 0) return
     setSaving(true)
     const p: Parameters<typeof savePayment>[0] = {
-      id: `p${Date.now()}`, customerId, month, amount, paidAt: paidAt || today,
-      note, service, createdAt: today, paymentMethod: method,
+      id: editPayment?.id ?? `p${Date.now()}`, customerId, month, amount, paidAt: paidAt || today,
+      note, service, createdAt: editPayment?.createdAt ?? today, paymentMethod: method,
       ...(method === 'transfer' && bankAccount ? { bankAccount } : {}),
       ...(transactionRef ? { transactionRef } : {}),
     }
@@ -52,8 +54,8 @@ function PaymentModal({ customerId, customerName, month, due, paid, service, lab
       <div className="ex-modal" style={{ maxWidth: 460 }}>
         <div className="so-header">
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--navy)' }}>{customerName}</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{label}</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--navy)' }}>{isEdit ? '✏️ Sửa khoản thu' : customerName}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{isEdit ? `${customerName} · ${label}` : label}</div>
           </div>
           <button className="so-close" onClick={onClose}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -119,14 +121,14 @@ function PaymentModal({ customerId, customerName, month, due, paid, service, lab
 
         <div className="so-footer">
           <button className="so-cancel" style={{ marginLeft: 'auto' }} onClick={onClose}>Hủy</button>
-          <button className="so-save" onClick={submit} disabled={saving || amount <= 0}>{saving ? 'Đang lưu…' : 'Xác nhận thu'}</button>
+          <button className="so-save" onClick={submit} disabled={saving || amount <= 0}>{saving ? 'Đang lưu…' : isEdit ? 'Lưu thay đổi' : 'Xác nhận thu'}</button>
         </div>
       </div>
     </>
   )
 }
 
-type CollectArgs = { customerId: string; customerName: string; month: string; due: number; paid: number; service: ServiceId; label: string }
+type CollectArgs = { customerId: string; customerName: string; month: string; due: number; paid: number; service: ServiceId; label: string; editPayment?: Payment }
 
 const SVC_LABEL: Record<string, string> = {
   [METER_SERVICE[1]]: 'Điện CS', [METER_SERVICE[2]]: 'Máy lạnh', [METER_SERVICE[3]]: 'Nước', phiql: 'Phí QL',
@@ -142,6 +144,24 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (m: string) => setExpanded(prev => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n })
+  const [editingDebt, setEditingDebt] = useState(false)
+  const [debtInput, setDebtInput] = useState(String(customer.oldDebt ?? ''))
+  const [savingDebt, setSavingDebt] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const saveOldDebt = async () => {
+    setSavingDebt(true)
+    const val = parseFloat(debtInput.replace(/[^0-9.]/g, '')) || 0
+    await saveCustomer({ ...customer, oldDebt: val > 0 ? val : undefined })
+    setSavingDebt(false)
+    setEditingDebt(false)
+  }
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id)
+    await deletePayment(id)
+    setDeletingId(null)
+  }
 
   const months = Array.from(new Set(readings.map(r => r.month))).sort()
   const primary = primaryService(customer)
@@ -176,9 +196,15 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
   })
 
   // Gộp toàn bộ tiền đã thu rồi trả nợ theo thứ tự tháng cũ → mới (pool approach)
-  // Tiền dư 1 tháng tự động bù sang tháng khác còn thiếu
+  // Nợ cũ (oldDebt) được xét đầu tiên (trước tất cả tháng trong hệ thống)
+  const oldDebtDue = customer.oldDebt ?? 0
   const itemsByDate = [...items].sort((a, b) => a.month.localeCompare(b.month))
   let pool = items.reduce((s, it) => s + it.paid, 0)
+  let oldDebtRemain = 0
+  if (oldDebtDue > 0) {
+    if (pool >= oldDebtDue) { oldDebtRemain = 0; pool -= oldDebtDue }
+    else { oldDebtRemain = oldDebtDue - pool; pool = 0 }
+  }
   for (const it of itemsByDate) {
     if (pool >= it.due) { it.remain = 0; pool -= it.due }
     else { it.remain = it.due - pool; pool = 0 }
@@ -197,63 +223,89 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
           </button>
         </div>
         <div style={{ padding: '10px 14px', maxHeight: '65vh', overflowY: 'auto' }}>
+          <style>{`.cn-pick td,.cn-pick th{padding:5px 10px!important;white-space:nowrap;font-size:12px}`}</style>
+
+          {/* Nợ cũ trước hệ thống */}
+          <div style={{ marginBottom: 10, padding: '8px 12px', background: '#FFF7E8', borderRadius: 8, border: '1px solid #F0D080', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#8A5A12' }}>Nợ cũ (trước hệ thống):</span>
+            {editingDebt ? (
+              <>
+                <input style={{ width: 130, padding: '3px 8px', borderRadius: 6, border: '1px solid #ccc', fontSize: 12 }}
+                  value={debtInput} onChange={e => setDebtInput(e.target.value)} placeholder="0" autoFocus />
+                <button className="btn-ghost" style={{ fontSize: 11 }} onClick={saveOldDebt} disabled={savingDebt}>{savingDebt ? '…' : 'Lưu'}</button>
+                <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => setEditingDebt(false)}>Hủy</button>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: 13, fontWeight: 700, color: oldDebtRemain > 0 ? '#DC2626' : 'var(--green)' }}>
+                  {oldDebtDue > 0 ? `${fmt(oldDebtDue)} đ (còn: ${fmt(oldDebtRemain)} đ)` : '—'}
+                </span>
+                <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => { setDebtInput(String(customer.oldDebt ?? '')); setEditingDebt(true) }}>
+                  {oldDebtDue > 0 ? '✏️ Sửa' : '+ Nhập nợ cũ'}
+                </button>
+              </>
+            )}
+          </div>
+
           {items.length === 0 ? (
-            <div style={{ color: 'var(--muted)', fontStyle: 'italic', padding: 8 }}>Khách này chưa có khoản phải thu.</div>
+            <div style={{ color: 'var(--muted)', fontStyle: 'italic', padding: 8 }}>Khách này chưa có khoản phải thu theo tháng.</div>
           ) : (
-            <>
-              <style>{`.cn-pick td,.cn-pick th{padding:5px 10px!important;white-space:nowrap;font-size:12px}`}</style>
-              <table className="dn-table cn-pick" style={{ width: '100%' }}>
-                <thead><tr>
-                  <th>Tháng</th>
-                  <th style={{ textAlign: 'right' }}>Phải thu (đ)</th>
-                  <th style={{ textAlign: 'right' }}>Đã thu (đ)</th>
-                  <th style={{ textAlign: 'right' }}>Còn nợ (đ)</th>
-                  <th style={{ width: 64, textAlign: 'center' }}></th>
-                </tr></thead>
-                <tbody>
-                  {items.map((it) => {
-                    const isOpen = expanded.has(it.month)
-                    return (
-                      <>
-                        <tr key={it.month} style={{ background: it.remain <= 0 ? '#F8FBF5' : undefined }}>
-                          <td style={{ fontWeight: 600 }}>
-                            {it.history.length > 0 && (
-                              <button onClick={() => toggleExpand(it.month)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--navy)', padding: '0 4px 0 0' }}>
-                                {isOpen ? '▾' : '▸'}
-                              </button>
-                            )}
-                            {it.month}
-                          </td>
-                          <td style={{ textAlign: 'right' }}>{fmt(it.due)}</td>
-                          <td style={{ textAlign: 'right', color: it.paid > 0 ? 'var(--green)' : 'var(--muted2)' }}>{fmt(it.paid)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(it.remain)}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <button className="btn-ghost" style={{ fontSize: 12, padding: '3px 10px' }}
-                              onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: primary, label: it.month })}>
-                              + Thu
+            <table className="dn-table cn-pick" style={{ width: '100%' }}>
+              <thead><tr>
+                <th>Tháng</th>
+                <th style={{ textAlign: 'right' }}>Phải thu (đ)</th>
+                <th style={{ textAlign: 'right' }}>Đã thu (đ)</th>
+                <th style={{ textAlign: 'right' }}>Còn nợ (đ)</th>
+                <th style={{ width: 64, textAlign: 'center' }}></th>
+              </tr></thead>
+              <tbody>
+                {items.map((it) => {
+                  const isOpen = expanded.has(it.month)
+                  return (
+                    <>
+                      <tr key={it.month} style={{ background: it.remain <= 0 ? '#F8FBF5' : undefined }}>
+                        <td style={{ fontWeight: 600 }}>
+                          {it.history.length > 0 && (
+                            <button onClick={() => toggleExpand(it.month)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--navy)', padding: '0 4px 0 0' }}>
+                              {isOpen ? '▾' : '▸'}
                             </button>
+                          )}
+                          {it.month}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{fmt(it.due)}</td>
+                        <td style={{ textAlign: 'right', color: it.paid > 0 ? 'var(--green)' : 'var(--muted2)' }}>{fmt(it.paid)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(it.remain)}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button className="btn-ghost" style={{ fontSize: 12, padding: '3px 10px' }}
+                            onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: primary, label: it.month })}>
+                            + Thu
+                          </button>
+                        </td>
+                      </tr>
+                      {isOpen && it.history.map((p, pi) => (
+                        <tr key={`${it.month}-h${pi}`} style={{ background: '#F4F7FF' }}>
+                          <td colSpan={2} style={{ color: '#6B7280', fontSize: 10.5, paddingLeft: 24 }}>
+                            📅 {p.paidAt || '—'}
+                            {p.paymentMethod && <span style={{ marginLeft: 5, background: p.paymentMethod === 'transfer' ? '#EEF3FA' : '#F0F8EC', color: p.paymentMethod === 'transfer' ? 'var(--navy)' : '#3A7A1A', borderRadius: 4, padding: '1px 4px' }}>{METHOD_LABEL[p.paymentMethod]}</span>}
+                            {p.bankAccount && <span style={{ marginLeft: 5 }}>· {p.bankAccount}</span>}
+                            {p.transactionRef && <span style={{ marginLeft: 5, color: '#9B59B6' }}>#{p.transactionRef}</span>}
+                            {p.note && <span style={{ marginLeft: 5, fontStyle: 'italic' }}>{p.note}</span>}
+                          </td>
+                          <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{fmt(p.amount)}</td>
+                          <td colSpan={2} style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button title="Sửa" onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: primary, label: it.month, editPayment: p })}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: '0 4px', color: 'var(--navy)' }}>✏️</button>
+                            <button title="Xóa" onClick={() => handleDelete(p.id)} disabled={deletingId === p.id}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: '0 4px', color: '#DC2626', opacity: deletingId === p.id ? 0.4 : 1 }}>🗑️</button>
                           </td>
                         </tr>
-                        {isOpen && it.history.map((p, pi) => (
-                          <tr key={`${it.month}-h${pi}`} style={{ background: '#F4F7FF' }}>
-                            <td colSpan={2} style={{ color: '#6B7280', fontSize: 10.5, paddingLeft: 24 }}>
-                              📅 {p.paidAt || '—'}
-                              {p.paymentMethod && <span style={{ marginLeft: 5, background: p.paymentMethod === 'transfer' ? '#EEF3FA' : '#F0F8EC', color: p.paymentMethod === 'transfer' ? 'var(--navy)' : '#3A7A1A', borderRadius: 4, padding: '1px 4px' }}>{METHOD_LABEL[p.paymentMethod]}</span>}
-                              {p.bankAccount && <span style={{ marginLeft: 5 }}>· {p.bankAccount}</span>}
-                              {p.transactionRef && <span style={{ marginLeft: 5, color: '#9B59B6' }}>#{p.transactionRef}</span>}
-                              {p.note && <span style={{ marginLeft: 5, fontStyle: 'italic' }}>{p.note}</span>}
-                            </td>
-                            <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{fmt(p.amount)}</td>
-                            <td></td><td></td>
-                          </tr>
-                        ))}
-                      </>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </>
+                      ))}
+                    </>
+                  )
+                })}
+              </tbody>
+            </table>
           )}
         </div>
         <div className="so-footer"><button className="so-cancel" style={{ marginLeft: 'auto' }} onClick={onClose}>Đóng</button></div>
@@ -314,10 +366,14 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
     const cell = R.m.get(p.month); if (!cell) continue
     cell.paid += p.amount
   }
-  // Chốt còn nợ: gộp toàn bộ tiền đã thu → trả nợ theo thứ tự tháng cũ→mới
+  // Chốt còn nợ: gộp toàn bộ tiền đã thu → trả nợ theo thứ tự: nợ cũ trước, rồi tháng cũ→mới
   for (const R of rowMap.values()) {
     const sortedMonths = Array.from(R.m.keys()).sort()
     let pool = Array.from(R.m.values()).reduce((s, c) => s + c.paid, 0)
+    const oldDebt = R.c.oldDebt ?? 0
+    R.totalDue += oldDebt
+    if (pool >= oldDebt) pool -= oldDebt
+    else pool = 0
     for (const m of sortedMonths) {
       const cell = R.m.get(m)!
       R.totalDue += cell.due
@@ -327,6 +383,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
       if (cell.due > 0 && cell.remain > 0) R.unpaid += 1
     }
     R.totalPaid = Array.from(R.m.values()).reduce((s, c) => s + c.paid, 0)
+    R.totalRemain = Math.max(0, R.totalDue - R.totalPaid)
   }
 
   const cmp = { numeric: true, sensitivity: 'base' } as const
@@ -435,7 +492,7 @@ export function TabCongNo({ readings, customers, usages, payments, month, meterN
       )}
       {collecting && (
         <PaymentModal customerId={collecting.customerId} customerName={collecting.customerName} month={collecting.month} due={collecting.due} paid={collecting.paid}
-          service={collecting.service} label={collecting.label} onClose={() => setCollecting(null)} />
+          service={collecting.service} label={collecting.label} editPayment={collecting.editPayment} onClose={() => setCollecting(null)} />
       )}
       {printing && (
         <PhieuThongBaoModal customer={printing} readings={readings} usages={usages} month={month} onClose={() => setPrinting(null)} />

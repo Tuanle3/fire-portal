@@ -195,6 +195,7 @@ export interface Customer {
   // Mặc định (không nằm trong list nào) = "Có tính phí" (thu trong tháng).
   feeInactiveMonths?: string[]  // Các tháng KHÔNG tính phí quản lý (phí = 0).
   feeAccruedMonths?: string[]   // Các tháng "tính dồn" (chưa có khách thuê nhưng vẫn tính phí cho chủ ki-ốt, thu bù sau).
+  oldDebt?: number              // Công nợ cũ trước khi dùng hệ thống (đ)
   createdAt: string
 }
 

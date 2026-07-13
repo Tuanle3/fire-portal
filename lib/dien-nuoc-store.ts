@@ -78,6 +78,7 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
     hasManagementFee: d.hasManagementFee === true,
     managementFeePrice: d.managementFeePrice != null ? Number(d.managementFeePrice) : undefined,
     managementFeeHistory: (d.managementFeeHistory as Customer['managementFeeHistory']) ?? undefined,
+    oldDebt:    d.oldDebt != null ? Number(d.oldDebt) : undefined,
     createdAt:  (d.createdAt as string) ?? '',
   }
 }
