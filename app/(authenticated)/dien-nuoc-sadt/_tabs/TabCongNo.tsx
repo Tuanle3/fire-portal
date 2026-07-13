@@ -187,37 +187,36 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
             <div style={{ color: 'var(--muted)', fontStyle: 'italic', padding: 8 }}>Khách này chưa có khoản phải thu.</div>
           ) : (
             <>
-              <style>{`.cn-pick td,.cn-pick th{padding:5px 8px!important;white-space:nowrap}.cn-hist td{padding:3px 8px!important;font-size:10px;color:var(--muted);background:#F8FAFC}`}</style>
-              <table className="dn-table cn-pick" style={{ fontSize: 11, width: '100%' }}>
+              <style>{`.cn-pick td,.cn-pick th{padding:4px 7px!important;white-space:nowrap;font-size:11px}`}</style>
+              <table className="dn-table cn-pick" style={{ width: '100%' }}>
                 <thead><tr>
-                  <th style={{ width: 24 }}></th>
                   <th>Tháng</th><th>Khoản</th>
-                  <th style={{ textAlign: 'right' }}>Phải thu</th>
-                  <th style={{ textAlign: 'right' }}>Đã thu</th>
-                  <th style={{ textAlign: 'right' }}>Còn nợ</th>
-                  <th style={{ width: 56 }}></th>
+                  <th style={{ textAlign: 'right' }}>Phải thu (đ)</th>
+                  <th style={{ textAlign: 'right' }}>Đã thu (đ)</th>
+                  <th style={{ textAlign: 'right' }}>Còn nợ (đ)</th>
+                  <th style={{ width: 52, textAlign: 'center' }}></th>
                 </tr></thead>
                 <tbody>
-                  {items.map((it, i) => {
+                  {items.map((it) => {
                     const key = `${it.month}:${it.service}`
                     const isOpen = expanded.has(key)
                     return (
                       <>
                         <tr key={key} style={{ background: it.remain <= 0 ? '#F8FBF5' : undefined }}>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ fontWeight: 600 }}>
                             {it.history.length > 0 && (
                               <button onClick={() => toggleExpand(key)} title={isOpen ? 'Ẩn lịch sử' : 'Xem lịch sử thu'}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--navy)', padding: 0 }}>
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--navy)', padding: '0 3px 0 0', verticalAlign: 'middle' }}>
                                 {isOpen ? '▾' : '▸'}
                               </button>
                             )}
+                            {it.month}
                           </td>
-                          <td style={{ fontWeight: 600 }}>{it.month}</td>
                           <td>{it.label}</td>
-                          <td style={{ textAlign: 'right' }}>{fmt(it.due)} đ</td>
-                          <td style={{ textAlign: 'right', color: it.paid > 0 ? 'var(--green)' : 'var(--muted2)' }}>{fmt(it.paid)} đ</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(it.remain)} đ</td>
-                          <td>
+                          <td style={{ textAlign: 'right' }}>{fmt(it.due)}</td>
+                          <td style={{ textAlign: 'right', color: it.paid > 0 ? 'var(--green)' : 'var(--muted2)' }}>{fmt(it.paid)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(it.remain)}</td>
+                          <td style={{ textAlign: 'center' }}>
                             <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }}
                               onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: it.service, label: `${it.label} · ${it.month}` })}>
                               + Thu
@@ -225,20 +224,17 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
                           </td>
                         </tr>
                         {isOpen && it.history.map((p, pi) => (
-                          <tr key={`${key}-h${pi}`} className="cn-hist">
-                            <td></td>
-                            <td colSpan={2} style={{ color: '#6B7280' }}>
+                          <tr key={`${key}-h${pi}`} style={{ background: '#F4F7FF' }}>
+                            <td colSpan={2} style={{ color: '#6B7280', fontSize: 10, paddingLeft: '18px !important' }}>
                               📅 {p.paidAt || '—'}
-                              {p.paymentMethod && <span style={{ marginLeft: 6, background: p.paymentMethod === 'transfer' ? '#EEF3FA' : '#F0F8EC', color: p.paymentMethod === 'transfer' ? 'var(--navy)' : '#3A7A1A', borderRadius: 4, padding: '1px 5px', fontSize: 9.5 }}>{METHOD_LABEL[p.paymentMethod]}</span>}
+                              {p.paymentMethod && <span style={{ marginLeft: 5, background: p.paymentMethod === 'transfer' ? '#EEF3FA' : '#F0F8EC', color: p.paymentMethod === 'transfer' ? 'var(--navy)' : '#3A7A1A', borderRadius: 4, padding: '1px 4px' }}>{METHOD_LABEL[p.paymentMethod]}</span>}
+                              {p.bankAccount && <span style={{ marginLeft: 5, color: '#6B7280' }}>· {p.bankAccount}</span>}
+                              {p.transactionRef && <span style={{ marginLeft: 5, color: '#9B59B6' }}>#{p.transactionRef}</span>}
+                              {p.note && <span style={{ marginLeft: 5, fontStyle: 'italic' }}>{p.note}</span>}
                             </td>
                             <td></td>
-                            <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{fmt(p.amount)} đ</td>
-                            <td></td>
-                            <td style={{ maxWidth: 200, whiteSpace: 'normal', fontSize: 10, color: '#6B7280' }}>
-                              {p.bankAccount && <div>🏦 {p.bankAccount}</div>}
-                              {p.transactionRef && <div>🔖 {p.transactionRef}</div>}
-                              {p.note && <div>💬 {p.note}</div>}
-                            </td>
+                            <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 600, fontSize: 10 }}>{fmt(p.amount)}</td>
+                            <td></td><td></td>
                           </tr>
                         ))}
                       </>
