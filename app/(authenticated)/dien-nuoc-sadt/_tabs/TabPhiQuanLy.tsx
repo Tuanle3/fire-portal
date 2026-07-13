@@ -168,9 +168,14 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     [feeCustomers, floorFilter],
   )
 
-  // Các tháng hiển thị (cột đối chiếu): CHỈ trong năm của tháng đang chọn — từ tháng 1 đến tháng đang chọn.
-  // (Không hiện dữ liệu năm trước cho gọn: VD chọn 2026-01 thì chỉ hiện 2026-01.)
-  const months = useMemo(() => monthRange(`${month.slice(0, 4)}-01`, month, 12), [month])
+  // Các tháng đối chiếu: từ tháng 1 đến tháng TRƯỚC tháng đang chọn.
+  // Tháng hiện tại chưa được xác nhận (Lưu) nên không hiện trong cột so sánh.
+  const months = useMemo(() => {
+    const [y, m] = month.split('-')
+    const prev = parseInt(m) - 1
+    if (prev <= 0) return []
+    return monthRange(`${y}-01`, `${y}-${String(prev).padStart(2, '0')}`, 12)
+  }, [month])
 
   const displayed = useMemo(() => {
     const filtered = floorCustomers.filter(c => !statusFilter || feeStatus(c, month) === statusFilter)
