@@ -138,9 +138,9 @@ const SVC_ORDER: ServiceId[] = [METER_SERVICE[1], METER_SERVICE[2], METER_SERVIC
 const METHOD_LABEL: Record<string, string> = { transfer: 'CK', cash: 'TM' }
 
 // Popup chọn tháng thu cho 1 khách — 1 dòng/tháng, tổng phải thu (không tách dịch vụ).
-function CollectPickerModal({ customer, readings, customers, usages, payments, onPick, onClose }: {
+function CollectPickerModal({ customer, readings, customers, usages, payments, currentMonth, onPick, onClose }: {
   customer: Customer; readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]
-  onPick: (a: CollectArgs) => void; onClose: () => void
+  currentMonth: string; onPick: (a: CollectArgs) => void; onClose: () => void
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (m: string) => setExpanded(prev => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n })
@@ -176,7 +176,7 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
       const row = meterAllocation(r, customers, usages).rows.find(rr => rr.customer.id === customer.id)
       if (row && row.amount > 0) due += row.amount
     }
-    due += managementFeeOf(customer, m)
+    if (m < currentMonth) due += managementFeeOf(customer, m)  // chỉ tính phí QL tháng đã Lưu
     if (due > 0) dueByMonth.set(m, due)
   }
 
@@ -375,8 +375,9 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
       ensureSvc(cell, service).due += row.amount; cell.due += row.amount
     }
   }
-  // Phí quản lý
+  // Phí quản lý — chỉ tính các tháng đã Lưu (trước tháng đang chọn)
   for (const c of customers) for (const m of months) {
+    if (m >= month) continue
     const fee = managementFeeOf(c, m)
     if (fee > 0) { const cell = ensureCell(ensureRow(c), m); ensureSvc(cell, 'phiql').due += fee; cell.due += fee }
   }
@@ -508,7 +509,7 @@ export function TabCongNo({ readings, customers, usages, payments, month, meterN
       <CongNoMultiMonth readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} onCollect={setPicking} onPrint={setPrinting} />
       {picking && (
         <CollectPickerModal customer={picking} readings={readings} customers={customers} usages={usages} payments={payments}
-          onPick={a => { setPicking(null); setCollecting(a) }} onClose={() => setPicking(null)} />
+          currentMonth={month} onPick={a => { setPicking(null); setCollecting(a) }} onClose={() => setPicking(null)} />
       )}
       {collecting && (
         <PaymentModal customerId={collecting.customerId} customerName={collecting.customerName} month={collecting.month} due={collecting.due} paid={collecting.paid}
