@@ -10,73 +10,146 @@ import { NumberInput } from '../_components/NumberInput'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
-function PaymentModal({ customerId, month, due, paid, service, label, onClose }: {
-  customerId: string; month: string; due: number; paid: number; service: ServiceId; label: string; onClose: () => void
+function PaymentModal({ customerId, customerName, month, due, paid, service, label, onClose }: {
+  customerId: string; customerName: string; month: string; due: number; paid: number; service: ServiceId; label: string; onClose: () => void
 }) {
   const remain = Math.max(0, due - paid)
+  const today = new Date().toISOString().slice(0, 10)
   const [amount, setAmount] = useState(remain)
+  const [paidAt, setPaidAt] = useState(today)
+  const [method, setMethod] = useState<'transfer' | 'cash'>('transfer')
+  const [bankAccount, setBankAccount] = useState('')
+  const [transactionRef, setTransactionRef] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const isOver = amount > remain && remain > 0
 
   const submit = async () => {
     if (amount <= 0) return
     setSaving(true)
-    const now = new Date().toISOString().slice(0, 10)
-    await savePayment({ id: `p${Date.now()}`, customerId, month, amount, paidAt: now, note, service, createdAt: now })
+    const p: Parameters<typeof savePayment>[0] = {
+      id: `p${Date.now()}`, customerId, month, amount, paidAt: paidAt || today,
+      note, service, createdAt: today, paymentMethod: method,
+      ...(method === 'transfer' && bankAccount ? { bankAccount } : {}),
+      ...(transactionRef ? { transactionRef } : {}),
+    }
+    await savePayment(p)
     setSaving(false)
     onClose()
   }
 
+  const radioStyle = (active: boolean): React.CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', padding: '5px 12px',
+    borderRadius: 7, border: `1px solid ${active ? 'var(--navy)' : 'var(--border2)'}`,
+    background: active ? '#EEF3FA' : '#fff', fontWeight: active ? 700 : 400,
+    color: active ? 'var(--navy)' : 'var(--muted)', fontSize: 12,
+  })
+
   return (
     <>
       <div className="so-backdrop" onClick={onClose} />
-      <div className="ex-modal">
+      <div className="ex-modal" style={{ maxWidth: 460 }}>
         <div className="so-header">
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Ghi nhận thu tiền — {label}</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--navy)' }}>{customerName}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{label}</div>
+          </div>
           <button className="so-close" onClick={onClose}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>Còn nợ tháng {month}: <b style={{ color: '#DC2626' }}>{fmt(remain)} đ</b></div>
+
+        {/* Tóm tắt khoản nợ */}
+        <div style={{ padding: '10px 20px', background: '#F8FAFC', borderBottom: '1px solid var(--border3)', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Phải thu', val: due, color: 'var(--txt)' },
+            { label: 'Đã thu', val: paid, color: 'var(--green)' },
+            { label: 'Còn nợ', val: remain, color: remain > 0 ? '#DC2626' : 'var(--green)' },
+          ].map(x => (
+            <div key={x.label}>
+              <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{x.label}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: x.color }}>{fmt(x.val)} đ</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+          {/* Ngày thanh toán */}
           <div className="so-field so-field--full">
-            <label className="so-label">Số tiền thu</label>
+            <label className="so-label">Ngày thanh toán</label>
+            <input className="so-input" type="date" value={paidAt} onChange={e => setPaidAt(e.target.value)} />
+          </div>
+
+          {/* Số tiền */}
+          <div className="so-field so-field--full">
+            <label className="so-label">Số tiền nhận {isOver && <span style={{ color: '#D97706', fontWeight: 600 }}>⚠ vượt {fmt(amount - remain)} đ so nợ còn lại</span>}</label>
             <NumberInput className="so-input" value={amount} onValueChange={setAmount} />
           </div>
+
+          {/* Hình thức */}
+          <div className="so-field so-field--full">
+            <label className="so-label">Hình thức thanh toán</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <label style={radioStyle(method === 'transfer')}><input type="radio" style={{ display: 'none' }} checked={method === 'transfer'} onChange={() => setMethod('transfer')} />💳 Chuyển khoản</label>
+              <label style={radioStyle(method === 'cash')}><input type="radio" style={{ display: 'none' }} checked={method === 'cash'} onChange={() => setMethod('cash')} />💵 Tiền mặt</label>
+            </div>
+          </div>
+
+          {/* TK nhận (chỉ khi CK) */}
+          {method === 'transfer' && (
+            <div className="so-field so-field--full">
+              <label className="so-label">Tài khoản nhận tiền</label>
+              <input className="so-input" placeholder="VD: BIDV 1234567890" value={bankAccount} onChange={e => setBankAccount(e.target.value)} />
+            </div>
+          )}
+
+          {/* Mã giao dịch */}
+          <div className="so-field so-field--full">
+            <label className="so-label">Mã giao dịch / số chứng từ (tuỳ chọn)</label>
+            <input className="so-input" placeholder="Mã chuyển khoản, số phiếu thu…" value={transactionRef} onChange={e => setTransactionRef(e.target.value)} />
+          </div>
+
+          {/* Ghi chú */}
           <div className="so-field so-field--full">
             <label className="so-label">Ghi chú (tuỳ chọn)</label>
             <input className="so-input" value={note} onChange={e => setNote(e.target.value)} />
           </div>
         </div>
+
         <div className="so-footer">
           <button className="so-cancel" style={{ marginLeft: 'auto' }} onClick={onClose}>Hủy</button>
-          <button className="so-save" onClick={submit} disabled={saving}>{saving ? 'Đang lưu…' : 'Xác nhận thu'}</button>
+          <button className="so-save" onClick={submit} disabled={saving || amount <= 0}>{saving ? 'Đang lưu…' : 'Xác nhận thu'}</button>
         </div>
       </div>
     </>
   )
 }
 
-type CollectArgs = { customerId: string; month: string; due: number; paid: number; service: ServiceId; label: string }
+type CollectArgs = { customerId: string; customerName: string; month: string; due: number; paid: number; service: ServiceId; label: string }
 
 const SVC_LABEL: Record<string, string> = {
   [METER_SERVICE[1]]: 'Điện CS', [METER_SERVICE[2]]: 'Máy lạnh', [METER_SERVICE[3]]: 'Nước', phiql: 'Phí QL',
 }
 const SVC_ORDER: ServiceId[] = [METER_SERVICE[1], METER_SERVICE[2], METER_SERVICE[3], 'phiql']
 
-// Popup chọn khoản thu cho 1 khách: liệt kê từng (tháng × dịch vụ) còn nợ để chọn tháng lưu.
+const METHOD_LABEL: Record<string, string> = { transfer: 'CK', cash: 'TM' }
+
+// Popup chọn khoản thu cho 1 khách: liệt kê từng (tháng × dịch vụ) với lịch sử thu chi tiết.
 function CollectPickerModal({ customer, readings, customers, usages, payments, onPick, onClose }: {
   customer: Customer; readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]
   onPick: (a: CollectArgs) => void; onClose: () => void
 }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggleExpand = (key: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n })
+
   const months = Array.from(new Set(readings.map(r => r.month))).sort()
   const primary = primaryService(customer)
   const svcLabel: Record<MeterId, string> = { 1: 'Điện CS', 2: 'Máy lạnh', 3: 'Nước' }
-  type Item = { month: string; service: ServiceId; label: string; due: number; paid: number; remain: number }
+  type Item = { month: string; service: ServiceId; label: string; due: number; paid: number; remain: number; history: Payment[] }
   const items: Item[] = []
-  const paidOf = (m: string, service: ServiceId) => payments
+  const paymentsOf = (m: string, service: ServiceId) => payments
     .filter(p => p.customerId === customer.id && p.month === m && paymentService(p, primary) === service)
-    .reduce((s, p) => s + p.amount, 0)
+    .sort((a, b) => (a.paidAt || '').localeCompare(b.paidAt || ''))
 
   for (const m of months) {
     for (const id of [1, 2, 3] as MeterId[]) {
@@ -85,11 +158,16 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
       const row = meterAllocation(r, customers, usages).rows.find(rr => rr.customer.id === customer.id)
       if (!row || row.amount <= 0) continue
       const service = METER_SERVICE[id]
-      const paid = paidOf(m, service)
-      items.push({ month: m, service, label: svcLabel[id], due: row.amount, paid, remain: Math.max(0, row.amount - paid) })
+      const history = paymentsOf(m, service)
+      const paid = history.reduce((s, p) => s + p.amount, 0)
+      items.push({ month: m, service, label: svcLabel[id], due: row.amount, paid, remain: Math.max(0, row.amount - paid), history })
     }
     const fee = managementFeeOf(customer, m)
-    if (fee > 0) { const paid = paidOf(m, 'phiql'); items.push({ month: m, service: 'phiql', label: 'Phí QL', due: fee, paid, remain: Math.max(0, fee - paid) }) }
+    if (fee > 0) {
+      const history = paymentsOf(m, 'phiql')
+      const paid = history.reduce((s, p) => s + p.amount, 0)
+      items.push({ month: m, service: 'phiql', label: 'Phí QL', due: fee, paid, remain: Math.max(0, fee - paid), history })
+    }
   }
   // Còn nợ lên trước, rồi tháng mới → cũ
   items.sort((a, b) => (b.remain > 0 ? 1 : 0) - (a.remain > 0 ? 1 : 0) || b.month.localeCompare(a.month) || a.label.localeCompare(b.label))
@@ -97,41 +175,78 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
   return (
     <>
       <div className="so-backdrop" onClick={onClose} />
-      <div className="ex-modal" style={{ maxWidth: 660 }}>
+      <div className="ex-modal" style={{ maxWidth: 700 }}>
         <div className="so-header">
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Chọn khoản thu — {customer.name}</div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Khoản thu — {customer.name}</div>
           <button className="so-close" onClick={onClose}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
-        <div style={{ padding: '12px 16px', maxHeight: '60vh', overflowY: 'auto' }}>
+        <div style={{ padding: '12px 16px', maxHeight: '65vh', overflowY: 'auto' }}>
           {items.length === 0 ? (
             <div style={{ color: 'var(--muted)', fontStyle: 'italic', padding: 8 }}>Khách này chưa có khoản phải thu.</div>
           ) : (
-            <div className="dn-scroll">
-              <style>{`.cn-pick td,.cn-pick th{padding:5px 8px!important;white-space:nowrap}`}</style>
+            <>
+              <style>{`.cn-pick td,.cn-pick th{padding:5px 8px!important;white-space:nowrap}.cn-hist td{padding:3px 8px!important;font-size:10px;color:var(--muted);background:#F8FAFC}`}</style>
               <table className="dn-table cn-pick" style={{ fontSize: 11, width: '100%' }}>
                 <thead><tr>
-                  <th>Tháng</th><th>Khoản</th><th style={{ textAlign: 'right' }}>Phải thu</th>
-                  <th style={{ textAlign: 'right' }}>Đã thu</th><th style={{ textAlign: 'right' }}>Còn nợ</th><th style={{ width: 52 }}></th>
+                  <th style={{ width: 24 }}></th>
+                  <th>Tháng</th><th>Khoản</th>
+                  <th style={{ textAlign: 'right' }}>Phải thu</th>
+                  <th style={{ textAlign: 'right' }}>Đã thu</th>
+                  <th style={{ textAlign: 'right' }}>Còn nợ</th>
+                  <th style={{ width: 56 }}></th>
                 </tr></thead>
                 <tbody>
-                  {items.map((it, i) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: 600 }}>{it.month}</td>
-                      <td>{it.label}</td>
-                      <td style={{ textAlign: 'right' }}>{fmt(it.due)} đ</td>
-                      <td style={{ textAlign: 'right', color: 'var(--green)' }}>{fmt(it.paid)} đ</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(it.remain)} đ</td>
-                      <td>
-                        <button className="btn-ghost" disabled={it.remain <= 0} style={it.remain <= 0 ? { opacity: 0.45, cursor: 'default' } : undefined}
-                          onClick={() => onPick({ customerId: customer.id, month: it.month, due: it.due, paid: it.paid, service: it.service, label: `${it.label} · ${it.month}` })}>Thu</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {items.map((it, i) => {
+                    const key = `${it.month}:${it.service}`
+                    const isOpen = expanded.has(key)
+                    return (
+                      <>
+                        <tr key={key} style={{ background: it.remain <= 0 ? '#F8FBF5' : undefined }}>
+                          <td style={{ textAlign: 'center' }}>
+                            {it.history.length > 0 && (
+                              <button onClick={() => toggleExpand(key)} title={isOpen ? 'Ẩn lịch sử' : 'Xem lịch sử thu'}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--navy)', padding: 0 }}>
+                                {isOpen ? '▾' : '▸'}
+                              </button>
+                            )}
+                          </td>
+                          <td style={{ fontWeight: 600 }}>{it.month}</td>
+                          <td>{it.label}</td>
+                          <td style={{ textAlign: 'right' }}>{fmt(it.due)} đ</td>
+                          <td style={{ textAlign: 'right', color: it.paid > 0 ? 'var(--green)' : 'var(--muted2)' }}>{fmt(it.paid)} đ</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(it.remain)} đ</td>
+                          <td>
+                            <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }}
+                              onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: it.service, label: `${it.label} · ${it.month}` })}>
+                              + Thu
+                            </button>
+                          </td>
+                        </tr>
+                        {isOpen && it.history.map((p, pi) => (
+                          <tr key={`${key}-h${pi}`} className="cn-hist">
+                            <td></td>
+                            <td colSpan={2} style={{ color: '#6B7280' }}>
+                              📅 {p.paidAt || '—'}
+                              {p.paymentMethod && <span style={{ marginLeft: 6, background: p.paymentMethod === 'transfer' ? '#EEF3FA' : '#F0F8EC', color: p.paymentMethod === 'transfer' ? 'var(--navy)' : '#3A7A1A', borderRadius: 4, padding: '1px 5px', fontSize: 9.5 }}>{METHOD_LABEL[p.paymentMethod]}</span>}
+                            </td>
+                            <td></td>
+                            <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{fmt(p.amount)} đ</td>
+                            <td></td>
+                            <td style={{ maxWidth: 200, whiteSpace: 'normal', fontSize: 10, color: '#6B7280' }}>
+                              {p.bankAccount && <div>🏦 {p.bankAccount}</div>}
+                              {p.transactionRef && <div>🔖 {p.transactionRef}</div>}
+                              {p.note && <div>💬 {p.note}</div>}
+                            </td>
+                          </tr>
+                        ))}
+                      </>
+                    )
+                  })}
                 </tbody>
               </table>
-            </div>
+            </>
           )}
         </div>
         <div className="so-footer"><button className="so-cancel" style={{ marginLeft: 'auto' }} onClick={onClose}>Đóng</button></div>
@@ -308,7 +423,7 @@ export function TabCongNo({ readings, customers, usages, payments, month, meterN
           onPick={a => { setPicking(null); setCollecting(a) }} onClose={() => setPicking(null)} />
       )}
       {collecting && (
-        <PaymentModal customerId={collecting.customerId} month={collecting.month} due={collecting.due} paid={collecting.paid}
+        <PaymentModal customerId={collecting.customerId} customerName={collecting.customerName} month={collecting.month} due={collecting.due} paid={collecting.paid}
           service={collecting.service} label={collecting.label} onClose={() => setCollecting(null)} />
       )}
     </div>

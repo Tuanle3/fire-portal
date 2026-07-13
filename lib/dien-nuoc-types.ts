@@ -318,11 +318,14 @@ export interface Payment {
   customerId: string
   month: string
   amount: number
-  paidAt: string
+  paidAt: string         // ngày thanh toán YYYY-MM-DD
   note: string
-  service?: ServiceId  // dịch vụ được thu; vắng mặt = dữ liệu cũ (suy từ kind / đồng hồ gốc)
-  kind?: PaymentKind   // (cũ) 'management' ⇒ phiql; còn lại ⇒ đồng hồ gốc của khách
+  service?: ServiceId    // dịch vụ được thu; vắng mặt = dữ liệu cũ (suy từ kind / đồng hồ gốc)
+  kind?: PaymentKind     // (cũ) 'management' ⇒ phiql; còn lại ⇒ đồng hồ gốc của khách
   createdAt: string
+  paymentMethod?: 'transfer' | 'cash'  // chuyển khoản / tiền mặt
+  bankAccount?: string   // tài khoản ngân hàng nhận tiền
+  transactionRef?: string // mã giao dịch / số chứng từ
 }
 
 // Dịch vụ mà 1 khoản thu áp vào: ưu tiên service; nếu cũ thì kind='management' ⇒ phiql, còn lại ⇒ đồng hồ gốc.

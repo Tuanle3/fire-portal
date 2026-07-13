@@ -128,14 +128,17 @@ export function subscribeUsage(cb: (rows: CustomerUsage[]) => void): Unsubscribe
 function parsePayment(id: string, d: Record<string, unknown>): Payment {
   return {
     id,
-    customerId: (d.customerId as string) ?? '',
-    month:      (d.month as string) ?? '',
-    amount:     Number(d.amount ?? 0),
-    paidAt:     (d.paidAt as string) ?? '',
-    note:       (d.note as string) ?? '',
-    service:    (d.service as Payment['service']) ?? undefined,
-    kind:       (d.kind as Payment['kind']) ?? undefined,
-    createdAt:  (d.createdAt as string) ?? '',
+    customerId:      (d.customerId as string) ?? '',
+    month:           (d.month as string) ?? '',
+    amount:          Number(d.amount ?? 0),
+    paidAt:          (d.paidAt as string) ?? '',
+    note:            (d.note as string) ?? '',
+    service:         (d.service as Payment['service']) ?? undefined,
+    kind:            (d.kind as Payment['kind']) ?? undefined,
+    createdAt:       (d.createdAt as string) ?? '',
+    paymentMethod:   (d.paymentMethod as Payment['paymentMethod']) ?? undefined,
+    bankAccount:     (d.bankAccount as string) ?? undefined,
+    transactionRef:  (d.transactionRef as string) ?? undefined,
   }
 }
 
