@@ -134,106 +134,105 @@ const SVC_ORDER: ServiceId[] = [METER_SERVICE[1], METER_SERVICE[2], METER_SERVIC
 
 const METHOD_LABEL: Record<string, string> = { transfer: 'CK', cash: 'TM' }
 
-// Popup chọn khoản thu cho 1 khách: liệt kê từng (tháng × dịch vụ) với lịch sử thu chi tiết.
+// Popup chọn tháng thu cho 1 khách — 1 dòng/tháng, tổng phải thu (không tách dịch vụ).
 function CollectPickerModal({ customer, readings, customers, usages, payments, onPick, onClose }: {
   customer: Customer; readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]
   onPick: (a: CollectArgs) => void; onClose: () => void
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const toggleExpand = (key: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n })
+  const toggleExpand = (m: string) => setExpanded(prev => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n })
 
   const months = Array.from(new Set(readings.map(r => r.month))).sort()
   const primary = primaryService(customer)
-  const svcLabel: Record<MeterId, string> = { 1: 'Điện CS', 2: 'Máy lạnh', 3: 'Nước' }
-  type Item = { month: string; service: ServiceId; label: string; due: number; paid: number; remain: number; history: Payment[] }
-  const items: Item[] = []
-  const paymentsOf = (m: string, service: ServiceId) => payments
-    .filter(p => p.customerId === customer.id && p.month === m && paymentService(p, primary) === service)
-    .sort((a, b) => (a.paidAt || '').localeCompare(b.paidAt || ''))
 
+  // Phải thu: tổng tất cả dịch vụ trong tháng
+  const dueByMonth = new Map<string, number>()
   for (const m of months) {
+    let due = 0
     for (const id of [1, 2, 3] as MeterId[]) {
       const r = readings.find(x => x.meterId === id && x.month === m)
       if (!r) continue
       const row = meterAllocation(r, customers, usages).rows.find(rr => rr.customer.id === customer.id)
-      if (!row || row.amount <= 0) continue
-      const service = METER_SERVICE[id]
-      const history = paymentsOf(m, service)
-      const paid = history.reduce((s, p) => s + p.amount, 0)
-      items.push({ month: m, service, label: svcLabel[id], due: row.amount, paid, remain: Math.max(0, row.amount - paid), history })
+      if (row && row.amount > 0) due += row.amount
     }
-    const fee = managementFeeOf(customer, m)
-    if (fee > 0) {
-      const history = paymentsOf(m, 'phiql')
-      const paid = history.reduce((s, p) => s + p.amount, 0)
-      items.push({ month: m, service: 'phiql', label: 'Phí QL', due: fee, paid, remain: Math.max(0, fee - paid), history })
-    }
+    due += managementFeeOf(customer, m)
+    if (due > 0) dueByMonth.set(m, due)
   }
-  // Còn nợ lên trước, rồi tháng mới → cũ
-  items.sort((a, b) => (b.remain > 0 ? 1 : 0) - (a.remain > 0 ? 1 : 0) || b.month.localeCompare(a.month) || a.label.localeCompare(b.label))
+
+  // Đã thu: tổng tất cả khoản thu trong tháng (không tách dịch vụ)
+  const histByMonth = new Map<string, Payment[]>()
+  for (const p of payments.filter(p => p.customerId === customer.id)) {
+    if (!histByMonth.has(p.month)) histByMonth.set(p.month, [])
+    histByMonth.get(p.month)!.push(p)
+  }
+  for (const [, arr] of histByMonth) arr.sort((a, b) => (a.paidAt || '').localeCompare(b.paidAt || ''))
+
+  type Item = { month: string; due: number; paid: number; remain: number; history: Payment[] }
+  const items: Item[] = Array.from(dueByMonth.entries()).map(([m, due]) => {
+    const history = histByMonth.get(m) ?? []
+    const paid = history.reduce((s, p) => s + p.amount, 0)
+    return { month: m, due, paid, remain: Math.max(0, due - paid), history }
+  }).sort((a, b) => (b.remain > 0 ? 1 : 0) - (a.remain > 0 ? 1 : 0) || b.month.localeCompare(a.month))
 
   return (
     <>
       <div className="so-backdrop" onClick={onClose} />
-      <div className="ex-modal" style={{ maxWidth: 700 }}>
+      <div className="ex-modal" style={{ maxWidth: 560 }}>
         <div className="so-header">
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Khoản thu — {customer.name}</div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Thu tiền — {customer.name}</div>
           <button className="so-close" onClick={onClose}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
-        <div style={{ padding: '12px 16px', maxHeight: '65vh', overflowY: 'auto' }}>
+        <div style={{ padding: '10px 14px', maxHeight: '65vh', overflowY: 'auto' }}>
           {items.length === 0 ? (
             <div style={{ color: 'var(--muted)', fontStyle: 'italic', padding: 8 }}>Khách này chưa có khoản phải thu.</div>
           ) : (
             <>
-              <style>{`.cn-pick td,.cn-pick th{padding:4px 7px!important;white-space:nowrap;font-size:11px}`}</style>
+              <style>{`.cn-pick td,.cn-pick th{padding:5px 10px!important;white-space:nowrap;font-size:12px}`}</style>
               <table className="dn-table cn-pick" style={{ width: '100%' }}>
                 <thead><tr>
-                  <th>Tháng</th><th>Khoản</th>
+                  <th>Tháng</th>
                   <th style={{ textAlign: 'right' }}>Phải thu (đ)</th>
                   <th style={{ textAlign: 'right' }}>Đã thu (đ)</th>
                   <th style={{ textAlign: 'right' }}>Còn nợ (đ)</th>
-                  <th style={{ width: 52, textAlign: 'center' }}></th>
+                  <th style={{ width: 64, textAlign: 'center' }}></th>
                 </tr></thead>
                 <tbody>
                   {items.map((it) => {
-                    const key = `${it.month}:${it.service}`
-                    const isOpen = expanded.has(key)
+                    const isOpen = expanded.has(it.month)
                     return (
                       <>
-                        <tr key={key} style={{ background: it.remain <= 0 ? '#F8FBF5' : undefined }}>
+                        <tr key={it.month} style={{ background: it.remain <= 0 ? '#F8FBF5' : undefined }}>
                           <td style={{ fontWeight: 600 }}>
                             {it.history.length > 0 && (
-                              <button onClick={() => toggleExpand(key)} title={isOpen ? 'Ẩn lịch sử' : 'Xem lịch sử thu'}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--navy)', padding: '0 3px 0 0', verticalAlign: 'middle' }}>
+                              <button onClick={() => toggleExpand(it.month)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--navy)', padding: '0 4px 0 0' }}>
                                 {isOpen ? '▾' : '▸'}
                               </button>
                             )}
                             {it.month}
                           </td>
-                          <td>{it.label}</td>
                           <td style={{ textAlign: 'right' }}>{fmt(it.due)}</td>
                           <td style={{ textAlign: 'right', color: it.paid > 0 ? 'var(--green)' : 'var(--muted2)' }}>{fmt(it.paid)}</td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(it.remain)}</td>
                           <td style={{ textAlign: 'center' }}>
-                            <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }}
-                              onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: it.service, label: `${it.label} · ${it.month}` })}>
+                            <button className="btn-ghost" style={{ fontSize: 12, padding: '3px 10px' }}
+                              onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: primary, label: it.month })}>
                               + Thu
                             </button>
                           </td>
                         </tr>
                         {isOpen && it.history.map((p, pi) => (
-                          <tr key={`${key}-h${pi}`} style={{ background: '#F4F7FF' }}>
-                            <td colSpan={2} style={{ color: '#6B7280', fontSize: 10, paddingLeft: '18px !important' }}>
+                          <tr key={`${it.month}-h${pi}`} style={{ background: '#F4F7FF' }}>
+                            <td colSpan={2} style={{ color: '#6B7280', fontSize: 10.5, paddingLeft: 24 }}>
                               📅 {p.paidAt || '—'}
                               {p.paymentMethod && <span style={{ marginLeft: 5, background: p.paymentMethod === 'transfer' ? '#EEF3FA' : '#F0F8EC', color: p.paymentMethod === 'transfer' ? 'var(--navy)' : '#3A7A1A', borderRadius: 4, padding: '1px 4px' }}>{METHOD_LABEL[p.paymentMethod]}</span>}
-                              {p.bankAccount && <span style={{ marginLeft: 5, color: '#6B7280' }}>· {p.bankAccount}</span>}
+                              {p.bankAccount && <span style={{ marginLeft: 5 }}>· {p.bankAccount}</span>}
                               {p.transactionRef && <span style={{ marginLeft: 5, color: '#9B59B6' }}>#{p.transactionRef}</span>}
                               {p.note && <span style={{ marginLeft: 5, fontStyle: 'italic' }}>{p.note}</span>}
                             </td>
-                            <td></td>
-                            <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 600, fontSize: 10 }}>{fmt(p.amount)}</td>
+                            <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{fmt(p.amount)}</td>
                             <td></td><td></td>
                           </tr>
                         ))}
@@ -297,22 +296,18 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
     const fee = managementFeeOf(c, m)
     if (fee > 0) { const cell = ensureCell(ensureRow(c), m); ensureSvc(cell, 'phiql').due += fee; cell.due += fee }
   }
-  // Đã thu theo (tháng × dịch vụ)
-  const custById = new Map(customers.map(c => [c.id, c]))
+  // Đã thu theo tháng (tổng, không tách dịch vụ)
   for (const p of payments) {
     const R = rowMap.get(p.customerId); if (!R) continue
     const cell = R.m.get(p.month); if (!cell) continue
-    const sv = cell.svc.get(paymentService(p, primaryService(custById.get(p.customerId)!)))
-    if (sv) sv.paid += p.amount
+    cell.paid += p.amount
   }
   // Chốt còn nợ + tổng + đếm số tháng chưa thu đủ
   for (const R of rowMap.values()) {
     for (const cell of R.m.values()) {
-      let rem = 0
-      for (const sv of cell.svc.values()) rem += Math.max(0, sv.due - sv.paid)
-      cell.remain = rem; cell.paid = cell.due - rem
-      R.totalDue += cell.due; R.totalRemain += rem
-      if (cell.due > 0 && rem > 0) R.unpaid += 1
+      cell.remain = Math.max(0, cell.due - cell.paid)
+      R.totalDue += cell.due; R.totalRemain += cell.remain
+      if (cell.due > 0 && cell.remain > 0) R.unpaid += 1
     }
     R.totalPaid = R.totalDue - R.totalRemain
   }
