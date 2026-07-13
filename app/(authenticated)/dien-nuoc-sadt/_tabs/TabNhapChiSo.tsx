@@ -564,7 +564,7 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
 
           {/* Phần 2: Bảng Sơn An thu hộ (khách thuê) theo khung giờ */}
           <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-            <div style={{ padding: '6px 11px', background: '#8A5A12', color: '#fff', fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>① Sơn An thu hộ (khách thuê) — theo khung giờ</div>
+            <div style={{ padding: '6px 11px', background: '#8A5A12', color: '#fff', fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>② Phí Sơn An chịu theo đồng hồ điện — theo khung giờ</div>
             <div style={{ padding: '8px 11px', flex: 1 }}>
               <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5 }}>
                 Chung 3 tầng TM: <b style={{ color: 'var(--navy)' }}>{fmtKwh(split.commonPoolKwh)} kWh</b>
