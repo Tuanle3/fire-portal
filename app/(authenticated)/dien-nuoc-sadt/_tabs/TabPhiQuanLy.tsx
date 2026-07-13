@@ -139,7 +139,7 @@ function PhiCURow({ c, month, months }: { c: Customer; month: string; months: st
         {status === 'accrue' && <div style={{ fontSize: 9.5, color: '#8A5A12', fontWeight: 700 }}>Tính dồn · thu bù</div>}
       </td>
       <td className="dn-sticky-col dn-sticky-btn" style={{ verticalAlign: 'top' }}>
-        <button className="btn-ghost" onClick={save} disabled={!dirty || saving} title={dirty ? `Lưu mức phí & trạng thái từ tháng ${month}` : 'Chưa có thay đổi'}>{saving ? '…' : 'Lưu'}</button>
+        <button className="btn-ghost" onClick={save} disabled={saving} title={`Lưu mức phí & trạng thái tháng ${month}`}>{saving ? '…' : 'Lưu'}</button>
       </td>
       {months.map(m => {
         const isCur = m === month
@@ -161,6 +161,7 @@ function PhiCURow({ c, month, months }: { c: Customer; month: string; months: st
 export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; month: string }) {
   const [floorFilter, setFloorFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'' | FeeStatus>('')
+  const [savingAll, setSavingAll] = useState(false)
 
   const feeCustomers = useMemo(() => customers.filter(c => c.hasManagementFee), [customers])
 
@@ -195,6 +196,22 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     })
   }, [floorCustomers, statusFilter, month])
 
+  const saveAll = async () => {
+    setSavingAll(true)
+    await Promise.all(displayed.map(c => {
+      const inact = new Set(c.feeInactiveMonths ?? [])
+      const accr = new Set(c.feeAccruedMonths ?? [])
+      const conf = new Set(c.feeConfirmedMonths ?? [])
+      inact.delete(month); accr.delete(month)
+      const st = feeStatus(c, month)
+      if (st === 'none') { inact.add(month); conf.delete(month) }
+      else if (st === 'accrue') { accr.add(month); conf.add(month) }
+      else { conf.add(month) }
+      return saveCustomer({ ...c, feeInactiveMonths: Array.from(inact).sort(), feeAccruedMonths: Array.from(accr).sort(), feeConfirmedMonths: Array.from(conf).sort() })
+    }))
+    setSavingAll(false)
+  }
+
   // Tổng theo tháng (đã lưu) + lũy kế cộng dồn cho hàng tổng.
   const monthTotals = months.map(m => displayed.reduce((s, c) => s + managementFeeOf(c, m), 0))
   const cumTotals = monthTotals.reduce<number[]>((acc, v) => [...acc, (acc.length ? acc[acc.length - 1] : 0) + v], [])
@@ -223,6 +240,7 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
             </select>
           </span>
           <button className="btn-ghost" onClick={() => exportPhiQuanLy(displayed, month)}>⬇ Xuất Excel</button>
+          <button className="btn-primary" onClick={saveAll} disabled={savingAll || displayed.length === 0} title={`Lưu xác nhận tháng ${month} cho tất cả ${displayed.length} khách đang hiển thị`}>{savingAll ? '…' : `✓ Lưu tất cả (${displayed.length})`}</button>
         </span>
       </div>
       <div className="sc-body">
