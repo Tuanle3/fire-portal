@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, ServiceId,
-  meterAllocation, managementFeeOf, METER_SERVICE, primaryService, paymentService,
+  meterAllocation, METER_SERVICE, primaryService, paymentService,
 } from '@/lib/dien-nuoc-types'
 import { savePayment, deletePayment, saveCustomer } from '@/lib/dien-nuoc-store'
 import { exportCongNo } from '@/lib/dien-nuoc-excel'
@@ -176,7 +176,7 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, c
       const row = meterAllocation(r, customers, usages).rows.find(rr => rr.customer.id === customer.id)
       if (row && row.amount > 0) due += row.amount
     }
-    if ((customer.feeConfirmedMonths ?? []).includes(m)) due += managementFeeOf(customer, m)
+    const phiql = customer.feeByMonth?.[m]; if (phiql) due += phiql
     if (due > 0) dueByMonth.set(m, due)
   }
 
@@ -375,10 +375,9 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
       ensureSvc(cell, service).due += row.amount; cell.due += row.amount
     }
   }
-  // Phí quản lý — chỉ tính các tháng đã bấm Lưu (feeConfirmedMonths)
+  // Phí quản lý — chỉ tính các tháng đã nhập tay và Lưu trong tab Phí quản lý (feeByMonth)
   for (const c of customers) for (const m of months) {
-    if (!(c.feeConfirmedMonths ?? []).includes(m)) continue
-    const fee = managementFeeOf(c, m)
+    const fee = c.feeByMonth?.[m] ?? 0
     if (fee > 0) { const cell = ensureCell(ensureRow(c), m); ensureSvc(cell, 'phiql').due += fee; cell.due += fee }
   }
   // Đã thu theo tháng (tổng, không tách dịch vụ)

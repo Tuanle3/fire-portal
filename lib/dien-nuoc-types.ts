@@ -195,7 +195,8 @@ export interface Customer {
   // Mặc định (không nằm trong list nào) = "Có tính phí" (thu trong tháng).
   feeInactiveMonths?: string[]  // Các tháng KHÔNG tính phí quản lý (phí = 0).
   feeAccruedMonths?: string[]   // Các tháng "tính dồn" (chưa có khách thuê nhưng vẫn tính phí cho chủ ki-ốt, thu bù sau).
-  feeConfirmedMonths?: string[] // Các tháng đã bấm Lưu trong tab Phí quản lý → mới tính vào công nợ.
+  feeConfirmedMonths?: string[] // (cũ — không dùng nữa, giữ để không mất data)
+  feeByMonth?: Record<string, number> // Phí quản lý nhập tay từng tháng (YYYY-MM → đ). Tháng nào có entry thì mới tính vào công nợ.
   oldDebt?: number              // Công nợ cũ trước khi dùng hệ thống (đ)
   createdAt: string
 }
