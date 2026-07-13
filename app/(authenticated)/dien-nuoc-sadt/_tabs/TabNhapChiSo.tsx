@@ -483,9 +483,9 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
 
         {/* Bố cục 3 phần cùng hàng (desktop). iPad: 2 cột + bảng thống kê full. Điện thoại: xếp dọc. */}
         <style>{`
-          .dh1-3col { display: grid; grid-template-columns: minmax(250px, 0.7fr) 330px minmax(0, 2fr); gap: 12px; align-items: stretch; margin-bottom: 12px; }
+          .dh1-3col { display: grid; grid-template-columns: minmax(230px, 0.7fr) 390px minmax(0, 2fr); gap: 12px; align-items: stretch; margin-bottom: 12px; }
           .dh1-3col > div { min-width: 0; }
-          /* Bảng Sơn An thu hộ: nén padding + không xuống dòng ⇒ cột giữa (max-content) vừa khít nội dung */
+          /* Bảng Sơn An thu hộ: nén padding + không xuống dòng, đủ chỗ hiện hết cột Thành tiền */
           .dh1-satable td, .dh1-satable th { padding: 6px 9px !important; white-space: nowrap; }
           @media (max-width: 1200px) {
             .dh1-3col { grid-template-columns: 1fr 1fr; }
