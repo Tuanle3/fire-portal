@@ -176,7 +176,7 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, c
       const row = meterAllocation(r, customers, usages).rows.find(rr => rr.customer.id === customer.id)
       if (row && row.amount > 0) due += row.amount
     }
-    if (m < currentMonth) due += managementFeeOf(customer, m)  // chỉ tính phí QL tháng đã Lưu
+    if ((customer.feeConfirmedMonths ?? []).includes(m)) due += managementFeeOf(customer, m)
     if (due > 0) dueByMonth.set(m, due)
   }
 
@@ -375,9 +375,9 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
       ensureSvc(cell, service).due += row.amount; cell.due += row.amount
     }
   }
-  // Phí quản lý — chỉ tính các tháng đã Lưu (trước tháng đang chọn)
+  // Phí quản lý — chỉ tính các tháng đã bấm Lưu (feeConfirmedMonths)
   for (const c of customers) for (const m of months) {
-    if (m >= month) continue
+    if (!(c.feeConfirmedMonths ?? []).includes(m)) continue
     const fee = managementFeeOf(c, m)
     if (fee > 0) { const cell = ensureCell(ensureRow(c), m); ensureSvc(cell, 'phiql').due += fee; cell.due += fee }
   }

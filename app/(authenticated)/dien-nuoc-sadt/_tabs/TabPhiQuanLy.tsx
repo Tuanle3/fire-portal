@@ -96,10 +96,17 @@ function PhiCURow({ c, month, months }: { c: Customer; month: string; months: st
     if (draft !== configuredUnit) cust = upsertPhiqlPriceForMonth(cust, month, draft, isArea)
     const inact = new Set(cust.feeInactiveMonths ?? [])
     const accr = new Set(cust.feeAccruedMonths ?? [])
+    const conf = new Set(cust.feeConfirmedMonths ?? [])
     inact.delete(month); accr.delete(month)
-    if (status === 'none') inact.add(month)
-    else if (status === 'accrue') accr.add(month)
-    cust = { ...cust, feeInactiveMonths: Array.from(inact).sort(), feeAccruedMonths: Array.from(accr).sort() }
+    if (status === 'none') { inact.add(month); conf.delete(month) }
+    else if (status === 'accrue') { accr.add(month); conf.add(month) }
+    else { conf.add(month) }  // 'charge'
+    cust = {
+      ...cust,
+      feeInactiveMonths: Array.from(inact).sort(),
+      feeAccruedMonths: Array.from(accr).sort(),
+      feeConfirmedMonths: Array.from(conf).sort(),
+    }
     await saveCustomer(cust)
     setSaving(false)
   }
