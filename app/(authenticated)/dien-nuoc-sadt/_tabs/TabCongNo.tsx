@@ -7,6 +7,7 @@ import {
 import { savePayment } from '@/lib/dien-nuoc-store'
 import { exportCongNo } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
+import { PhieuThongBaoModal } from './PhieuThongBao'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN')
 
@@ -253,9 +254,9 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, o
 // Bảng công nợ CHI TIẾT theo từng tháng — 1 bảng tổng (không tách đồng hồ).
 // Mỗi khách 1 dòng; mỗi tháng 1 cột hiện Phải thu / Còn nợ; nút +/- mỗi tháng để bung chi tiết theo dịch vụ.
 // Cột tổng: Phải thu / Đã thu / Còn nợ + ghi chú tự đếm số tháng chưa thu.
-function CongNoMultiMonth({ readings, customers, usages, payments, month, meterNames, onCollect }: {
+function CongNoMultiMonth({ readings, customers, usages, payments, month, meterNames, onCollect, onPrint }: {
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]; month: string
-  meterNames: Record<number, string>; onCollect: (c: Customer) => void
+  meterNames: Record<number, string>; onCollect: (c: Customer) => void; onPrint: (c: Customer) => void
 }) {
   const [open, setOpen] = useState<Set<string>>(new Set())
   const toggle = (m: string) => setOpen(prev => { const n = new Set(prev); if (n.has(m)) n.delete(m); else n.add(m); return n })
@@ -316,7 +317,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
   const rows = Array.from(rowMap.values()).filter(r => r.totalDue > 0)
     .sort((x, y) => (x.c.group?.trim() || 'zzz').localeCompare(y.c.group?.trim() || 'zzz', 'vi', cmp) || x.c.name.localeCompare(y.c.name, 'vi', cmp))
 
-  const leadCols = 7 // Khách · Nhóm · Tổng phải thu · Tổng đã thu · Tổng còn nợ · Ghi chú · Thu tiền
+  const leadCols = 8 // Khách · Nhóm · Tổng phải thu · Tổng đã thu · Tổng còn nợ · Ghi chú · Thu tiền · In phiếu
   const sum = (fn: (r: Row) => number) => rows.reduce((s, r) => s + fn(r), 0)
 
   return (
@@ -334,7 +335,8 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
             <th style={{ textAlign: 'right' }}>Tổng đã thu</th>
             <th style={{ textAlign: 'right' }}>Tổng còn nợ</th>
             <th style={{ textAlign: 'right' }}>Ghi chú</th>
-            <th style={{ width: 92 }}></th>
+            <th style={{ width: 80 }}></th>
+            <th style={{ width: 72 }}></th>
             {months.map(m => (
               <th key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap', background: m === month ? '#E0EDFA' : undefined }}>
                 <button onClick={() => toggle(m)} title={open.has(m) ? 'Thu gọn dịch vụ' : 'Xem chi tiết theo dịch vụ'}
@@ -356,6 +358,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
                 <td style={{ textAlign: 'right', fontWeight: 700, color: R.totalRemain > 0 ? '#DC2626' : 'var(--green)', whiteSpace: 'nowrap' }}>{fmt(R.totalRemain)} đ</td>
                 <td style={{ textAlign: 'right' }}>{R.unpaid > 0 ? <span className="badge badge-red">{R.unpaid} tháng</span> : <span className="badge badge-green">Đủ</span>}</td>
                 <td><button className="btn-ghost" onClick={() => onCollect(R.c)}>Thu tiền</button></td>
+                <td><button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => onPrint(R.c)}>🖨️ In phiếu</button></td>
                 {months.map(m => {
                   const cell = R.m.get(m)
                   const bg = m === month ? '#F2F7FD' : undefined
@@ -385,7 +388,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
               <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(sum(r => r.totalDue))} đ</td>
               <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--green)' }}>{fmt(sum(r => r.totalPaid))} đ</td>
               <td style={{ textAlign: 'right', fontWeight: 700, color: sum(r => r.totalRemain) > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(sum(r => r.totalRemain))} đ</td>
-              <td></td><td></td>
+              <td></td><td></td><td></td>
               {months.map(m => {
                 const mrem = sum(r => r.m.get(m)?.remain ?? 0)
                 return <td key={m} style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', background: m === month ? '#D6E6F6' : undefined, color: mrem > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(mrem)}</td>
@@ -405,10 +408,11 @@ export function TabCongNo({ readings, customers, usages, payments, month, meterN
 }) {
   const [collecting, setCollecting] = useState<CollectArgs | null>(null)
   const [picking, setPicking] = useState<Customer | null>(null)
+  const [printing, setPrinting] = useState<Customer | null>(null)
 
   return (
     <div>
-      <CongNoMultiMonth readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} onCollect={setPicking} />
+      <CongNoMultiMonth readings={readings} customers={customers} usages={usages} payments={payments} month={month} meterNames={meterNames} onCollect={setPicking} onPrint={setPrinting} />
       {picking && (
         <CollectPickerModal customer={picking} readings={readings} customers={customers} usages={usages} payments={payments}
           onPick={a => { setPicking(null); setCollecting(a) }} onClose={() => setPicking(null)} />
@@ -416,6 +420,9 @@ export function TabCongNo({ readings, customers, usages, payments, month, meterN
       {collecting && (
         <PaymentModal customerId={collecting.customerId} customerName={collecting.customerName} month={collecting.month} due={collecting.due} paid={collecting.paid}
           service={collecting.service} label={collecting.label} onClose={() => setCollecting(null)} />
+      )}
+      {printing && (
+        <PhieuThongBaoModal customer={printing} readings={readings} usages={usages} month={month} onClose={() => setPrinting(null)} />
       )}
     </div>
   )
