@@ -552,15 +552,13 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
               <div className="dn-scroll">
               <table className="dn-table" style={{ fontSize: 10.5 }}>
                 <thead><tr>
-                  <th>Khung giờ</th><th style={{ textAlign: 'right' }}>Chung</th><th style={{ textAlign: 'right' }}>Công ty</th>
+                  <th>Khung giờ</th>
                   <th style={{ textAlign: 'right' }}>Tổng kWh</th><th style={{ textAlign: 'right' }}>Đơn giá</th><th style={{ textAlign: 'right' }}>Thành tiền</th>
                 </tr></thead>
                 <tbody>
                   {split.bands.map(b => (
                     <tr key={b.key}>
                       <td>{BAND_LABELS[b.key]}</td>
-                      <td style={{ textAlign: 'right' }}>{fmtKwh(b.commonKwh)}</td>
-                      <td style={{ textAlign: 'right' }}>{fmtKwh(b.companyKwh)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtKwh(b.kwh)}</td>
                       <td style={{ textAlign: 'right' }}>{fmtDec(b.price)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(b.amount)}</td>
@@ -568,9 +566,9 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr><td colSpan={5} style={{ textAlign: 'right', color: 'var(--muted)' }}>Chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(split.sonAnSubtotal)}</td></tr>
-                  <tr><td colSpan={5} style={{ textAlign: 'right', color: 'var(--muted)' }}>VAT ({split.vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(split.sonAnVat)}</td></tr>
-                  <tr style={{ background: '#FFF4E0' }}><td colSpan={5} style={{ textAlign: 'right', fontWeight: 800, color: '#8A5A12' }}>Sơn An thu hộ</td><td style={{ textAlign: 'right', fontWeight: 800, color: '#8A5A12' }}>{fmt(split.sonAnTotal)} đ</td></tr>
+                  <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>Chưa VAT</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(split.sonAnSubtotal)}</td></tr>
+                  <tr><td colSpan={3} style={{ textAlign: 'right', color: 'var(--muted)' }}>VAT ({split.vatPercent || 0}%)</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(split.sonAnVat)}</td></tr>
+                  <tr style={{ background: '#FFF4E0' }}><td colSpan={3} style={{ textAlign: 'right', fontWeight: 800, color: '#8A5A12' }}>Sơn An thu hộ</td><td style={{ textAlign: 'right', fontWeight: 800, color: '#8A5A12' }}>{fmt(split.sonAnTotal)} đ</td></tr>
                 </tfoot>
               </table>
               </div>
