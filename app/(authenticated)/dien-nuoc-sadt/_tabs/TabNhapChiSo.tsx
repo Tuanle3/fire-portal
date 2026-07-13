@@ -332,28 +332,45 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
 //  • BQT chịu = điện cư dân dùng chung CÓ đo đếm = Σ(ghi tầng − khách) các khu KHÔNG phải 3 tầng TM.
 //  • Sơn An chịu = phần còn lại chưa quy được = hao hụt/thất thoát. ①+②+③ = tổng tiền đồng hồ 1.
 interface Dh1Split3 {
-  total: number; tenant: number; bqtBorne: number; sonanBorne: number                 // tiền (đ)
-  totalKwh: number; commonKwh: number; companyKwh: number                              // kWh chi tiết
-  tenantKwh: number; bqtKwh: number; sonanKwh: number                                  // kWh 3 bên
+  total: number
+  sonanRevenue: number    // tiền thực thu từ khách ki ốt + công ty (theo đơn giá của họ)
+  sonanEVNCost: number    // tiền Sơn An trả EVN cho phần kWh của khách (theo đơn giá EVN)
+  sonanProfit: number     // chênh lệch Sơn An hưởng = sonanRevenue − sonanEVNCost
+  bqtBorne: number        // BQT chịu = tổng đồng hồ − sonanEVNCost
+  totalKwh: number; commonKwh: number; companyKwh: number
+  tenantKwh: number; bqtKwh: number
 }
+// Tỷ lệ phân bổ khung giờ cho ki ốt (chung 3 tầng TM) khi tính chi phí EVN
+const KIOSK_BAND_RATIO = { caoDiem: 0.15, thapDiem: 0.35, binhThuong: 0.50 } as const
 function splitDh1ThreeWay(split: ReturnType<typeof computeLightingSplit>, reading: MeterReading, customers: Customer[], usages: CustomerUsage[]): Dh1Split3 {
   const total = split.meterTotal
-  const tenant = Math.min(split.sonAnTotal, total)     // Sơn An thu hộ (khách thuê)
-  const remaining = Math.max(0, total - tenant)        // = phần Ban quản trị (gồm cả hao hụt)
   const vatMul = 1 + (reading.vatPercent || 0) / 100
+
+  // ① Sơn An thu hộ = tiền thực tế thu từ khách (theo đơn giá cấu hình từng khách)
+  const sonanRevenue = meterAllocation(reading, customers, usages).allocated
+
+  // ② Sơn An chịu phí EVN = tiền EVN tính cho phần kWh của ki ốt + công ty
+  // Ki ốt (chung 3 tầng TM): phân bổ 15% CĐ / 35% TĐ / 50% BT × đơn giá EVN × VAT
+  const commonKwh = split.commonPoolKwh
+  const kioskEVNCost = (['caoDiem', 'thapDiem', 'binhThuong'] as const).reduce((s, k) =>
+    s + commonKwh * KIOSK_BAND_RATIO[k] * (reading.bands[k]?.donGia || 0), 0) * vatMul
+  // Công ty (ownMeter): kWh thực từng khung giờ × đơn giá EVN × VAT
+  const companyEVNCost = split.companies.reduce((s, co) =>
+    s + (['caoDiem', 'thapDiem', 'binhThuong'] as const).reduce((ss, k) =>
+      ss + co[k] * (reading.bands[k]?.donGia || 0), 0) * vatMul, 0)
+  const sonanEVNCost = kioskEVNCost + companyEVNCost
+
+  const sonanProfit = sonanRevenue - sonanEVNCost
+  const bqtBorne = Math.max(0, total - sonanEVNCost)
+
+  // kWh thông tin (không dùng để tính tiền)
+  const companyKwh = split.companies.reduce((s, co) => s + co.total, 0)
+  const tenantKwh = commonKwh + companyKwh
+  const totKwh = BAND_KEYS.reduce((s, k) => s + (reading.bands[k]?.kwh || 0), 0)
   const bqtc = computeBqt(reading, customers, usages, reading.bqtRatio ?? DEFAULT_BQT_RATIO)
   const commonGroups = new Set((reading.floorReadings ?? []).filter(f => f.commonTM).map(f => (f.group || '').trim()))
   const bqtKwh = bqtc.floors.filter(fr => !commonGroups.has((fr.group || '').trim())).reduce((s, fr) => s + fr.bqtKwh, 0)
-  const totKwh = BAND_KEYS.reduce((s, k) => s + (reading.bands[k]?.kwh || 0), 0)
-  const avg = totKwh > 0 ? meterSubtotal(reading.bands) / totKwh : 0
-  const bqtBorne = Math.min(bqtKwh * avg * vatMul, remaining)   // BQT chịu (cư dân đo đếm)
-  const sonanBorne = Math.max(0, remaining - bqtBorne)          // Sơn An chịu (hao hụt)
-  // kWh tương ứng 3 bên (cùng cách chia): khách thuê = 3 tầng TM chung + công ty; hao hụt = phần dôi
-  const commonKwh = split.commonPoolKwh
-  const companyKwh = split.companies.reduce((s, co) => s + co.total, 0)
-  const tenantKwh = commonKwh + companyKwh
-  const sonanKwh = Math.max(0, totKwh - tenantKwh - bqtKwh)
-  return { total, tenant, bqtBorne, sonanBorne, totalKwh: totKwh, commonKwh, companyKwh, tenantKwh, bqtKwh, sonanKwh }
+  return { total, sonanRevenue, sonanEVNCost, sonanProfit, bqtBorne, totalKwh: totKwh, commonKwh, companyKwh, tenantKwh, bqtKwh }
 }
 
 // ── Đồng hồ 1: tách "Sơn An thu hộ" & "Ban quản trị" (theo sheet Điện chiếu sáng) ──
@@ -368,9 +385,8 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
   // Chia 3 bên: Sơn An thu hộ (khách thuê) · Sơn An chịu (hao hụt) · BQT chịu (cư dân đo đếm)
   const split3 = splitDh1ThreeWay(split, reading, customers, usages)
   const tot3 = split.meterTotal
-  const tenantPct = tot3 > 0 ? Math.round(split3.tenant / tot3 * 100) : 0
-  const sonanPct = tot3 > 0 ? Math.round(split3.sonanBorne / tot3 * 100) : 0
-  const bqtBornePct = Math.max(0, 100 - tenantPct - sonanPct)
+  const evnCostPct = tot3 > 0 ? Math.round(split3.sonanEVNCost / tot3 * 100) : 0
+  const bqtBornePct = Math.max(0, 100 - evnCostPct)
   const groupSuggestions = Array.from(new Set(customers.filter(c => customerHasService(c, 'dh1') && c.active).map(c => (c.group || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'))
 
   const [dragIdx, setDragIdx] = useState<number | null>(null)  // kéo-thả đổi vị trí khu
@@ -503,40 +519,43 @@ function BqtSection({ reading, readings, month, customers, usages, floorReadings
             <div style={{ background: '#FFF9EC', border: '1px solid #F1E2BD', borderRadius: 10, overflow: 'hidden' }}>
               <div style={{ padding: '7px 11px', background: '#FBEFCF', color: '#8A5A12', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', borderBottom: '1px solid #F1E2BD' }}>📘 Tóm tắt cách tính</div>
               <div style={{ padding: '9px 11px', fontSize: 11.5, lineHeight: 1.6, color: 'var(--txt2)' }}>
-                <div style={{ marginBottom: 4 }}><b style={{ color: '#8A5A12' }}>① Sơn An thu hộ (khách thuê)</b> = 3 tầng TM chung (chia tỷ lệ giờ) + công ty đồng hồ riêng × đơn giá + VAT.</div>
-                <div style={{ marginBottom: 4 }}><b style={{ color: 'var(--navy)' }}>② BQT chịu</b> = điện cư dân dùng chung có đo đếm (Σ ghi tầng − khách, khu không phải 3 tầng TM).</div>
-                <div><b style={{ color: '#8C1F1F' }}>③ Sơn An chịu</b> = phần còn lại = hao hụt/thất thoát. <b>①+②+③ = tổng đồng hồ 1.</b></div>
+                <div style={{ marginBottom: 4 }}><b style={{ color: '#8A5A12' }}>① Sơn An thu hộ</b> = tổng tiền thu từ khách ki ốt + công ty (theo đơn giá cấu hình từng khách).</div>
+                <div style={{ marginBottom: 4 }}><b style={{ color: '#8C1F1F' }}>② Sơn An chịu phí EVN</b> = kWh ki ốt (15% CĐ/35% TĐ/50% BT) + kWh công ty thực × đơn giá EVN × VAT.</div>
+                <div style={{ marginBottom: 4 }}><b style={{ color: '#5A7A2A' }}>③ Chênh lệch Sơn An hưởng</b> = ① − ② (dương = lời, âm = lỗ so EVN).</div>
+                <div><b style={{ color: 'var(--navy)' }}>④ BQT chịu</b> = tổng đồng hồ 1 − ②. <b>② + ④ = tổng đồng hồ 1.</b></div>
               </div>
             </div>
 
-            {/* Phân bổ 3 bên tháng hiện tại — số nằm bên phải để tiết kiệm chiều cao */}
+            {/* Phân bổ 4 chỉ tiêu tháng hiện tại */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-              <div style={{ padding: '6px 11px', background: '#1C3557', color: '#fff', fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>② Phân bổ 3 bên (tháng {month})</div>
+              <div style={{ padding: '6px 11px', background: '#1C3557', color: '#fff', fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>② Phân bổ chi phí (tháng {month})</div>
               <div style={{ padding: '9px 11px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#F8FAFC', borderRadius: 8, padding: '7px 10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#F8FAFC', borderRadius: 8, padding: '6px 10px' }}>
                   <span style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.02em' }}>Tổng đồng hồ 1</span>
                   <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(split.meterTotal)} đ</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#FFF4E0', borderRadius: 8, padding: '7px 10px' }}>
-                  <span style={{ fontSize: 10, color: '#8A5A12', textTransform: 'uppercase', letterSpacing: '.02em' }}>① Khách thuê</span>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: '#8A5A12', whiteSpace: 'nowrap' }}>{fmt(split3.tenant)} đ <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)' }}>({tenantPct}%)</span></span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#FFF4E0', borderRadius: 8, padding: '6px 10px' }}>
+                  <span style={{ fontSize: 10, color: '#8A5A12', textTransform: 'uppercase', letterSpacing: '.02em' }}>① Thu hộ từ khách</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#8A5A12', whiteSpace: 'nowrap' }}>{fmt(split3.sonanRevenue)} đ</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#FDECEC', borderRadius: 8, padding: '7px 10px' }}>
-                  <span style={{ fontSize: 10, color: '#8C1F1F', textTransform: 'uppercase', letterSpacing: '.02em' }}>③ Sơn An chịu</span>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: '#8C1F1F', whiteSpace: 'nowrap' }}>{fmt(split3.sonanBorne)} đ <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)' }}>({sonanPct}%)</span></span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#FDECEC', borderRadius: 8, padding: '6px 10px' }}>
+                  <span style={{ fontSize: 10, color: '#8C1F1F', textTransform: 'uppercase', letterSpacing: '.02em' }}>② Chịu phí EVN</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#8C1F1F', whiteSpace: 'nowrap' }}>{fmt(split3.sonanEVNCost)} đ <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)' }}>({evnCostPct}%)</span></span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#E0EDFA', borderRadius: 8, padding: '8px 10px' }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase', letterSpacing: '.02em' }}>② BQT chịu</span>
-                  <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(split3.bqtBorne)} đ <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)' }}>({bqtBornePct}%)</span></span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: split3.sonanProfit >= 0 ? '#F0F8EC' : '#FDECEC', borderRadius: 8, padding: '6px 10px' }}>
+                  <span style={{ fontSize: 10, color: '#5A7A2A', textTransform: 'uppercase', letterSpacing: '.02em' }}>③ Chênh lệch hưởng</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: split3.sonanProfit >= 0 ? '#3A7A1A' : '#8C1F1F', whiteSpace: 'nowrap' }}>{split3.sonanProfit >= 0 ? '+' : ''}{fmt(split3.sonanProfit)} đ</span>
                 </div>
-                <div style={{ display: 'flex', height: 11, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border3)', marginTop: 'auto' }} title={`Sơn An thu hộ ${tenantPct}% · Sơn An chịu ${sonanPct}% · BQT chịu ${bqtBornePct}%`}>
-                  <div style={{ width: `${tenantPct}%`, background: '#D4A64A' }} />
-                  <div style={{ width: `${sonanPct}%`, background: '#C0392B' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, background: '#E0EDFA', borderRadius: 8, padding: '7px 10px' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase', letterSpacing: '.02em' }}>④ BQT chịu</span>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--navy)', whiteSpace: 'nowrap' }}>{fmt(split3.bqtBorne)} đ <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)' }}>({bqtBornePct}%)</span></span>
+                </div>
+                <div style={{ display: 'flex', height: 10, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border3)', marginTop: 'auto' }} title={`Sơn An chịu phí EVN ${evnCostPct}% · BQT chịu ${bqtBornePct}%`}>
+                  <div style={{ width: `${evnCostPct}%`, background: '#C0392B' }} />
                   <div style={{ width: `${bqtBornePct}%`, background: '#1C3557' }} />
                 </div>
                 <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', fontSize: 9, color: 'var(--muted)', marginTop: 1 }}>
-                  <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#D4A64A', marginRight: 3 }} />Khách thuê</span>
-                  <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#C0392B', marginRight: 3 }} />Sơn An chịu</span>
+                  <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#C0392B', marginRight: 3 }} />SA chịu phí EVN</span>
                   <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#1C3557', marginRight: 3 }} />BQT chịu</span>
                 </div>
               </div>
@@ -829,14 +848,14 @@ function Dh1MonthlyTable({ reading, readings, month, customers, usages }: {
     ? [
         { label: 'Chung 3 tầng TM (kWh)', get: s => s.commonKwh },
         { label: 'Công ty đồng hồ riêng (kWh)', get: s => s.companyKwh },
-        { label: '① Khách thuê – Sơn An thu hộ (kWh)', get: s => s.tenantKwh, bold: true, bg: '#FFF9EC', color: '#8A5A12', share: true },
-        { label: '③ Sơn An chịu – hao hụt (kWh)', get: s => s.sonanKwh, bold: true, bg: '#FDECEC', color: '#8C1F1F', share: true },
-        { label: '② BQT chịu – cư dân (kWh)', get: s => s.bqtKwh, bold: true, bg: '#E0EDFA', color: 'var(--navy)', share: true },
+        { label: '① Khách thuê tổng (kWh)', get: s => s.tenantKwh, bold: true, bg: '#FFF9EC', color: '#8A5A12', share: true },
+        { label: '④ BQT – cư dân đo đếm (kWh)', get: s => s.bqtKwh, bold: true, bg: '#E0EDFA', color: 'var(--navy)', share: true },
       ]
     : [
-        { label: '① Khách thuê – Sơn An thu hộ (đ)', get: s => s.tenant, bold: true, bg: '#FFF9EC', color: '#8A5A12', share: true },
-        { label: '③ Sơn An chịu – hao hụt (đ)', get: s => s.sonanBorne, bold: true, bg: '#FDECEC', color: '#8C1F1F', share: true },
-        { label: '② BQT chịu – cư dân (đ)', get: s => s.bqtBorne, bold: true, bg: '#E0EDFA', color: 'var(--navy)', share: true },
+        { label: '① Sơn An thu hộ từ khách (đ)', get: s => s.sonanRevenue, bold: true, bg: '#FFF9EC', color: '#8A5A12', share: true },
+        { label: '② Sơn An chịu phí EVN (đ)', get: s => s.sonanEVNCost, bold: true, bg: '#FDECEC', color: '#8C1F1F', share: true },
+        { label: '③ Chênh lệch SA hưởng (đ)', get: s => s.sonanProfit, bold: true, bg: '#F0F8EC', color: '#3A7A1A' },
+        { label: '④ BQT chịu (đ)', get: s => s.bqtBorne, bold: true, bg: '#E0EDFA', color: 'var(--navy)', share: true },
       ]
 
   const tabBtn = (m: 'tien' | 'kwh', label: string) => (
@@ -850,7 +869,7 @@ function Dh1MonthlyTable({ reading, readings, month, customers, usages }: {
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border3)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
       <div style={{ padding: '6px 12px', background: '#EEF3FA', borderBottom: '1px solid var(--border3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10.5, fontWeight: 800, color: '#4B6A8A', textTransform: 'uppercase', letterSpacing: '.04em' }}>📊 Thống kê từng tháng — Khách thuê · Sơn An chịu · BQT chịu (đồng hồ điện 1)</span>
+        <span style={{ fontSize: 10.5, fontWeight: 800, color: '#4B6A8A', textTransform: 'uppercase', letterSpacing: '.04em' }}>📊 Thống kê từng tháng — Thu hộ · Chịu phí EVN · Chênh lệch · BQT chịu (đồng hồ điện 1)</span>
         <span style={{ display: 'flex', gap: 4 }}>{tabBtn('kwh', 'kWh')}{tabBtn('tien', 'Tiền')}</span>
       </div>
       <div style={{ padding: '8px 12px', flex: 1 }}>
