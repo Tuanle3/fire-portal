@@ -79,7 +79,8 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
     managementFeePrice: d.managementFeePrice != null ? Number(d.managementFeePrice) : undefined,
     managementFeeHistory: (d.managementFeeHistory as Customer['managementFeeHistory']) ?? undefined,
     feeConfirmedMonths: Array.isArray(d.feeConfirmedMonths) ? (d.feeConfirmedMonths as string[]) : undefined,
-    feeByMonth: d.feeByMonth != null && typeof d.feeByMonth === 'object' ? (d.feeByMonth as Record<string, number>) : undefined,
+    feeByMonth:        d.feeByMonth != null && typeof d.feeByMonth === 'object' ? (d.feeByMonth as Record<string, number>) : undefined,
+    feeAccruedByMonth: d.feeAccruedByMonth != null && typeof d.feeAccruedByMonth === 'object' ? (d.feeAccruedByMonth as Record<string, number>) : undefined,
     oldDebt:    d.oldDebt != null ? Number(d.oldDebt) : undefined,
     createdAt:  (d.createdAt as string) ?? '',
   }
