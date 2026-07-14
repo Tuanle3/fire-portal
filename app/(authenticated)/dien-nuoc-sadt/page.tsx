@@ -129,6 +129,9 @@ export default function DienNuocSadtPage() {
         .dn-table thead th { position:sticky; top:42px; z-index:5; }
         /* Trong card có sc-head sticky → thead lùi thêm độ cao sc-head */
         .sc--sticky .dn-table thead th { top:90px; }
+        /* Khi có hàng section-hdr (~30px): hàng header chính phải lùi xuống để không chồng */
+        .dn-section-hdr + tr th { top:72px; }
+        .sc--sticky .dn-section-hdr + tr th { top:120px; }
         /* Góc trái trên (sticky cả ngang lẫn dọc) cần z-index cao hơn */
         .dn-table thead th.dn-sticky-col { z-index:8; }
 
@@ -165,6 +168,7 @@ export default function DienNuocSadtPage() {
           .dn-table td { padding:7px 8px; font-size:11.5px; }
           /* Thead: bù thêm chiều cao khi sc-head wrap nhiều dòng hơn */
           .sc--sticky .dn-table thead th { top:120px; }
+          .sc--sticky .dn-section-hdr + tr th { top:150px; }
         }
 
         /* Header của card dính lại khi cuộn (ngay dưới tab bar ~42px), tiện bấm nút */
