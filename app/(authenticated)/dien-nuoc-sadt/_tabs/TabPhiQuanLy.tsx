@@ -257,11 +257,11 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                       const notSaved = isCur ? unsaved : (c.feeByMonth?.[m] === undefined && c.feeAccruedByMonth?.[m] === undefined)
                       return (
                         <td key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap', background: isCur ? '#E0EDFA' : undefined }}>
-                          {notSaved && !isCur ? <span style={{ color: 'var(--muted2)' }}>—</span> : (
+                          {notSaved ? <span style={{ color: 'var(--muted2)' }}>—</span> : (
                             <>
                               {charge > 0 && <div style={{ fontWeight: isCur ? 700 : undefined, color: 'var(--navy)', fontSize: isCur ? undefined : 11 }}>{fmt(charge)}</div>}
                               {accrued > 0 && <div style={{ fontWeight: isCur ? 700 : undefined, color: '#92400E', fontSize: isCur ? undefined : 11 }} title="Tích lũy (chưa KT)">~{fmt(accrued)}</div>}
-                              {total === 0 && <span style={{ color: 'var(--muted2)' }}>0</span>}
+                              {total === 0 && <span style={{ color: 'var(--muted2)' }}>—</span>}
                             </>
                           )}
                         </td>
