@@ -30,6 +30,8 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
   const [savingAll, setSavingAll] = useState(false)
   // draft[customerId] = đơn giá đang nhập cho tháng hiện tại (chưa Lưu)
   const [priceDrafts, setPriceDrafts] = useState<Record<string, number>>({})
+  // modeOverrides[customerId] = 'charge' | 'accrue' — user chọn tay tháng này
+  const [modeOverrides, setModeOverrides] = useState<Record<string, 'charge' | 'accrue'>>({})
 
   const feeCustomers = useMemo(() => customers.filter(c => c.hasManagementFee), [customers])
 
@@ -56,6 +58,16 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     return monthRange(`${y}-01`, month, 12)
   }, [month])
 
+  // Mode cho tháng hiện tại: override > đã lưu > default từ trạng thái KT
+  const getMode = (c: Customer): 'charge' | 'accrue' => {
+    if (modeOverrides[c.id] !== undefined) return modeOverrides[c.id]
+    if (c.feeByMonth?.[month] !== undefined) return 'charge'
+    if (c.feeAccruedByMonth?.[month] !== undefined) return 'accrue'
+    return isActiveInMonth(c, month) ? 'charge' : 'accrue'
+  }
+  const toggleMode = (id: string, cur: 'charge' | 'accrue') =>
+    setModeOverrides(prev => ({ ...prev, [id]: cur === 'charge' ? 'accrue' : 'charge' }))
+
   // Lấy đơn giá hiển thị:
   // 1. Có draft → dùng draft
   // 2. Đã lưu (feeByMonth hoặc feeAccruedByMonth) và isArea → suy ngược: savedAmt / areaM2
@@ -79,14 +91,14 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
 
   const saveSingle = async (c: Customer) => {
     const amount = getAmt(c)
-    const hasKT = isActiveInMonth(c, month)
-    // Lưu vào bucket đúng theo trạng thái KT; xóa bucket còn lại để tránh trùng
+    const mode = getMode(c)
     const feeByMonth = { ...(c.feeByMonth ?? {}) }
     const feeAccruedByMonth = { ...(c.feeAccruedByMonth ?? {}) }
-    if (hasKT) { feeByMonth[month] = amount; delete feeAccruedByMonth[month] }
+    if (mode === 'charge') { feeByMonth[month] = amount; delete feeAccruedByMonth[month] }
     else { feeAccruedByMonth[month] = amount; delete feeByMonth[month] }
     await saveCustomer({ ...c, feeByMonth, feeAccruedByMonth })
     setPriceDrafts(prev => { const n = { ...prev }; delete n[c.id]; return n })
+    setModeOverrides(prev => { const n = { ...prev }; delete n[c.id]; return n })
   }
 
   const deleteSingle = async (c: Customer) => {
@@ -95,20 +107,22 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     delete feeByMonth[month]; delete feeAccruedByMonth[month]
     await saveCustomer({ ...c, feeByMonth, feeAccruedByMonth })
     setPriceDrafts(prev => { const n = { ...prev }; delete n[c.id]; return n })
+    setModeOverrides(prev => { const n = { ...prev }; delete n[c.id]; return n })
   }
 
   const saveAll = async () => {
     setSavingAll(true)
     await Promise.all(displayed.map(c => {
       const amount = getAmt(c)
-      const hasKT = isActiveInMonth(c, month)
+      const mode = getMode(c)
       const feeByMonth = { ...(c.feeByMonth ?? {}) }
       const feeAccruedByMonth = { ...(c.feeAccruedByMonth ?? {}) }
-      if (hasKT) { feeByMonth[month] = amount; delete feeAccruedByMonth[month] }
+      if (mode === 'charge') { feeByMonth[month] = amount; delete feeAccruedByMonth[month] }
       else { feeAccruedByMonth[month] = amount; delete feeByMonth[month] }
       return saveCustomer({ ...c, feeByMonth, feeAccruedByMonth })
     }))
     setPriceDrafts({})
+    setModeOverrides({})
     setSavingAll(false)
   }
 
@@ -138,9 +152,9 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
       </div>
       <div className="sc-body">
         <div style={{ background: '#EEF3FA', border: '1px solid #D0DCE8', borderRadius: 10, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: 'var(--txt2)' }}>
-          Nhập <b>đơn giá (đ/m²)</b> — hệ thống tự tính <b>Phí = Diện tích × Đơn giá</b> và lưu theo trạng thái khách thuê:
-          <b style={{ color: '#15803D' }}> 🟢 Có KT</b> → Thu ngay (công nợ) · <b style={{ color: '#92400E' }}>🟡 Chưa KT</b> → Tích lũy cộng dồn (hiển thị <span style={{ color: '#92400E' }}>~màu cam</span>, thu sau từ chủ KO).
-          Tháng nào chưa lưu thì không tính vào công nợ.
+          Nhập <b>đơn giá (đ/m²)</b> — hệ thống tự tính <b>Phí = Diện tích × Đơn giá</b>.
+          Nhấn nút <b style={{ color: '#15803D' }}>● Thu ngay</b> / <b style={{ color: '#92400E' }}>◎ Cộng dồn CN</b> để chọn loại trước khi Lưu.
+          Tháng nào chưa lưu thì không tính vào công nợ. <b>Cộng dồn CN</b> = tích lũy chưa có KT, hiển thị riêng ở tab Công nợ, không tính cảnh báo quá hạn.
         </div>
 
         <div className="dn-usage-wrap">
@@ -176,11 +190,12 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                 const bd = managementFeeBreakdown(c, month)
                 const unitPrice = getUnitPrice(c)
                 const amt = bd.isArea && bd.areaM2 > 0 ? unitPrice * bd.areaM2 : unitPrice
-                const hasKT = isActiveInMonth(c, month)
+                const mode = getMode(c)
+                const isCharge = mode === 'charge'
                 const savedCharge = c.feeByMonth?.[month]
                 const savedAccrued = c.feeAccruedByMonth?.[month]
                 const unsaved = savedCharge === undefined && savedAccrued === undefined
-                const changed = priceDrafts[c.id] !== undefined
+                const changed = priceDrafts[c.id] !== undefined || modeOverrides[c.id] !== undefined
                 const cumulative = months.reduce((s, m) => s + (m === month ? amt : histAmt(c, m)), 0)
                 return (
                   <tr key={c.id}>
@@ -189,10 +204,16 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                       <div style={{ fontSize: 10.5, color: 'var(--muted)', fontWeight: 400 }}>
                         {c.floor || '—'}{c.kioskCode ? ` · ${c.kioskCode}` : ''}
                       </div>
-                      <div style={{ marginTop: 2 }}>
-                        <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 4, background: hasKT ? '#DCFCE7' : '#FEF3C7', color: hasKT ? '#15803D' : '#92400E', fontWeight: 600 }}>
-                          {hasKT ? '🟢 Có KT' : '🟡 Chưa KT'}
-                        </span>
+                      <div style={{ marginTop: 3 }}>
+                        <button
+                          onClick={() => toggleMode(c.id, mode)}
+                          title="Nhấn để đổi: Thu ngay ↔ Cộng dồn CN"
+                          style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px solid', cursor: 'pointer', fontWeight: 600,
+                            background: isCharge ? '#DCFCE7' : '#FEF3C7',
+                            color: isCharge ? '#15803D' : '#92400E',
+                            borderColor: isCharge ? '#86EFAC' : '#FDE68A' }}>
+                          {isCharge ? '● Thu ngay' : '◎ Cộng dồn CN'}
+                        </button>
                       </div>
                     </td>
                     <td className="dn-sticky-col dn-sticky-input">
@@ -204,15 +225,13 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <span style={{ fontSize: 10.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>= {fmt(amt)} đ</span>
-                            {unsaved && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
-                            {!unsaved && <span style={{ fontSize: 9.5, color: hasKT ? '#15803D' : '#92400E' }}>{hasKT ? 'thu ngay' : 'tích lũy'}</span>}
+                            {unsaved && !changed && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
                           </div>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <NumberInput style={{ width: 110 }} value={unitPrice} onValueChange={v => setUnitPrice(c.id, v)} />
-                          {unsaved && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
-                          {!unsaved && <span style={{ fontSize: 9.5, color: hasKT ? '#15803D' : '#92400E' }}>{hasKT ? 'thu ngay' : 'tích lũy'}</span>}
+                          {unsaved && !changed && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
                         </div>
                       )}
                     </td>
@@ -231,8 +250,8 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                       </div>
                     </td>
                     {months.map(m => {
-                      const charge = m === month ? (hasKT ? amt : 0) : (c.feeByMonth?.[m] ?? 0)
-                      const accrued = m === month ? (!hasKT ? amt : 0) : (c.feeAccruedByMonth?.[m] ?? 0)
+                      const charge = m === month ? (isCharge ? amt : 0) : (c.feeByMonth?.[m] ?? 0)
+                      const accrued = m === month ? (!isCharge ? amt : 0) : (c.feeAccruedByMonth?.[m] ?? 0)
                       const total = charge + accrued
                       const isCur = m === month
                       const notSaved = isCur ? unsaved : (c.feeByMonth?.[m] === undefined && c.feeAccruedByMonth?.[m] === undefined)
