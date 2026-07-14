@@ -89,11 +89,14 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
 
   const setUnitPrice = (id: string, v: number) => setPriceDrafts(prev => ({ ...prev, [id]: v }))
 
+  const absRecord = (r: Record<string, number>) =>
+    Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Math.abs(v)]))
+
   const saveSingle = async (c: Customer) => {
-    const amount = getAmt(c)
+    const amount = Math.abs(getAmt(c))
     const mode = getMode(c)
-    const feeByMonth = { ...(c.feeByMonth ?? {}) }
-    const feeAccruedByMonth = { ...(c.feeAccruedByMonth ?? {}) }
+    const feeByMonth = absRecord({ ...(c.feeByMonth ?? {}) })
+    const feeAccruedByMonth = absRecord({ ...(c.feeAccruedByMonth ?? {}) })
     if (mode === 'charge') { feeByMonth[month] = amount; delete feeAccruedByMonth[month] }
     else { feeAccruedByMonth[month] = amount; delete feeByMonth[month] }
     await saveCustomer({ ...c, feeByMonth, feeAccruedByMonth })
@@ -113,10 +116,10 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
   const saveAll = async () => {
     setSavingAll(true)
     await Promise.all(displayed.map(c => {
-      const amount = getAmt(c)
+      const amount = Math.abs(getAmt(c))
       const mode = getMode(c)
-      const feeByMonth = { ...(c.feeByMonth ?? {}) }
-      const feeAccruedByMonth = { ...(c.feeAccruedByMonth ?? {}) }
+      const feeByMonth = absRecord({ ...(c.feeByMonth ?? {}) })
+      const feeAccruedByMonth = absRecord({ ...(c.feeAccruedByMonth ?? {}) })
       if (mode === 'charge') { feeByMonth[month] = amount; delete feeAccruedByMonth[month] }
       else { feeAccruedByMonth[month] = amount; delete feeByMonth[month] }
       return saveCustomer({ ...c, feeByMonth, feeAccruedByMonth })
