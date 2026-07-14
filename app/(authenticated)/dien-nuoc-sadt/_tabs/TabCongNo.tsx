@@ -406,12 +406,19 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
     R.totalRemain = Math.max(0, R.totalDue - R.totalPaid)
   }
 
-  const cmp = { numeric: true, sensitivity: 'base' } as const
-  const rows = Array.from(rowMap.values()).filter(r => r.totalDue > 0)
-    .sort((x, y) => (x.c.group?.trim() || 'zzz').localeCompare(y.c.group?.trim() || 'zzz', 'vi', cmp) || x.c.name.localeCompare(y.c.name, 'vi', cmp))
-
   // PQL cộng dồn (tích lũy chưa có KT) — KHÔNG tính vào công nợ phải thu / cảnh báo quá hạn
-  const accruedPQL = (c: Customer) => Object.values(c.feeAccruedByMonth ?? {}).reduce((s, v) => s + v, 0)
+  const accruedPQL = (c: Customer) => Object.values(c.feeAccruedByMonth ?? {}).reduce((s, v) => s + Math.abs(v), 0)
+
+  // Đưa khách chỉ có PQL cộng dồn (không có totalDue) vào bảng để hiển thị
+  for (const c of customers) {
+    if (accruedPQL(c) > 0 && !rowMap.has(c.id)) {
+      rowMap.set(c.id, { c, m: new Map(), totalDue: 0, totalPaid: 0, totalRemain: 0, unpaid: 0 })
+    }
+  }
+
+  const cmp = { numeric: true, sensitivity: 'base' } as const
+  const rows = Array.from(rowMap.values()).filter(r => r.totalDue > 0 || accruedPQL(r.c) > 0)
+    .sort((x, y) => (x.c.group?.trim() || 'zzz').localeCompare(y.c.group?.trim() || 'zzz', 'vi', cmp) || x.c.name.localeCompare(y.c.name, 'vi', cmp))
 
   const leadCols = 9 // Khách · Nhóm · Tổng phải thu · Tổng đã thu · Tổng còn nợ · PQL cộng dồn · Ghi chú · Thu tiền · In phiếu
   const sum = (fn: (r: Row) => number) => rows.reduce((s, r) => s + fn(r), 0)

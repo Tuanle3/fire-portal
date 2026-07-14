@@ -126,7 +126,7 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     setSavingAll(false)
   }
 
-  const histAmt = (c: Customer, m: string) => (c.feeByMonth?.[m] ?? 0) + (c.feeAccruedByMonth?.[m] ?? 0)
+  const histAmt = (c: Customer, m: string) => Math.abs(c.feeByMonth?.[m] ?? 0) + Math.abs(c.feeAccruedByMonth?.[m] ?? 0)
   const monthTotals = months.map(m =>
     displayed.reduce((s, c) => s + (m === month ? getAmt(c) : histAmt(c, m)), 0)
   )
@@ -250,8 +250,8 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                       </div>
                     </td>
                     {months.map(m => {
-                      const charge = m === month ? (isCharge ? amt : 0) : (c.feeByMonth?.[m] ?? 0)
-                      const accrued = m === month ? (!isCharge ? amt : 0) : (c.feeAccruedByMonth?.[m] ?? 0)
+                      const charge = m === month ? (isCharge ? amt : 0) : Math.abs(c.feeByMonth?.[m] ?? 0)
+                      const accrued = m === month ? (!isCharge ? amt : 0) : Math.abs(c.feeAccruedByMonth?.[m] ?? 0)
                       const total = charge + accrued
                       const isCur = m === month
                       const notSaved = isCur ? unsaved : (c.feeByMonth?.[m] === undefined && c.feeAccruedByMonth?.[m] === undefined)
