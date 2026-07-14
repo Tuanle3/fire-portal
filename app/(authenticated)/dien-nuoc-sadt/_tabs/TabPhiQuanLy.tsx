@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { Customer, managementFeeOf } from '@/lib/dien-nuoc-types'
+import { Customer, managementFeeBreakdown } from '@/lib/dien-nuoc-types'
 import { saveCustomer } from '@/lib/dien-nuoc-store'
 import { exportPhiQuanLy } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
@@ -28,8 +28,8 @@ function monthRange(start: string, end: string, cap = 15): string[] {
 export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; month: string }) {
   const [floorFilter, setFloorFilter] = useState('')
   const [savingAll, setSavingAll] = useState(false)
-  // draft[customerId] = số tiền đang nhập cho tháng hiện tại (chưa Lưu)
-  const [drafts, setDrafts] = useState<Record<string, number>>({})
+  // draft[customerId] = đơn giá đang nhập cho tháng hiện tại (chưa Lưu)
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, number>>({})
 
   const feeCustomers = useMemo(() => customers.filter(c => c.hasManagementFee), [customers])
 
@@ -56,22 +56,31 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     return monthRange(`${y}-01`, month, 12)
   }, [month])
 
-  // Giá trị hiển thị cho 1 khách ở tháng hiện tại:
-  // 1. Nếu đang sửa (có trong drafts) → dùng draft
-  // 2. Nếu đã lưu trước (feeByMonth[month]) → dùng giá đã lưu
-  // 3. Chưa có gì → pre-fill từ managementFeeOf (tính theo cấu hình cũ để tiện)
-  const getAmt = (c: Customer) => {
-    if (drafts[c.id] !== undefined) return drafts[c.id]
-    if (c.feeByMonth?.[month] !== undefined) return c.feeByMonth[month]
-    return managementFeeOf(c, month)
+  // Lấy đơn giá hiển thị:
+  // 1. Có draft → dùng draft
+  // 2. Đã lưu feeByMonth và isArea → suy ngược: savedAmt / areaM2
+  // 3. Chưa có → pre-fill từ config (managementFeeBreakdown.unitPrice)
+  const getUnitPrice = (c: Customer) => {
+    if (priceDrafts[c.id] !== undefined) return priceDrafts[c.id]
+    const bd = managementFeeBreakdown(c, month)
+    if (bd.isArea && bd.areaM2 > 0 && c.feeByMonth?.[month] !== undefined)
+      return c.feeByMonth[month] / bd.areaM2
+    return bd.unitPrice
   }
 
-  const setAmt = (id: string, v: number) => setDrafts(prev => ({ ...prev, [id]: v }))
+  // Số tiền = đơn giá × diện tích (nếu theo m²) hoặc đơn giá (flat)
+  const getAmt = (c: Customer) => {
+    const bd = managementFeeBreakdown(c, month)
+    const unitPrice = getUnitPrice(c)
+    return bd.isArea && bd.areaM2 > 0 ? unitPrice * bd.areaM2 : unitPrice
+  }
+
+  const setUnitPrice = (id: string, v: number) => setPriceDrafts(prev => ({ ...prev, [id]: v }))
 
   const saveSingle = async (c: Customer) => {
     const amount = getAmt(c)
     await saveCustomer({ ...c, feeByMonth: { ...(c.feeByMonth ?? {}), [month]: amount } })
-    setDrafts(prev => { const n = { ...prev }; delete n[c.id]; return n })
+    setPriceDrafts(prev => { const n = { ...prev }; delete n[c.id]; return n })
   }
 
   const saveAll = async () => {
@@ -80,7 +89,7 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
       const amount = getAmt(c)
       return saveCustomer({ ...c, feeByMonth: { ...(c.feeByMonth ?? {}), [month]: amount } })
     }))
-    setDrafts({})
+    setPriceDrafts({})
     setSavingAll(false)
   }
 
@@ -109,7 +118,7 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
       </div>
       <div className="sc-body">
         <div style={{ background: '#EEF3FA', border: '1px solid #D0DCE8', borderRadius: 10, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: 'var(--txt2)' }}>
-          Nhập số tiền phí quản lý cho từng khách tháng <b>{month}</b>, rồi bấm <b>Lưu</b> từng dòng hoặc <b>Lưu tất cả</b>.
+          Nhập <b>đơn giá (đ/m²)</b> cho từng khách tháng <b>{month}</b> — hệ thống tự tính <b>Phí = Diện tích × Đơn giá</b>. Bấm <b>Lưu</b> từng dòng hoặc <b>Lưu tất cả</b>.
           Tháng nào chưa lưu thì không tính vào công nợ. Cột bên phải: phí các tháng đã lưu &amp; lũy kế.
         </div>
 
@@ -126,7 +135,7 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
               </tr>
               <tr>
                 <th className="dn-sticky-col">Khách hàng</th>
-                <th className="dn-sticky-col dn-sticky-input" style={{ textAlign: 'right' }}>Phí tháng {month} (đ)</th>
+                <th className="dn-sticky-col dn-sticky-input" style={{ textAlign: 'right' }}>Đơn giá (đ/m²) → Phí tháng {month}</th>
                 <th className="dn-sticky-col dn-sticky-btn"></th>
                 {months.map(m => (
                   <th key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap', background: m === month ? '#E0EDFA' : undefined }}>
@@ -143,10 +152,12 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                 </td></tr>
               )}
               {displayed.map(c => {
-                const amt = getAmt(c)
+                const bd = managementFeeBreakdown(c, month)
+                const unitPrice = getUnitPrice(c)
+                const amt = bd.isArea && bd.areaM2 > 0 ? unitPrice * bd.areaM2 : unitPrice
                 const savedAmt = c.feeByMonth?.[month]
                 const unsaved = savedAmt === undefined
-                const changed = drafts[c.id] !== undefined && drafts[c.id] !== savedAmt
+                const changed = priceDrafts[c.id] !== undefined
                 const cumulative = months.reduce((s, m) => s + (m === month ? amt : (c.feeByMonth?.[m] ?? 0)), 0)
                 return (
                   <tr key={c.id}>
@@ -157,10 +168,23 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                       </div>
                     </td>
                     <td className="dn-sticky-col dn-sticky-input">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <NumberInput style={{ width: 110 }} value={amt} onValueChange={v => setAmt(c.id, v)} />
-                        {unsaved && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
-                      </div>
+                      {bd.isArea && bd.areaM2 > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{bd.areaM2} m² ×</span>
+                            <NumberInput style={{ width: 90 }} value={unitPrice} onValueChange={v => setUnitPrice(c.id, v)} />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontSize: 10.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>= {fmt(amt)} đ</span>
+                            {unsaved && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <NumberInput style={{ width: 110 }} value={unitPrice} onValueChange={v => setUnitPrice(c.id, v)} />
+                          {unsaved && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
+                        </div>
+                      )}
                     </td>
                     <td className="dn-sticky-col dn-sticky-btn">
                       <button className="btn-ghost" onClick={() => saveSingle(c)}
