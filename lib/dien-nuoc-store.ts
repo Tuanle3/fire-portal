@@ -192,3 +192,20 @@ export function subscribeMeterNames(cb: (names: Record<number, string>) => void)
     cb((snap.data() as Record<number, string>) ?? {})
   })
 }
+
+// ── Loại phí khác (other fee types) — admin có thể thêm/xóa từ UI ────────────
+const DOC_OTHER_FEE_TYPES = 'other_fee_types'
+export interface OtherFeeTypeDef { key: string; label: string }
+
+export async function saveOtherFeeTypes(types: OtherFeeTypeDef[]): Promise<void> {
+  await setDoc(doc(diennuocDb, COL_CONFIG, DOC_OTHER_FEE_TYPES), { types })
+}
+export function subscribeOtherFeeTypes(
+  defaults: OtherFeeTypeDef[],
+  cb: (types: OtherFeeTypeDef[]) => void,
+): Unsubscribe {
+  return onSnapshot(doc(diennuocDb, COL_CONFIG, DOC_OTHER_FEE_TYPES), snap => {
+    const d = snap.data() as { types?: OtherFeeTypeDef[] } | undefined
+    cb(d?.types && d.types.length > 0 ? d.types : defaults)
+  })
+}
