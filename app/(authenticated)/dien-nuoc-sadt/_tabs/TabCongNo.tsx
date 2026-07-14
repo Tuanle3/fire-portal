@@ -131,9 +131,9 @@ function PaymentModal({ customerId, customerName, month, due, paid, service, lab
 type CollectArgs = { customerId: string; customerName: string; month: string; due: number; paid: number; service: ServiceId; label: string; editPayment?: Payment }
 
 const SVC_LABEL: Record<string, string> = {
-  [METER_SERVICE[1]]: 'Điện CS', [METER_SERVICE[2]]: 'Máy lạnh', [METER_SERVICE[3]]: 'Nước', phiql: 'Phí QL',
+  [METER_SERVICE[1]]: 'Điện CS', [METER_SERVICE[2]]: 'Máy lạnh', [METER_SERVICE[3]]: 'Nước', phiql: 'Phí QL', phi_khac: 'Phí khác',
 }
-const SVC_ORDER: ServiceId[] = [METER_SERVICE[1], METER_SERVICE[2], METER_SERVICE[3], 'phiql']
+const SVC_ORDER: ServiceId[] = [METER_SERVICE[1], METER_SERVICE[2], METER_SERVICE[3], 'phiql', 'phi_khac']
 
 const METHOD_LABEL: Record<string, string> = { transfer: 'CK', cash: 'TM' }
 
@@ -389,7 +389,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
   // Phí khác (mở lại điện, thu rác,...) — tổng tất cả loại phí cho tháng đó
   for (const c of customers) for (const m of months) {
     const total = Object.values(c.otherFeesByType ?? {}).reduce((s, byMonth) => s + (byMonth[m] ?? 0), 0)
-    if (total > 0) { const cell = ensureCell(ensureRow(c), m); cell.due += total }
+    if (total > 0) { const cell = ensureCell(ensureRow(c), m); ensureSvc(cell, 'phi_khac').due += total; cell.due += total }
   }
   // Đã thu theo tháng (tổng, không tách dịch vụ)
   for (const p of payments) {

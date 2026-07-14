@@ -33,7 +33,7 @@ export function meterLabel(customNames: Partial<Record<number, string>> | undefi
 // ── Loại sử dụng (dịch vụ) 1 khách có thể đăng ký cùng lúc ────────────────────
 // dh1/dh2/nuoc = 3 đồng hồ; phiql = phí quản lý (không có đồng hồ). Một khách chọn
 // nhiều dịch vụ ⇒ hiện ở nhiều tab, mỗi dịch vụ có cách tính tiền & đơn giá riêng.
-export type ServiceId = 'dh1' | 'dh2' | 'nuoc' | 'phiql'
+export type ServiceId = 'dh1' | 'dh2' | 'nuoc' | 'phiql' | 'phi_khac'
 export const SERVICE_IDS: ServiceId[] = ['dh1', 'dh2', 'nuoc', 'phiql']
 export const METER_SERVICE: Record<MeterId, ServiceId> = { 1: 'dh1', 2: 'dh2', 3: 'nuoc' }
 export const SERVICE_METER: Partial<Record<ServiceId, MeterId>> = { dh1: 1, dh2: 2, nuoc: 3 }
