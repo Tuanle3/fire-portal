@@ -76,7 +76,7 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     if (priceDrafts[c.id] !== undefined) return priceDrafts[c.id]
     const bd = managementFeeBreakdown(c, month)
     const saved = c.feeByMonth?.[month] ?? c.feeAccruedByMonth?.[month]
-    if (bd.isArea && bd.areaM2 > 0 && saved !== undefined) return saved / bd.areaM2
+    if (bd.isArea && bd.areaM2 > 0 && saved !== undefined) return Math.abs(saved) / bd.areaM2
     return bd.unitPrice
   }
 
