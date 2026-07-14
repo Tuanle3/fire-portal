@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { Customer, managementFeeBreakdown } from '@/lib/dien-nuoc-types'
+import { Customer, managementFeeBreakdown, isActiveInMonth } from '@/lib/dien-nuoc-types'
 import { saveCustomer } from '@/lib/dien-nuoc-store'
 import { exportPhiQuanLy } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
@@ -58,13 +58,13 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
 
   // Lấy đơn giá hiển thị:
   // 1. Có draft → dùng draft
-  // 2. Đã lưu feeByMonth và isArea → suy ngược: savedAmt / areaM2
+  // 2. Đã lưu (feeByMonth hoặc feeAccruedByMonth) và isArea → suy ngược: savedAmt / areaM2
   // 3. Chưa có → pre-fill từ config (managementFeeBreakdown.unitPrice)
   const getUnitPrice = (c: Customer) => {
     if (priceDrafts[c.id] !== undefined) return priceDrafts[c.id]
     const bd = managementFeeBreakdown(c, month)
-    if (bd.isArea && bd.areaM2 > 0 && c.feeByMonth?.[month] !== undefined)
-      return c.feeByMonth[month] / bd.areaM2
+    const saved = c.feeByMonth?.[month] ?? c.feeAccruedByMonth?.[month]
+    if (bd.isArea && bd.areaM2 > 0 && saved !== undefined) return saved / bd.areaM2
     return bd.unitPrice
   }
 
@@ -79,7 +79,21 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
 
   const saveSingle = async (c: Customer) => {
     const amount = getAmt(c)
-    await saveCustomer({ ...c, feeByMonth: { ...(c.feeByMonth ?? {}), [month]: amount } })
+    const hasKT = isActiveInMonth(c, month)
+    // Lưu vào bucket đúng theo trạng thái KT; xóa bucket còn lại để tránh trùng
+    const feeByMonth = { ...(c.feeByMonth ?? {}) }
+    const feeAccruedByMonth = { ...(c.feeAccruedByMonth ?? {}) }
+    if (hasKT) { feeByMonth[month] = amount; delete feeAccruedByMonth[month] }
+    else { feeAccruedByMonth[month] = amount; delete feeByMonth[month] }
+    await saveCustomer({ ...c, feeByMonth, feeAccruedByMonth })
+    setPriceDrafts(prev => { const n = { ...prev }; delete n[c.id]; return n })
+  }
+
+  const deleteSingle = async (c: Customer) => {
+    const feeByMonth = { ...(c.feeByMonth ?? {}) }
+    const feeAccruedByMonth = { ...(c.feeAccruedByMonth ?? {}) }
+    delete feeByMonth[month]; delete feeAccruedByMonth[month]
+    await saveCustomer({ ...c, feeByMonth, feeAccruedByMonth })
     setPriceDrafts(prev => { const n = { ...prev }; delete n[c.id]; return n })
   }
 
@@ -87,14 +101,20 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     setSavingAll(true)
     await Promise.all(displayed.map(c => {
       const amount = getAmt(c)
-      return saveCustomer({ ...c, feeByMonth: { ...(c.feeByMonth ?? {}), [month]: amount } })
+      const hasKT = isActiveInMonth(c, month)
+      const feeByMonth = { ...(c.feeByMonth ?? {}) }
+      const feeAccruedByMonth = { ...(c.feeAccruedByMonth ?? {}) }
+      if (hasKT) { feeByMonth[month] = amount; delete feeAccruedByMonth[month] }
+      else { feeAccruedByMonth[month] = amount; delete feeByMonth[month] }
+      return saveCustomer({ ...c, feeByMonth, feeAccruedByMonth })
     }))
     setPriceDrafts({})
     setSavingAll(false)
   }
 
+  const histAmt = (c: Customer, m: string) => (c.feeByMonth?.[m] ?? 0) + (c.feeAccruedByMonth?.[m] ?? 0)
   const monthTotals = months.map(m =>
-    displayed.reduce((s, c) => s + (m === month ? getAmt(c) : (c.feeByMonth?.[m] ?? 0)), 0)
+    displayed.reduce((s, c) => s + (m === month ? getAmt(c) : histAmt(c, m)), 0)
   )
   const cumTotals = monthTotals.reduce<number[]>((acc, v) => [...acc, (acc.length ? acc[acc.length - 1] : 0) + v], [])
   const totalThisMonth = displayed.reduce((s, c) => s + getAmt(c), 0)
@@ -118,8 +138,9 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
       </div>
       <div className="sc-body">
         <div style={{ background: '#EEF3FA', border: '1px solid #D0DCE8', borderRadius: 10, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: 'var(--txt2)' }}>
-          Nhập <b>đơn giá (đ/m²)</b> cho từng khách tháng <b>{month}</b> — hệ thống tự tính <b>Phí = Diện tích × Đơn giá</b>. Bấm <b>Lưu</b> từng dòng hoặc <b>Lưu tất cả</b>.
-          Tháng nào chưa lưu thì không tính vào công nợ. Cột bên phải: phí các tháng đã lưu &amp; lũy kế.
+          Nhập <b>đơn giá (đ/m²)</b> — hệ thống tự tính <b>Phí = Diện tích × Đơn giá</b> và lưu theo trạng thái khách thuê:
+          <b style={{ color: '#15803D' }}> 🟢 Có KT</b> → Thu ngay (công nợ) · <b style={{ color: '#92400E' }}>🟡 Chưa KT</b> → Tích lũy cộng dồn (hiển thị <span style={{ color: '#92400E' }}>~màu cam</span>, thu sau từ chủ KO).
+          Tháng nào chưa lưu thì không tính vào công nợ.
         </div>
 
         <div className="dn-usage-wrap">
@@ -155,16 +176,23 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                 const bd = managementFeeBreakdown(c, month)
                 const unitPrice = getUnitPrice(c)
                 const amt = bd.isArea && bd.areaM2 > 0 ? unitPrice * bd.areaM2 : unitPrice
-                const savedAmt = c.feeByMonth?.[month]
-                const unsaved = savedAmt === undefined
+                const hasKT = isActiveInMonth(c, month)
+                const savedCharge = c.feeByMonth?.[month]
+                const savedAccrued = c.feeAccruedByMonth?.[month]
+                const unsaved = savedCharge === undefined && savedAccrued === undefined
                 const changed = priceDrafts[c.id] !== undefined
-                const cumulative = months.reduce((s, m) => s + (m === month ? amt : (c.feeByMonth?.[m] ?? 0)), 0)
+                const cumulative = months.reduce((s, m) => s + (m === month ? amt : histAmt(c, m)), 0)
                 return (
                   <tr key={c.id}>
                     <td className="dn-sticky-col" style={{ fontWeight: 600 }}>
                       {c.name}
                       <div style={{ fontSize: 10.5, color: 'var(--muted)', fontWeight: 400 }}>
                         {c.floor || '—'}{c.kioskCode ? ` · ${c.kioskCode}` : ''}
+                      </div>
+                      <div style={{ marginTop: 2 }}>
+                        <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 4, background: hasKT ? '#DCFCE7' : '#FEF3C7', color: hasKT ? '#15803D' : '#92400E', fontWeight: 600 }}>
+                          {hasKT ? '🟢 Có KT' : '🟡 Chưa KT'}
+                        </span>
                       </div>
                     </td>
                     <td className="dn-sticky-col dn-sticky-input">
@@ -177,30 +205,46 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <span style={{ fontSize: 10.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>= {fmt(amt)} đ</span>
                             {unsaved && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
+                            {!unsaved && <span style={{ fontSize: 9.5, color: hasKT ? '#15803D' : '#92400E' }}>{hasKT ? 'thu ngay' : 'tích lũy'}</span>}
                           </div>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <NumberInput style={{ width: 110 }} value={unitPrice} onValueChange={v => setUnitPrice(c.id, v)} />
                           {unsaved && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
+                          {!unsaved && <span style={{ fontSize: 9.5, color: hasKT ? '#15803D' : '#92400E' }}>{hasKT ? 'thu ngay' : 'tích lũy'}</span>}
                         </div>
                       )}
                     </td>
-                    <td className="dn-sticky-col dn-sticky-btn">
-                      <button className="btn-ghost" onClick={() => saveSingle(c)}
-                        style={changed || unsaved ? { color: 'var(--accent)', fontWeight: 700 } : undefined}>
-                        Lưu
-                      </button>
+                    <td className="dn-sticky-col dn-sticky-btn" style={{ verticalAlign: 'middle' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <button className="btn-ghost" onClick={() => saveSingle(c)}
+                          style={changed || unsaved ? { color: 'var(--accent)', fontWeight: 700 } : undefined}>
+                          Lưu
+                        </button>
+                        {!unsaved && (
+                          <button className="btn-ghost" onClick={() => deleteSingle(c)}
+                            style={{ fontSize: 11, color: '#DC2626' }}>
+                            Xóa
+                          </button>
+                        )}
+                      </div>
                     </td>
                     {months.map(m => {
-                      const v = m === month ? amt : (c.feeByMonth?.[m] ?? 0)
+                      const charge = m === month ? (hasKT ? amt : 0) : (c.feeByMonth?.[m] ?? 0)
+                      const accrued = m === month ? (!hasKT ? amt : 0) : (c.feeAccruedByMonth?.[m] ?? 0)
+                      const total = charge + accrued
                       const isCur = m === month
-                      const notSaved = isCur ? unsaved : c.feeByMonth?.[m] === undefined
+                      const notSaved = isCur ? unsaved : (c.feeByMonth?.[m] === undefined && c.feeAccruedByMonth?.[m] === undefined)
                       return (
                         <td key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap', background: isCur ? '#E0EDFA' : undefined }}>
-                          <span style={{ fontWeight: isCur ? 700 : undefined, color: notSaved ? 'var(--muted2)' : v > 0 ? 'var(--navy)' : 'var(--muted2)' }}>
-                            {notSaved && !isCur ? '—' : fmt(v)}
-                          </span>
+                          {notSaved && !isCur ? <span style={{ color: 'var(--muted2)' }}>—</span> : (
+                            <>
+                              {charge > 0 && <div style={{ fontWeight: isCur ? 700 : undefined, color: 'var(--navy)', fontSize: isCur ? undefined : 11 }}>{fmt(charge)}</div>}
+                              {accrued > 0 && <div style={{ fontWeight: isCur ? 700 : undefined, color: '#92400E', fontSize: isCur ? undefined : 11 }} title="Tích lũy (chưa KT)">~{fmt(accrued)}</div>}
+                              {total === 0 && <span style={{ color: 'var(--muted2)' }}>0</span>}
+                            </>
+                          )}
                         </td>
                       )
                     })}

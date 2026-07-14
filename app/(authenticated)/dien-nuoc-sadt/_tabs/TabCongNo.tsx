@@ -410,7 +410,10 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
   const rows = Array.from(rowMap.values()).filter(r => r.totalDue > 0)
     .sort((x, y) => (x.c.group?.trim() || 'zzz').localeCompare(y.c.group?.trim() || 'zzz', 'vi', cmp) || x.c.name.localeCompare(y.c.name, 'vi', cmp))
 
-  const leadCols = 8 // Khách · Nhóm · Tổng phải thu · Tổng đã thu · Tổng còn nợ · Ghi chú · Thu tiền · In phiếu
+  // PQL cộng dồn (tích lũy chưa có KT) — KHÔNG tính vào công nợ phải thu / cảnh báo quá hạn
+  const accruedPQL = (c: Customer) => Object.values(c.feeAccruedByMonth ?? {}).reduce((s, v) => s + v, 0)
+
+  const leadCols = 9 // Khách · Nhóm · Tổng phải thu · Tổng đã thu · Tổng còn nợ · PQL cộng dồn · Ghi chú · Thu tiền · In phiếu
   const sum = (fn: (r: Row) => number) => rows.reduce((s, r) => s + fn(r), 0)
 
   return (
@@ -427,6 +430,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
             <th style={{ textAlign: 'right' }}>Tổng phải thu</th>
             <th style={{ textAlign: 'right' }}>Tổng đã thu</th>
             <th style={{ textAlign: 'right' }}>Tổng còn nợ</th>
+            <th style={{ textAlign: 'right', color: '#92400E', whiteSpace: 'nowrap' }} title="Phí quản lý tích lũy khi chưa có khách thuê — không tính vào cảnh báo quá hạn">PQL cộng dồn</th>
             <th style={{ textAlign: 'right' }}>Ghi chú</th>
             <th style={{ width: 80 }}></th>
             <th style={{ width: 72 }}></th>
@@ -449,6 +453,9 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
                 <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(R.totalDue)} đ</td>
                 <td style={{ textAlign: 'right', color: 'var(--green)', whiteSpace: 'nowrap' }}>{fmt(R.totalPaid)} đ</td>
                 <td style={{ textAlign: 'right', fontWeight: 700, color: R.totalRemain > 0 ? '#DC2626' : 'var(--green)', whiteSpace: 'nowrap' }}>{fmt(R.totalRemain)} đ</td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: accruedPQL(R.c) > 0 ? '#92400E' : 'var(--muted2)' }}>
+                  {accruedPQL(R.c) > 0 ? `${fmt(accruedPQL(R.c))} đ` : '—'}
+                </td>
                 <td style={{ textAlign: 'right' }}>{R.unpaid > 0 ? <span className="badge badge-red">{R.unpaid} tháng</span> : <span className="badge badge-green">Đủ</span>}</td>
                 <td><button className="btn-ghost" onClick={() => onCollect(R.c)}>Thu tiền</button></td>
                 <td><button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => onPrint(R.c)}>🖨️ In phiếu</button></td>
@@ -481,6 +488,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
               <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(sum(r => r.totalDue))} đ</td>
               <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--green)' }}>{fmt(sum(r => r.totalPaid))} đ</td>
               <td style={{ textAlign: 'right', fontWeight: 700, color: sum(r => r.totalRemain) > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(sum(r => r.totalRemain))} đ</td>
+              <td style={{ textAlign: 'right', fontWeight: 700, color: '#92400E' }}>{fmt(rows.reduce((s, r) => s + accruedPQL(r.c), 0))} đ</td>
               <td></td><td></td><td></td>
               {months.map(m => {
                 const mrem = sum(r => r.m.get(m)?.remain ?? 0)
