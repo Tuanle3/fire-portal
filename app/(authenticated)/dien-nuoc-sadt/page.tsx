@@ -122,6 +122,15 @@ export default function DienNuocSadtPage() {
         /* Lưới form khách hàng tự co theo bề rộng (không cần media query) */
         .dn-form-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-bottom:10px; }
 
+        /* ── Sticky tab bar: ~42px cao ── */
+        /* ── Sticky card header: thêm ~48px ── */
+        /* Thead dính: các th trong thead luôn hiện khi cuộn dọc */
+        .dn-table thead th { position:sticky; top:42px; z-index:5; }
+        /* Trong card có sc-head sticky → thead lùi thêm độ cao sc-head */
+        .sc--sticky .dn-table thead th { top:90px; }
+        /* Góc trái trên (sticky cả ngang lẫn dọc) cần z-index cao hơn */
+        .dn-table thead th.dn-sticky-col { z-index:8; }
+
         @media (max-width: 1100px) {
           /* Xếp dọc 2 bảng: tắt co giãn + bỏ hàng đệm (chỉ dùng khi 2 cột nằm ngang) */
           .dn-split { flex-direction:column; align-items:stretch; }
@@ -130,26 +139,41 @@ export default function DienNuocSadtPage() {
           .dn-spacer { display:none; }
           .ceo-kpi-row { grid-template-columns:repeat(2,1fr); }
         }
+        @media (max-width: 1024px) {
+          /* iPad: thu nhỏ padding bảng, giảm font bảng */
+          .prj-content { padding:14px 16px; }
+          .dn-table th { font-size:10.5px; padding:7px 10px; }
+          .dn-table td { padding:8px 10px; font-size:12px; }
+          .dn-sticky-input { min-width:260px; }
+          .sc-head { flex-wrap:wrap; gap:6px; }
+          .ceo-kpi-row { grid-template-columns:repeat(2,1fr); }
+        }
         @media (max-width: 640px) {
-          .prj-content { padding:12px 10px; }
-          .subtab-bar { margin:0 8px; }
-          .subtab { padding:9px 12px; font-size:12px; }
-          .sc-body { padding:12px 10px; }
-          .sc-head { padding:9px 12px; }
-          /* Điện thoại: bỏ dính cột bảng sản lượng để cuộn xem hết các tháng */
-          .dn-sticky-col { position:static !important; }
-          .dn-sticky-input { min-width:280px; }
-          .dn-sticky-btn { border-right:none !important; }
+          .prj-content { padding:10px 8px; }
+          .subtab-bar { margin:0 4px; }
+          .subtab { padding:8px 10px; font-size:11.5px; }
+          .sc-body { padding:10px 8px; }
+          .sc-head { padding:8px 10px; flex-wrap:wrap; gap:6px; }
+          .sc-title { font-size:10px; }
+          /* Điện thoại: thu nhỏ cột đầu nhưng vẫn giữ sticky để dễ đối chiếu */
+          .dn-sticky-col:first-child, .dn-table th.dn-sticky-col:first-child { min-width:90px; }
+          .dn-sticky-input { left:90px; min-width:220px; }
+          .dn-sticky-amt { left:310px; min-width:80px; }
+          .dn-sticky-btn { left:390px; border-right:none !important; min-width:40px; }
+          .dn-table th { font-size:10px; padding:6px 8px; }
+          .dn-table td { padding:7px 8px; font-size:11.5px; }
+          /* Thead: bù thêm chiều cao khi sc-head wrap nhiều dòng hơn */
+          .sc--sticky .dn-table thead th { top:120px; }
         }
 
-        /* Header của card dính lại khi cuộn (ngay dưới topbar ~92px), tiện bấm "Thêm khách hàng" */
+        /* Header của card dính lại khi cuộn (ngay dưới tab bar ~42px), tiện bấm nút */
         .sc--sticky { overflow:visible; }
-        .sc--sticky .sc-head { position:sticky; top:40px; z-index:30; border-radius:12px 12px 0 0; }
+        .sc--sticky .sc-head { position:sticky; top:42px; z-index:30; border-radius:12px 12px 0 0; }
 
         /* Bảng sản lượng khách hàng: cuộn ngang, cột nhập liệu dính bên trái */
         .dn-usage-wrap { overflow-x:auto; background:#F8FAFC; border:1px solid var(--border3); border-radius:10px; }
         .dn-sticky-col { position:sticky; z-index:2; background:#F8FAFC; }
-        .dn-table th.dn-sticky-col { background:#EEF3FA; }
+        .dn-table th.dn-sticky-col { background:#EEF3FA; z-index:6; }
         .dn-sticky-col:first-child, .dn-table th.dn-sticky-col:first-child { left:0; min-width:120px; }
         .dn-sticky-input { left:120px; min-width:320px; }
         .dn-sticky-amt { left:440px; min-width:90px; }
