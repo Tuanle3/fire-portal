@@ -142,7 +142,12 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, c
   customer: Customer; readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]
   currentMonth: string; onPick: (a: CollectArgs) => void; onClose: () => void
 }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Auto-expand tháng đã có phiếu thu để user thấy ngay không cần click tìm
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const s = new Set<string>()
+    for (const p of payments.filter(p => p.customerId === customer.id)) s.add(p.month)
+    return s
+  })
   const toggleExpand = (m: string) => setExpanded(prev => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n })
   const [editingDebt, setEditingDebt] = useState(false)
   const [debtInput, setDebtInput] = useState(String(customer.oldDebt ?? ''))
@@ -275,42 +280,48 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, c
                     return (
                       <>
                         <tr key={it.month} style={{ background: it.remain <= 0 ? '#F8FBF5' : undefined }}>
-                          <td style={{ fontWeight: 600 }}>
-                            {it.history.length > 0 && (
-                              <button onClick={() => toggleExpand(it.month)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--navy)', padding: '0 4px 0 0' }}>
-                                {isOpen ? '▾' : '▸'}
-                              </button>
-                            )}
-                            {it.month}
-                          </td>
+                          <td style={{ fontWeight: 600 }}>· {it.month}</td>
                           <td style={{ textAlign: 'right' }}>{fmt(it.due)}</td>
                           <td style={{ textAlign: 'right', color: it.paid > 0 ? 'var(--green)' : 'var(--muted2)' }}>{fmt(it.paid)}</td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(it.remain)}</td>
                           <td style={{ textAlign: 'right', fontWeight: 700, background: '#F0F5FF', color: cum > 0 ? '#8A3A8A' : 'var(--green)' }}>{fmt(cum)}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <button className="btn-ghost" style={{ fontSize: 12, padding: '3px 10px' }}
-                              onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: primary, label: it.month })}>
-                              + Thu
-                            </button>
+                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                              {it.history.length > 0 && (
+                                <button className="btn-ghost" style={{ fontSize: 11, padding: '3px 8px', color: 'var(--navy)' }}
+                                  onClick={() => toggleExpand(it.month)} title={isOpen ? 'Ẩn phiếu thu' : 'Xem/Sửa phiếu thu'}>
+                                  📋 {it.history.length} phiếu {isOpen ? '▴' : '▾'}
+                                </button>
+                              )}
+                              <button className="btn-ghost" style={{ fontSize: 12, padding: '3px 10px' }}
+                                onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: primary, label: it.month })}>
+                                + Thu
+                              </button>
+                            </div>
                           </td>
                         </tr>
                         {isOpen && it.history.map((p, pi) => (
-                          <tr key={`${it.month}-h${pi}`} style={{ background: '#F4F7FF' }}>
-                            <td colSpan={2} style={{ color: '#6B7280', fontSize: 10.5, paddingLeft: 24 }}>
-                              📅 {p.paidAt || '—'}
-                              {p.paymentMethod && <span style={{ marginLeft: 5, background: p.paymentMethod === 'transfer' ? '#EEF3FA' : '#F0F8EC', color: p.paymentMethod === 'transfer' ? 'var(--navy)' : '#3A7A1A', borderRadius: 4, padding: '1px 4px' }}>{METHOD_LABEL[p.paymentMethod]}</span>}
-                              {p.bankAccount && <span style={{ marginLeft: 5 }}>· {p.bankAccount}</span>}
+                          <tr key={`${it.month}-h${pi}`} style={{ background: '#EFF4FF' }}>
+                            <td colSpan={2} style={{ color: '#5B6A80', fontSize: 11, paddingLeft: 20 }}>
+                              <span style={{ fontWeight: 600 }}>📅 {p.paidAt || '—'}</span>
+                              {p.paymentMethod && <span style={{ marginLeft: 6, background: p.paymentMethod === 'transfer' ? '#EEF3FA' : '#F0F8EC', color: p.paymentMethod === 'transfer' ? 'var(--navy)' : '#3A7A1A', borderRadius: 4, padding: '1px 5px', fontSize: 10.5 }}>{METHOD_LABEL[p.paymentMethod]}</span>}
+                              {p.bankAccount && <span style={{ marginLeft: 5, color: 'var(--muted)' }}>· {p.bankAccount}</span>}
                               {p.transactionRef && <span style={{ marginLeft: 5, color: '#9B59B6' }}>#{p.transactionRef}</span>}
-                              {p.note && <span style={{ marginLeft: 5, fontStyle: 'italic' }}>{p.note}</span>}
+                              {p.note && <span style={{ marginLeft: 5, fontStyle: 'italic', color: 'var(--muted)' }}>{p.note}</span>}
                             </td>
-                            <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{fmt(p.amount)}</td>
-                            <td style={{ background: '#F0F5FF' }}></td>
+                            <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 700 }}>{fmt(p.amount)}</td>
+                            <td colSpan={2} style={{ background: '#EBF0FF' }}></td>
                             <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              <button title="Sửa" onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: primary, label: it.month, editPayment: p })}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: '0 4px', color: 'var(--navy)' }}>✏️</button>
-                              <button title="Xóa" onClick={() => handleDelete(p.id)} disabled={deletingId === p.id}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: '0 4px', color: '#DC2626', opacity: deletingId === p.id ? 0.4 : 1 }}>🗑️</button>
+                              <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                                <button className="btn-ghost" style={{ fontSize: 11, padding: '3px 8px', color: 'var(--navy)' }}
+                                  onClick={() => onPick({ customerId: customer.id, customerName: customer.name, month: it.month, due: it.due, paid: it.paid, service: primary, label: it.month, editPayment: p })}>
+                                  ✏️ Sửa
+                                </button>
+                                <button className="btn-ghost" style={{ fontSize: 11, padding: '3px 8px', color: '#DC2626', opacity: deletingId === p.id ? 0.4 : 1 }}
+                                  onClick={() => handleDelete(p.id)} disabled={deletingId === p.id}>
+                                  🗑️ Xóa
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
