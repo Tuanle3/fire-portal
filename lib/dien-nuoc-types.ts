@@ -198,9 +198,16 @@ export interface Customer {
   feeConfirmedMonths?: string[] // (cũ — không dùng nữa, giữ để không mất data)
   feeByMonth?: Record<string, number>         // Phí thu ngay (có khách thuê). Tháng nào có entry thì mới tính vào công nợ.
   feeAccruedByMonth?: Record<string, number>  // Phí tích lũy cộng dồn (chưa có KT, thu bù sau từ chủ ki-ốt). KHÔNG tính vào cảnh báo quá hạn.
+  // Phí khác (mở lại điện, thu rác, ...): feeTypeKey → month → amount
+  otherFeesByType?: Record<string, Record<string, number>>
   oldDebt?: number              // Công nợ cũ trước khi dùng hệ thống (đ)
   createdAt: string
 }
+
+// Danh sách loại phí khác — thêm vào đây để mở rộng
+export const OTHER_FEE_TYPES: { key: string; label: string }[] = [
+  { key: 'mo_lai_dien', label: 'Phí mở lại điện' },
+]
 
 // Trạng thái tính phí quản lý của 1 khách trong tháng.
 //  charge = có khách thuê, thu trong tháng · accrue = chưa có khách, tính dồn cho chủ (thu bù sau) · none = không tính phí.

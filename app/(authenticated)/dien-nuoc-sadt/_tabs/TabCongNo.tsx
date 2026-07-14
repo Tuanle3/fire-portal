@@ -386,6 +386,11 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
     const fee = c.feeByMonth?.[m] ?? 0
     if (fee > 0) { const cell = ensureCell(ensureRow(c), m); ensureSvc(cell, 'phiql').due += fee; cell.due += fee }
   }
+  // Phí khác (mở lại điện, thu rác,...) — tổng tất cả loại phí cho tháng đó
+  for (const c of customers) for (const m of months) {
+    const total = Object.values(c.otherFeesByType ?? {}).reduce((s, byMonth) => s + (byMonth[m] ?? 0), 0)
+    if (total > 0) { const cell = ensureCell(ensureRow(c), m); cell.due += total }
+  }
   // Đã thu theo tháng (tổng, không tách dịch vụ)
   for (const p of payments) {
     const R = rowMap.get(p.customerId); if (!R) continue
