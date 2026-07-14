@@ -200,22 +200,11 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, c
     return { month: m, due, paid, remain: 0, history }
   })
 
-  // Gộp toàn bộ tiền đã thu rồi trả nợ theo thứ tự tháng cũ → mới (pool approach)
-  // Nợ cũ (oldDebt) được xét đầu tiên (trước tất cả tháng trong hệ thống)
+  // Sổ cái theo tháng: còn nợ = phải thu − đã thu (có thể âm nếu trả dư)
   const oldDebtDue = customer.oldDebt ?? 0
-  const itemsByDate = [...items].sort((a, b) => a.month.localeCompare(b.month))
-  let pool = items.reduce((s, it) => s + it.paid, 0)
-  let oldDebtRemain = 0
-  if (oldDebtDue > 0) {
-    if (pool >= oldDebtDue) { oldDebtRemain = 0; pool -= oldDebtDue }
-    else { oldDebtRemain = oldDebtDue - pool; pool = 0 }
-  }
-  for (const it of itemsByDate) {
-    if (pool >= it.due) { it.remain = 0; pool -= it.due }
-    else { it.remain = it.due - pool; pool = 0 }
-  }
+  for (const it of items) it.remain = it.due - it.paid
 
-  items.sort((a, b) => (b.remain > 0 ? 1 : 0) - (a.remain > 0 ? 1 : 0) || b.month.localeCompare(a.month))
+  items.sort((a, b) => a.month.localeCompare(b.month))
 
   return (
     <>
@@ -242,8 +231,8 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, c
               </>
             ) : (
               <>
-                <span style={{ fontSize: 13, fontWeight: 700, color: oldDebtRemain > 0 ? '#DC2626' : 'var(--green)' }}>
-                  {oldDebtDue > 0 ? `${fmt(oldDebtDue)} đ (còn: ${fmt(oldDebtRemain)} đ)` : '—'}
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#DC2626' }}>
+                  {oldDebtDue > 0 ? `${fmt(oldDebtDue)} đ` : '—'}
                 </span>
                 <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => { setDebtInput(String(customer.oldDebt ?? '')); setEditingDebt(true) }}>
                   {oldDebtDue > 0 ? '✏️ Sửa' : '+ Nhập nợ cũ'}
@@ -255,14 +244,12 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, c
           {items.length === 0 ? (
             <div style={{ color: 'var(--muted)', fontStyle: 'italic', padding: 8 }}>Khách này chưa có khoản phải thu theo tháng.</div>
           ) : (() => {
-            // Lũy kế: cộng dồn từ tháng cũ nhất → mới nhất (kể cả nợ cũ)
-            const itemsChron = [...items].sort((a, b) => a.month.localeCompare(b.month))
-            let cumRun = oldDebtRemain
+            // Lũy kế: bắt đầu từ nợ cũ, cộng dồn (phải thu − đã thu) từng tháng
+            let cumRun = oldDebtDue
             const cumByMonth = new Map<string, number>()
-            for (const it of itemsChron) { cumRun += it.remain; cumByMonth.set(it.month, cumRun) }
+            for (const it of items) { cumRun += it.remain; cumByMonth.set(it.month, cumRun) }
             const totalRemain = cumRun
-            // Hiển thị theo thứ tự: nợ cũ nhất trên cùng → mới nhất dưới
-            const displayItems = [...items].sort((a, b) => a.month.localeCompare(b.month))
+            const displayItems = items
             return (
               <table className="dn-table cn-pick" style={{ width: '100%' }}>
                 <thead><tr>
@@ -279,12 +266,16 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, c
                     const cum = cumByMonth.get(it.month) ?? 0
                     return (
                       <>
-                        <tr key={it.month} style={{ background: it.remain <= 0 ? '#F8FBF5' : undefined }}>
+                        <tr key={it.month} style={{ background: it.remain <= 0 ? '#F8FBF5' : '#FEF9F9' }}>
                           <td style={{ fontWeight: 600 }}>· {it.month}</td>
                           <td style={{ textAlign: 'right' }}>{fmt(it.due)}</td>
                           <td style={{ textAlign: 'right', color: it.paid > 0 ? 'var(--green)' : 'var(--muted2)' }}>{fmt(it.paid)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(it.remain)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, background: '#F0F5FF', color: cum > 0 ? '#8A3A8A' : 'var(--green)' }}>{fmt(cum)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: it.remain > 0 ? '#DC2626' : it.remain < 0 ? 'var(--green)' : 'var(--muted)' }}>
+                            {it.remain < 0 ? `(${fmt(-it.remain)})` : fmt(it.remain)}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, background: '#F0F5FF', color: cum > 0 ? '#8A3A8A' : cum < 0 ? 'var(--green)' : 'var(--muted)' }}>
+                            {cum < 0 ? `(${fmt(-cum)})` : fmt(cum)}
+                          </td>
                           <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                             <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                               {it.history.length > 0 && (
@@ -331,8 +322,12 @@ function CollectPickerModal({ customer, readings, customers, usages, payments, c
                 </tbody>
                 <tfoot><tr style={{ background: '#EEF3FA' }}>
                   <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, fontSize: 12 }}>Tổng còn nợ:</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: totalRemain > 0 ? '#DC2626' : 'var(--green)' }}>{fmt(totalRemain)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 900, background: '#E0E8FF', color: totalRemain > 0 ? '#8A3A8A' : 'var(--green)' }}>{fmt(totalRemain)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: totalRemain > 0 ? '#DC2626' : totalRemain < 0 ? 'var(--green)' : 'var(--muted)' }}>
+                    {totalRemain < 0 ? `(${fmt(-totalRemain)})` : fmt(totalRemain)}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 900, background: '#E0E8FF', color: totalRemain > 0 ? '#8A3A8A' : totalRemain < 0 ? 'var(--green)' : 'var(--muted)' }}>
+                    {totalRemain < 0 ? `(${fmt(-totalRemain)})` : fmt(totalRemain)}
+                  </td>
                   <td></td>
                 </tr></tfoot>
               </table>
