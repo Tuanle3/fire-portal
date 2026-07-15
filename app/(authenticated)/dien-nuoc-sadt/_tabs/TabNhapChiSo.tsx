@@ -125,7 +125,8 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
       {months.length === 0 ? (
         <div className="dn-empty">Chưa có dữ liệu tháng nào cho đồng hồ này.</div>
       ) : (
-        <table className="dn-table dn-fill" style={{ fontSize: 11 }}>
+        <div className="dn-scroll" style={{ flex: '1 1 auto' }}>
+        <table className="dn-table" style={{ fontSize: 11 }}>
           <thead><tr>
             <th>Chỉ tiêu</th>
             {months.map(r => {
@@ -167,6 +168,7 @@ function MeterHistoryTable({ meterId, readings, visibleBands, isWater, unit }: {
             </tr>
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )
