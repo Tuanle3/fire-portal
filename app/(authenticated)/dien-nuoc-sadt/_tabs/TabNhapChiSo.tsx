@@ -1106,7 +1106,10 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
     setBandsIndexNew(usage?.bandsIndexNew ?? {})
   }, [usage, month, prevUsage])
 
-  const totalUnit = Math.max(0, indexNew - indexOld)
+  const isWater2 = reading.meterId === 3 && ((c.waterSubMeters ?? 1) >= 2 || /h[oồ]\s*b[oơ]i/i.test(c.name))
+  const meter1SL = Math.max(0, indexNew - indexOld)
+  const meter2SL = isWater2 ? Math.max(0, (bandsIndexNew.thapDiem ?? 0) - (bandsIndexOld.thapDiem ?? 0)) : 0
+  const totalUnit = meter1SL + meter2SL
   const bandsKwh: Partial<Record<BandKey, number>> = {}
   for (const k of ['caoDiem', 'thapDiem', 'binhThuong'] as const) {
     bandsKwh[k] = Math.max(0, (bandsIndexNew[k] ?? 0) - (bandsIndexOld[k] ?? 0))
@@ -1217,18 +1220,40 @@ function CURow({ customer: c, month, usage, allUsages, reading, months, readingB
   if (ct === 'flat_vat_incl') {
     return (
       <tr>
-        <td className="dn-sticky-col" style={{ fontWeight: 600 }}>{c.name}</td>
+        <td className="dn-sticky-col" style={{ fontWeight: 600, verticalAlign: isWater2 ? 'top' : undefined }}>{c.name}</td>
         <td className="dn-sticky-col dn-sticky-input">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
-            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Cũ:</span>
-            <NumberInput style={{ width: 80 }} placeholder="Chỉ số cũ" value={indexOld} onValueChange={setIndexOld} />
-            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Mới:</span>
-            <NumberInput style={{ width: 80 }} placeholder="Chỉ số mới" value={indexNew} onValueChange={setIndexNew} />
-            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ SL: {fmtKwh(totalUnit)} × {fmtDec(flatPrice)}</span>
-          </div>
+          {isWater2 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 10, color: 'var(--muted)', minWidth: 16 }}>①</span>
+                <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Cũ:</span>
+                <NumberInput style={{ width: 72 }} placeholder="Chỉ số cũ" value={indexOld} onValueChange={setIndexOld} />
+                <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Mới:</span>
+                <NumberInput style={{ width: 72 }} placeholder="Chỉ số mới" value={indexNew} onValueChange={setIndexNew} />
+                <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmtKwh(meter1SL)} m³</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 10, color: 'var(--muted)', minWidth: 16 }}>②</span>
+                <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Cũ:</span>
+                <NumberInput style={{ width: 72 }} placeholder="Chỉ số cũ" value={bandsIndexOld.thapDiem ?? 0} onValueChange={v => setBandsIndexOld(b => ({ ...b, thapDiem: v }))} />
+                <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Mới:</span>
+                <NumberInput style={{ width: 72 }} placeholder="Chỉ số mới" value={bandsIndexNew.thapDiem ?? 0} onValueChange={v => setBandsIndexNew(b => ({ ...b, thapDiem: v }))} />
+                <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ {fmtKwh(meter2SL)} m³</span>
+              </div>
+              <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Tổng: {fmtKwh(totalUnit)} × {fmtDec(flatPrice)}</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Cũ:</span>
+              <NumberInput style={{ width: 80 }} placeholder="Chỉ số cũ" value={indexOld} onValueChange={setIndexOld} />
+              <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Mới:</span>
+              <NumberInput style={{ width: 80 }} placeholder="Chỉ số mới" value={indexNew} onValueChange={setIndexNew} />
+              <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>→ SL: {fmtKwh(totalUnit)} × {fmtDec(flatPrice)}</span>
+            </div>
+          )}
         </td>
-        <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right' }}><b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b></td>
-        <td className="dn-sticky-col dn-sticky-btn"><button className="btn-ghost" onClick={save} disabled={saving}>{saving ? '…' : 'Lưu'}</button></td>
+        <td className="dn-sticky-col dn-sticky-amt" style={{ textAlign: 'right', verticalAlign: isWater2 ? 'top' : undefined }}><b style={{ color: 'var(--navy)' }}>{fmt(charge)} đ</b></td>
+        <td className="dn-sticky-col dn-sticky-btn" style={{ verticalAlign: isWater2 ? 'top' : undefined }}><button className="btn-ghost" onClick={save} disabled={saving}>{saving ? '…' : 'Lưu'}</button></td>
         {monthCells}
       </tr>
     )

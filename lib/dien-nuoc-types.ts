@@ -205,6 +205,7 @@ export interface Customer {
     breakdown: Record<string, number>         // Chi tiết từng tháng cộng dồn → số tiền
   }>
   // Phí khác (mở lại điện, thu rác, ...): feeTypeKey → month → amount
+  waterSubMeters?: number       // Số đồng hồ nước con (mặc định 1). Hồ bơi = 2.
   otherFeesByType?: Record<string, Record<string, number>>
   oldDebt?: number              // Công nợ cũ trước khi dùng hệ thống (đ)
   createdAt: string
