@@ -554,6 +554,13 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
             {pctOf != null && pctOf > 0 && <span className="ov-mini" style={{ marginLeft: 4 }}>{pct(v, pctOf).toFixed(0)}%</span>}
           </span>
         }
+        // Hàm tính lũy kế (tổng tất cả tháng trong series) cho 1 extractor — null nếu toàn null
+        const sumSeries = (fn: (s: typeof series[number]) => number | null): number | null => {
+          let total = 0, hasAny = false
+          for (const s of series) { const v = fn(s); if (v !== null) { total += v; hasAny = true } }
+          return hasAny ? total : null
+        }
+        const lukeCellBg = '#F0F4E8'
         return (
           <div className="sc ov-tight" style={{ marginTop: 14 }}>
             <div className="sc-head">
@@ -571,6 +578,9 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
                           {s.m}{s.m === M.dataMonth && <span className="ov-mini" style={{ display: 'block', fontWeight: 400 }}>hiện tại</span>}
                         </th>
                       ))}
+                      <th style={{ textAlign: 'right', background: lukeCellBg, whiteSpace: 'nowrap', color: '#3A5A1A' }}>
+                        Lũy kế<span className="ov-mini" style={{ display: 'block', fontWeight: 400 }}>{series[0]?.m} → {series[series.length - 1]?.m}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -585,6 +595,9 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
                               {renderVal(v, pctOf, g.isProfit, g.color)}
                             </td>
                           })}
+                          <td style={{ textAlign: 'right', background: lukeCellBg, fontWeight: 700 }}>
+                            {renderVal(sumSeries(s => g.totalVals(s).v), undefined, g.isProfit, g.color)}
+                          </td>
                         </tr>
                         {/* Dòng con ĐH1/ĐH2 */}
                         {g.rows.map((row, ri) => (
@@ -598,6 +611,9 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
                                 </td>
                               )
                             })}
+                            <td style={{ textAlign: 'right', background: lukeCellBg }}>
+                              {renderVal(sumSeries(s => row.vals(s).v), undefined, row.isProfit, g.color)}
+                            </td>
                           </tr>
                         ))}
                       </Fragment>
