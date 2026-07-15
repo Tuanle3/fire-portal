@@ -440,8 +440,8 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
         <span className="sc-title">Công nợ theo tháng — {rows.length} khách · {months.length} tháng</span>
         <button className="btn-ghost" onClick={() => exportCongNo(readings, customers, usages, payments, month, meterNames)}>⬇ Xuất Excel (tháng {month})</button>
       </div>
-      <div className="sc-body">
-        <div className="dn-scroll">
+      <style>{`.cn-mm-scroll .dn-table thead th { top: 0 !important; } .cn-mm-scroll .dn-table tfoot tr { position: sticky; bottom: 0; z-index: 4; }`}</style>
+      <div className="dn-scroll cn-mm-scroll" style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
         <table className="dn-table" style={{ fontSize: 12 }}>
           <thead><tr>
             <th>Khách hàng</th><th>Nhóm</th>
@@ -515,7 +515,6 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
             </tr></tfoot>
           )}
         </table>
-        </div>
       </div>
     </div>
   )
