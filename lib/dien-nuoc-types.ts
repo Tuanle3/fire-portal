@@ -198,6 +198,12 @@ export interface Customer {
   feeConfirmedMonths?: string[] // (cũ — không dùng nữa, giữ để không mất data)
   feeByMonth?: Record<string, number>         // Phí thu ngay (có khách thuê). Tháng nào có entry thì mới tính vào công nợ.
   feeAccruedByMonth?: Record<string, number>  // Phí tích lũy cộng dồn (chưa có KT, thu bù sau từ chủ ki-ốt). KHÔNG tính vào cảnh báo quá hạn.
+  feeAccruedSettledHistory?: Array<{          // Lịch sử chốt PQL cộng dồn (mỗi lần chốt lưu 1 bản ghi)
+    settledAt: string                         // Ngày chốt (YYYY-MM-DD)
+    settledMonth: string                      // Tháng ghi nhận vào công nợ (feeByMonth key)
+    total: number                             // Tổng số tiền được chốt
+    breakdown: Record<string, number>         // Chi tiết từng tháng cộng dồn → số tiền
+  }>
   // Phí khác (mở lại điện, thu rác, ...): feeTypeKey → month → amount
   otherFeesByType?: Record<string, Record<string, number>>
   oldDebt?: number              // Công nợ cũ trước khi dùng hệ thống (đ)

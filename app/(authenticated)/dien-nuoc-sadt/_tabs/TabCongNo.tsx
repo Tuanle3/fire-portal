@@ -137,6 +137,73 @@ const SVC_ORDER: ServiceId[] = [METER_SERVICE[1], METER_SERVICE[2], METER_SERVIC
 
 const METHOD_LABEL: Record<string, string> = { transfer: 'CK', cash: 'TM' }
 
+// Modal chốt PQL cộng dồn thành 1 khoản công nợ trong tháng hiện tại
+function ChotPQLModal({ customer, currentMonth, onClose }: {
+  customer: Customer; currentMonth: string; onClose: () => void
+}) {
+  const accrued = customer.feeAccruedByMonth ?? {}
+  const entries = Object.entries(accrued).sort(([a], [b]) => a.localeCompare(b))
+  const total = entries.reduce((s, [, v]) => s + v, 0)
+  const today = new Date().toISOString().slice(0, 10)
+  const [saving, setSaving] = useState(false)
+
+  const handleChot = async () => {
+    setSaving(true)
+    const feeByMonth = { ...(customer.feeByMonth ?? {}), [currentMonth]: (customer.feeByMonth?.[currentMonth] ?? 0) + total }
+    const historyEntry = { settledAt: today, settledMonth: currentMonth, total, breakdown: { ...accrued } }
+    const feeAccruedSettledHistory = [...(customer.feeAccruedSettledHistory ?? []), historyEntry]
+    await saveCustomer({ ...customer, feeByMonth, feeAccruedByMonth: {}, feeAccruedSettledHistory })
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <>
+      <div className="so-backdrop" onClick={onClose} />
+      <div className="ex-modal" style={{ maxWidth: 460 }}>
+        <div className="so-header">
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--navy)' }}>Chốt PQL cộng dồn — {customer.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Gộp thành 1 khoản trong tháng {currentMonth}</div>
+          </div>
+          <button className="so-close" onClick={onClose}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <table className="dn-table" style={{ fontSize: 12 }}>
+            <thead><tr>
+              <th>Tháng cộng dồn</th>
+              <th style={{ textAlign: 'right' }}>Số tiền PQL</th>
+            </tr></thead>
+            <tbody>
+              {entries.map(([m, v]) => (
+                <tr key={m}>
+                  <td>{m}</td>
+                  <td style={{ textAlign: 'right' }}>{fmt(v)} đ</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr style={{ background: '#E0EDFA' }}>
+              <td style={{ fontWeight: 700 }}>Tổng chốt</td>
+              <td style={{ textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>{fmt(total)} đ</td>
+            </tr></tfoot>
+          </table>
+          <div style={{ padding: '10px 14px', background: '#FFF7E8', borderRadius: 8, border: '1px solid #F0D080', fontSize: 12, color: '#78350F', lineHeight: 1.6 }}>
+            Sau khi chốt, <b>{fmt(total)} đ</b> sẽ xuất hiện trong công nợ tháng <b>{currentMonth}</b>. Chi tiết từng tháng được lưu lại để truy xuất. Thu tiền bình thường qua nút <b>Thu tiền</b>.
+          </div>
+        </div>
+        <div className="so-footer">
+          <button className="so-cancel" style={{ marginLeft: 'auto' }} onClick={onClose}>Hủy</button>
+          <button className="so-save" onClick={handleChot} disabled={saving || total <= 0}>
+            {saving ? 'Đang lưu…' : `✓ Chốt ${fmt(total)} đ`}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // Popup chọn tháng thu cho 1 khách — 1 dòng/tháng, tổng phải thu (không tách dịch vụ).
 function CollectPickerModal({ customer, readings, customers, usages, payments, currentMonth, onPick, onClose }: {
   customer: Customer; readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]
@@ -349,6 +416,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
 }) {
   const [open, setOpen] = useState<Set<string>>(new Set())
   const toggle = (m: string) => setOpen(prev => { const n = new Set(prev); if (n.has(m)) n.delete(m); else n.add(m); return n })
+  const [chotting, setChotting] = useState<Customer | null>(null)
 
   const months = Array.from(new Set(readings.map(r => r.month))).sort((a, b) => b.localeCompare(a)) // mới → cũ
 
@@ -472,7 +540,20 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
                 <td style={{ textAlign: 'right', color: 'var(--green)', whiteSpace: 'nowrap' }}>{fmt(R.totalPaid)} đ</td>
                 <td style={{ textAlign: 'right', fontWeight: 700, color: R.totalRemain > 0 ? '#DC2626' : 'var(--green)', whiteSpace: 'nowrap' }}>{fmt(R.totalRemain)} đ</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: accruedPQL(R.c) > 0 ? '#92400E' : 'var(--muted2)' }}>
-                  {accruedPQL(R.c) > 0 ? `${fmt(accruedPQL(R.c))} đ` : '—'}
+                  {accruedPQL(R.c) > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                      <span style={{ fontWeight: 600 }}>{fmt(accruedPQL(R.c))} đ</span>
+                      {R.c.feeByMonth?.[month] != null && (
+                        <span style={{ fontSize: 10, color: '#D97706', background: '#FEF3C7', padding: '1px 6px', borderRadius: 4, fontWeight: 600, letterSpacing: '.02em' }}>
+                          ⚠ Đề xuất chốt
+                        </span>
+                      )}
+                      <button className="btn-ghost" style={{ fontSize: 10.5, padding: '2px 8px', color: '#92400E', borderColor: '#D97706' }}
+                        onClick={() => setChotting(R.c)}>
+                        → Chốt
+                      </button>
+                    </div>
+                  ) : '—'}
                 </td>
                 <td style={{ textAlign: 'right' }}>{R.unpaid > 0 ? <span className="badge badge-red">{R.unpaid} tháng</span> : <span className="badge badge-green">Đủ</span>}</td>
                 <td><button className="btn-ghost" onClick={() => onCollect(R.c)}>Thu tiền</button></td>
@@ -516,6 +597,9 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
           )}
         </table>
       </div>
+      {chotting && (
+        <ChotPQLModal customer={chotting} currentMonth={month} onClose={() => setChotting(null)} />
+      )}
     </div>
   )
 }

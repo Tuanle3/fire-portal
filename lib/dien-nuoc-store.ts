@@ -85,6 +85,9 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
     feeAccruedByMonth: d.feeAccruedByMonth != null && typeof d.feeAccruedByMonth === 'object'
       ? Object.fromEntries(Object.entries(d.feeAccruedByMonth as Record<string, number>).map(([k, v]) => [k, Math.abs(Number(v))]))
       : undefined,
+    feeAccruedSettledHistory: Array.isArray(d.feeAccruedSettledHistory)
+      ? (d.feeAccruedSettledHistory as Customer['feeAccruedSettledHistory'])
+      : undefined,
     otherFeesByType:   d.otherFeesByType != null && typeof d.otherFeesByType === 'object'
       ? Object.fromEntries(Object.entries(d.otherFeesByType as Record<string, Record<string, number>>)
           .map(([typeKey, byMonth]) => [typeKey, typeof byMonth === 'object' && byMonth != null
