@@ -159,7 +159,16 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
       s + Object.values(c.otherFeesByType ?? {}).reduce((t, byMonth) => t + (byMonth[mo] ?? 0), 0), 0)
     // Chia 3 bên cho tháng hiệu lực + chuỗi các tháng có dữ liệu (mới → cũ) để thống kê
     const split3 = splitThreeWay(readings, customers, usages, mo)
-    const split3Series = monthsWithData.filter(mm => mm <= mo).slice(-8).map(mm => ({ m: mm, ...splitThreeWay(readings, customers, usages, mm) }))
+    const split3Series = monthsWithData.filter(mm => mm <= mo).slice(-8).map(mm => {
+      const s = splitThreeWay(readings, customers, usages, mm)
+      // Phí QL tháng đó (đã lưu — nhất quán với dueMapForMonth)
+      const mgmtFee = customers.reduce((sum, c) => sum + (c.feeByMonth?.[mm] ?? 0), 0)
+      // SA thu hộ = phần điện/nước khách thuê chịu + phí quản lý tháng đó
+      const saCollects = s.tenant + mgmtFee
+      // SA net = SA thu hộ - hao hụt SA phải chịu (tenant + bqt + sonan = total → sau khi BQT trả lại thì net = mgmtFee - sonan)
+      const saNet = mgmtFee - s.sonan
+      return { m: mm, ...s, mgmtFee, saCollects, saNet }
+    })
     const receivable = meters.reduce((s, m) => s + rowsSum(m), 0) + managementDue + otherFeesDue   // tổng phải thu hộ
     const collected = payments.filter(p => p.month === mo).reduce((s, p) => s + p.amount, 0)
     const recoveryPct = pct(collected, receivable)
@@ -178,15 +187,34 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
     interface DebtRow { id: string; name: string; group: string; overdue: number; cur: number; age: number }
     const debtRows: DebtRow[] = []
     for (const c of customers) {
-      let cur = 0, over = 0, oldest = 0
+      // Pool approach: nhất quán với TabCongNo — tránh tính trùng khi khách trả thừa 1 tháng bù tháng khác
+      let pool = c.oldDebt ?? 0   // pool > 0 = còn nợ, < 0 = đang thừa tiền
+      let oldestAge = pool > 0 ? 999 : 0   // nợ cũ (oldDebt) = rất cũ, xếp vào bucket m3
+      let foundOldest = pool > 0
       for (const m of pastMonths) {
-        const net = (dueByCM.get(m)!.get(c.id) ?? 0) - (paidByCM.get(m)!.get(c.id) ?? 0)
-        if (net <= 1) continue
-        const age = monthsBetween(m, mo)
-        if (age === 0) { cur += net; aging.cur += net }
-        else { over += net; oldest = Math.max(oldest, age); if (age === 1) aging.m1 += net; else if (age === 2) aging.m2 += net; else aging.m3 += net }
+        const due = dueByCM.get(m)!.get(c.id) ?? 0
+        const paid = paidByCM.get(m)!.get(c.id) ?? 0
+        pool = pool + due - paid
+        if (pool > 0 && due > 0 && !foundOldest) {
+          oldestAge = monthsBetween(m, mo)   // tháng đầu tiên bắt đầu phát sinh nợ mới
+          foundOldest = true
+        }
+        if (pool <= 0) { foundOldest = false; oldestAge = 0 }  // tiền thừa xoá hết nợ cũ
       }
-      if (cur + over > 1) debtRows.push({ id: c.id, name: c.name, group: c.group?.trim() || '', overdue: over, cur, age: oldest })
+      const totalRemain = Math.max(0, pool)
+      if (totalRemain <= 1) continue
+      // Tách phần hiện tháng vs quá hạn
+      const curDue = dueByCM.get(mo)?.get(c.id) ?? 0
+      const curPaid = paidByCM.get(mo)?.get(c.id) ?? 0
+      const curNet = Math.min(Math.max(0, curDue - curPaid), totalRemain)
+      const overNet = totalRemain - curNet
+      aging.cur += curNet
+      if (overNet > 0) {
+        if (oldestAge <= 1) aging.m1 += overNet
+        else if (oldestAge === 2) aging.m2 += overNet
+        else aging.m3 += overNet
+      }
+      debtRows.push({ id: c.id, name: c.name, group: c.group?.trim() || '', overdue: overNet, cur: curNet, age: oldestAge > 0 ? oldestAge : 0 })
     }
     const overdueTotal = aging.m1 + aging.m2 + aging.m3
     const outstandingTotal = aging.cur + overdueTotal
@@ -460,26 +488,30 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
             <table className="dn-table ov-dense">
               <thead><tr>
                 <th>Tháng</th>
-                <th style={{ textAlign: 'right' }}>Tổng chi phí</th>
-                <th style={{ textAlign: 'right' }}>Khách thuê</th>
-                <th style={{ textAlign: 'right' }}>Ban quản trị</th>
-                <th style={{ textAlign: 'right' }}>Sơn An chịu</th>
-                <th style={{ width: 150 }}>Tỷ trọng</th>
+                <th style={{ textAlign: 'right' }}>Chi phí điện nước</th>
+                <th style={{ textAlign: 'right' }}>BQT chịu</th>
+                <th style={{ textAlign: 'right', color: '#8A5A12' }}>SA chịu hao hụt</th>
+                <th style={{ textAlign: 'right', color: '#1F6B3D' }}>SA thu hộ</th>
+                <th style={{ textAlign: 'right' }}>Chênh lệch SA</th>
+                <th style={{ width: 130 }}>Tỷ trọng 3 bên</th>
               </tr></thead>
               <tbody>
-                {M.split3Series.length === 0 && <tr><td colSpan={6} className="ov-empty">Chưa có tháng nào nhập chỉ số điện nước.</td></tr>}
+                {M.split3Series.length === 0 && <tr><td colSpan={7} className="ov-empty">Chưa có tháng nào nhập chỉ số điện nước.</td></tr>}
                 {[...M.split3Series].reverse().map(s => (
                   <tr key={s.m} style={s.m === M.dataMonth ? { background: '#EEF3FA' } : undefined}>
                     <td style={{ fontWeight: 600 }}>{s.m}{s.m === M.dataMonth && <span className="ov-mini"> ·hiện tại</span>}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(s.total)}</td>
-                    <td style={{ textAlign: 'right' }}>{fmt(s.tenant)} <span className="ov-mini">{pct(s.tenant, s.total).toFixed(0)}%</span></td>
                     <td style={{ textAlign: 'right' }}>{fmt(s.bqt)} <span className="ov-mini">{pct(s.bqt, s.total).toFixed(0)}%</span></td>
                     <td style={{ textAlign: 'right', color: '#8A5A12', fontWeight: 600 }}>{fmt(s.sonan)} <span className="ov-mini">{pct(s.sonan, s.total).toFixed(0)}%</span></td>
+                    <td style={{ textAlign: 'right', color: '#1F6B3D', fontWeight: 600 }}>{fmt(s.saCollects)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: s.saNet >= 0 ? '#1F6B3D' : '#8C1F1F' }}>
+                      {s.saNet >= 0 ? '+' : ''}{fmt(s.saNet)}
+                    </td>
                     <td>
                       <div className="ov-bar" style={{ height: 14, borderRadius: 4 }}>
-                        <div style={{ width: `${pct(s.tenant, s.total)}%`, background: 'var(--navy)' }} />
-                        <div style={{ width: `${pct(s.bqt, s.total)}%`, background: 'var(--navy3)' }} />
-                        <div style={{ width: `${pct(s.sonan, s.total)}%`, background: 'var(--gold)' }} />
+                        <div style={{ width: `${pct(s.tenant, s.total)}%`, background: 'var(--navy)' }} title={`Khách thuê: ${fmt(s.tenant)}`} />
+                        <div style={{ width: `${pct(s.bqt, s.total)}%`, background: 'var(--navy3)' }} title={`BQT: ${fmt(s.bqt)}`} />
+                        <div style={{ width: `${pct(s.sonan, s.total)}%`, background: 'var(--gold)' }} title={`SA chịu: ${fmt(s.sonan)}`} />
                       </div>
                     </td>
                   </tr>
@@ -488,9 +520,10 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
             </table>
           </div>
           <div className="ov-legend" style={{ marginTop: 10 }}>
-            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--navy)' }} />Khách thuê (ki-ốt + công ty + 3 tầng TM chung)</span>
-            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--navy3)' }} />Ban quản trị (cư dân dùng chung)</span>
-            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--gold)' }} />Sơn An chịu = hao hụt/thất thoát kỹ thuật (ước tính)</span>
+            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--navy)' }} />Khách thuê chịu (điện/nước)</span>
+            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--navy3)' }} />Ban quản trị chịu (khu chung cư dân)</span>
+            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--gold)' }} />SA chịu hao hụt kỹ thuật</span>
+            <span className="ov-legend-item ov-mini" style={{ color: '#1F6B3D' }}>SA thu hộ = điện/nước khách + phí QL · Chênh lệch = phí QL − hao hụt</span>
           </div>
         </div>
       </div>
