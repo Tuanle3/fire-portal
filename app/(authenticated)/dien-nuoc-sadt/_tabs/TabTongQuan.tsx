@@ -2,7 +2,7 @@
 import { useMemo } from 'react'
 import {
   MeterReading, Customer, CustomerUsage, Payment, MeterId, BAND_KEYS,
-  meterLabel, meterAllocation, meterTotal, meterSubtotal, managementFeeOf,
+  meterLabel, meterAllocation, meterTotal, meterSubtotal,
   lastReadingBefore, bandsWithPriceChange, computeBqt, computeLightingSplit,
   METER_UNIT, BAND_LABELS,
 } from '@/lib/dien-nuoc-types'
@@ -37,8 +37,12 @@ function dueMapForMonth(readings: MeterReading[], customers: Customer[], usages:
     for (const row of meterAllocation(r, customers, usages).rows)
       map.set(row.customer.id, (map.get(row.customer.id) ?? 0) + row.amount)
   for (const c of customers) {
-    const f = managementFeeOf(c, m)
-    if (f > 0) map.set(c.id, (map.get(c.id) ?? 0) + f)
+    // Phí QL: dùng feeByMonth (đã lưu/xác nhận) như TabCongNo — không dùng managementFeeOf (lý thuyết)
+    const fee = c.feeByMonth?.[m] ?? 0
+    if (fee > 0) map.set(c.id, (map.get(c.id) ?? 0) + fee)
+    // Phí khác (mở lại điện, thu rác, ...)
+    const other = Object.values(c.otherFeesByType ?? {}).reduce((s, byMonth) => s + (byMonth[m] ?? 0), 0)
+    if (other > 0) map.set(c.id, (map.get(c.id) ?? 0) + other)
   }
   return map
 }
@@ -149,11 +153,14 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
     const yoyInput = billedOfMonth(readings, yoyM)
     const allocatedToTenants = meters.reduce((s, m) => s + (m.alloc?.allocated ?? 0), 0)
     const remainderBorne = meters.reduce((s, m) => s + (m.alloc?.remainderTotal ?? 0), 0)
-    const managementDue = customers.reduce((s, c) => s + managementFeeOf(c, mo), 0)
+    // Phí QL & phí khác: dùng feeByMonth / otherFeesByType (đã lưu) như TabCongNo
+    const managementDue = customers.reduce((s, c) => s + (c.feeByMonth?.[mo] ?? 0), 0)
+    const otherFeesDue = customers.reduce((s, c) =>
+      s + Object.values(c.otherFeesByType ?? {}).reduce((t, byMonth) => t + (byMonth[mo] ?? 0), 0), 0)
     // Chia 3 bên cho tháng hiệu lực + chuỗi các tháng có dữ liệu (mới → cũ) để thống kê
     const split3 = splitThreeWay(readings, customers, usages, mo)
     const split3Series = monthsWithData.filter(mm => mm <= mo).slice(-8).map(mm => ({ m: mm, ...splitThreeWay(readings, customers, usages, mm) }))
-    const receivable = meters.reduce((s, m) => s + rowsSum(m), 0) + managementDue   // tổng phải thu hộ
+    const receivable = meters.reduce((s, m) => s + rowsSum(m), 0) + managementDue + otherFeesDue   // tổng phải thu hộ
     const collected = payments.filter(p => p.month === mo).reduce((s, p) => s + p.amount, 0)
     const recoveryPct = pct(collected, receivable)
     const gánhPct = pct(remainderBorne, inputCost)
@@ -212,7 +219,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
     alerts.sort((a, b) => SEV_ORDER[a.sev] - SEV_ORDER[b.sev])
 
     return {
-      meters, inputCost, prevInput, yoyInput, allocatedToTenants, remainderBorne, managementDue,
+      meters, inputCost, prevInput, yoyInput, allocatedToTenants, remainderBorne, managementDue, otherFeesDue,
       receivable, collected, recoveryPct, gánhPct, aging, overdueTotal, outstandingTotal,
       overdueRows, overdueCount, sev3Count, alerts, missing, custById, yoyM,
       dataMonth: mo, fellBack, selectedMonth: month, split3, split3Series,
@@ -297,7 +304,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
             {' '}Chia 3 bên: khách thuê chịu <b>{fmt(M.split3.tenant)} đ</b> ({pct(M.split3.tenant, M.split3.total).toFixed(0)}%),
             Ban quản trị chịu <b>{fmt(M.split3.bqt)} đ</b> ({pct(M.split3.bqt, M.split3.total).toFixed(0)}%),
             Sơn An chịu hao hụt <b style={{ color: '#8A5A12' }}>{fmt(M.split3.sonan)} đ</b> ({pct(M.split3.sonan, M.split3.total).toFixed(0)}%).
-            {' '}Tổng phải thu hộ <b>{fmt(M.receivable)} đ</b> (gồm phí quản lý {fmt(M.managementDue)} đ); đã thu <b>{fmt(M.collected)} đ</b> —
+            {' '}Tổng phải thu hộ <b>{fmt(M.receivable)} đ</b> (gồm phí QL {fmt(M.managementDue)} đ{M.otherFeesDue > 0 ? `, phí khác ${fmt(M.otherFeesDue)} đ` : ''}); đã thu <b>{fmt(M.collected)} đ</b> —
             tỷ lệ thu hồi <span className={M.recoveryPct >= 70 ? 'down' : 'up'}>{M.recoveryPct.toFixed(0)}% ({verdict})</span>.
             {' '}Công nợ quá hạn <b className={M.overdueTotal > 0 ? undefined : undefined} style={{ color: M.overdueTotal > 0 ? '#8C1F1F' : '#1F6B3D' }}>{fmt(M.overdueTotal)} đ</b> từ {M.overdueCount} khách
             {M.sev3Count > 0 ? <>, trong đó <span className="up">{M.sev3Count} khách quá hạn ≥3 tháng ({fmt(M.aging.m3)} đ)</span> — cần biện pháp mạnh.</> : '.'}
@@ -315,7 +322,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
         <div className="ov-kpi">
           <div className="ov-kpi-lbl">🧾 Phải thu hộ</div>
           <div className="ov-kpi-val">{fmt(M.receivable)} đ</div>
-          <div className="ov-kpi-sub">Khách {fmt(M.allocatedToTenants)} + phí QL {fmtShort(M.managementDue)}</div>
+          <div className="ov-kpi-sub">Khách {fmtShort(M.allocatedToTenants)} · phí QL {fmtShort(M.managementDue)}{M.otherFeesDue > 0 ? ` · khác ${fmtShort(M.otherFeesDue)}` : ''}</div>
         </div>
         <div className="ov-kpi ov-kpi-green">
           <div className="ov-kpi-lbl">✓ Đã thu · {M.recoveryPct.toFixed(0)}%</div>
