@@ -118,17 +118,19 @@ export default function DienNuocSadtPage() {
         .dn-sum-top td { border-top:2px solid var(--navy) !important; }
         .dn-col-title { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; min-height:26px; }
         .dn-empty { font-size:12px; color:var(--muted2); font-style:italic; padding:16px 4px; }
-        /* Cho phép bảng rộng cuộn ngang trong khung, tránh vỡ layout / tràn trang */
-        .dn-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+        /* Bảng rộng cuộn ngang; overflow-y:auto + max-height tạo scroll container riêng để
+           position:sticky hoạt động đúng (overflow-x:auto tạo BFC, phá sticky page-level) */
+        .dn-scroll { overflow-x:auto; overflow-y:auto; max-height:calc(100vh - 200px); -webkit-overflow-scrolling:touch; }
+        /* sc--sticky: sc-head (42px nav + ~50px sc-head) đã chiếm ~92px → dn-scroll nhỏ lại */
+        .sc--sticky .dn-scroll { max-height:calc(100vh - 100px); }
         /* Lưới form khách hàng tự co theo bề rộng (không cần media query) */
         .dn-form-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-bottom:10px; }
 
-        /* ── Sticky tab bar: ~42px cao ── */
-        /* ── Sticky card header: thêm ~48px ── */
-        /* Thead dính: các th trong thead luôn hiện khi cuộn dọc */
+        /* Thead/tfoot dính trong scroll container riêng (top:0 vì container đã bắt đầu dưới nav) */
+        .dn-scroll .dn-table thead th { position:sticky; top:0; z-index:5; }
+        .dn-scroll .dn-table tfoot tr  { position:sticky; bottom:0; z-index:4; }
+        /* Fallback cho bảng KHÔNG nằm trong .dn-scroll (cuộn trang) */
         .dn-table thead th { position:sticky; top:42px; z-index:5; }
-        /* Trong card có sc-head sticky → thead lùi thêm độ cao sc-head */
-        .sc--sticky .dn-table thead th { top:90px; }
         /* Góc trái trên (sticky cả ngang lẫn dọc) cần z-index cao hơn */
         .dn-table thead th.dn-sticky-col { z-index:8; }
 
