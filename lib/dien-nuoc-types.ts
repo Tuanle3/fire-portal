@@ -572,6 +572,41 @@ export interface LightingSplit {
   vatPercent: number
 }
 
+// ── Chia tiền ĐH1 cho 3 bên (Sơn An thu hộ / SA chịu EVN / BQT chịu) ──────────
+export interface Dh1Split3 {
+  total: number
+  sonanRevenue: number    // tiền thực thu từ khách ki ốt + công ty (theo đơn giá của họ)
+  sonanEVNCost: number    // tiền Sơn An trả EVN cho phần kWh của khách (theo đơn giá EVN)
+  sonanProfit: number     // chênh lệch SA hưởng = sonanRevenue − sonanEVNCost
+  bqtBorne: number        // BQT chịu = tổng đồng hồ − sonanEVNCost
+  totalKwh: number; commonKwh: number; companyKwh: number
+  tenantKwh: number; bqtKwh: number
+}
+// Tỷ lệ phân bổ khung giờ cho ki ốt (chung 3 tầng TM) khi tính chi phí EVN
+export const KIOSK_BAND_RATIO = { caoDiem: 0.15, thapDiem: 0.35, binhThuong: 0.50 } as const
+
+export function splitDh1ThreeWay(split: LightingSplit, reading: MeterReading, customers: Customer[], usages: CustomerUsage[]): Dh1Split3 {
+  const total = split.meterTotal
+  const vatMul = 1 + (reading.vatPercent || 0) / 100
+  const sonanRevenue = meterAllocation(reading, customers, usages).allocated
+  const commonKwh = split.commonPoolKwh
+  const kioskEVNCost = (['caoDiem', 'thapDiem', 'binhThuong'] as const).reduce((s, k) =>
+    s + commonKwh * KIOSK_BAND_RATIO[k] * (reading.bands[k]?.donGia || 0), 0) * vatMul
+  const companyEVNCost = split.companies.reduce((s, co) =>
+    s + (['caoDiem', 'thapDiem', 'binhThuong'] as const).reduce((ss, k) =>
+      ss + co[k] * (reading.bands[k]?.donGia || 0), 0) * vatMul, 0)
+  const sonanEVNCost = kioskEVNCost + companyEVNCost
+  const sonanProfit = sonanRevenue - sonanEVNCost
+  const bqtBorne = Math.max(0, total - sonanEVNCost)
+  const companyKwh = split.companies.reduce((s, co) => s + co.total, 0)
+  const tenantKwh = commonKwh + companyKwh
+  const totKwh = BAND_KEYS.reduce((s, k) => s + (reading.bands[k]?.kwh || 0), 0)
+  const bqtc = computeBqt(reading, customers, usages, reading.bqtRatio ?? DEFAULT_BQT_RATIO)
+  const commonGroups = new Set((reading.floorReadings ?? []).filter(f => f.commonTM).map(f => (f.group || '').trim()))
+  const bqtKwh = bqtc.floors.filter(fr => !commonGroups.has((fr.group || '').trim())).reduce((s, fr) => s + fr.bqtKwh, 0)
+  return { total, sonanRevenue, sonanEVNCost, sonanProfit, bqtBorne, totalKwh: totKwh, commonKwh, companyKwh, tenantKwh, bqtKwh }
+}
+
 export function computeLightingSplit(
   reading: MeterReading, customers: Customer[], usages: CustomerUsage[],
   ratio: BqtRatio = reading.bqtRatio ?? DEFAULT_BQT_RATIO,

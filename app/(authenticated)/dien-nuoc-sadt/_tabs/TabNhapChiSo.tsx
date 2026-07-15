@@ -9,6 +9,7 @@ import {
   defaultFloorReadings, emptyFloorBands, floorBandKwh, floorTotalKwh, computeLightingSplit, computeBqt, isActiveInMonth, normalizeFloor,
   WATER_METER_KEYS, WATER_METER_LABELS, defaultWaterFloorReadings, waterFloorTotal,
   METER_SERVICE, subFor, findUsage, primaryService, customerHasService,
+  Dh1Split3, KIOSK_BAND_RATIO, splitDh1ThreeWay,
 } from '@/lib/dien-nuoc-types'
 import { saveMeterReading, saveUsage } from '@/lib/dien-nuoc-store'
 import { exportMeter } from '@/lib/dien-nuoc-excel'
@@ -329,51 +330,7 @@ function MeterCard({ meterId, month, readings, customers, usages, meterNames, ca
   )
 }
 
-// ── Chia tiền đồng hồ 1 cho 3 bên (cộng khớp tổng đồng hồ) — cùng logic splitThreeWay ở Tổng quan ──
-//  • Sơn An thu hộ (khách thuê) = tiền thu hộ (3 tầng TM chung + công ty đồng hồ riêng, đã VAT).
-//  • BQT chịu = điện cư dân dùng chung CÓ đo đếm = Σ(ghi tầng − khách) các khu KHÔNG phải 3 tầng TM.
-//  • Sơn An chịu = phần còn lại chưa quy được = hao hụt/thất thoát. ①+②+③ = tổng tiền đồng hồ 1.
-interface Dh1Split3 {
-  total: number
-  sonanRevenue: number    // tiền thực thu từ khách ki ốt + công ty (theo đơn giá của họ)
-  sonanEVNCost: number    // tiền Sơn An trả EVN cho phần kWh của khách (theo đơn giá EVN)
-  sonanProfit: number     // chênh lệch Sơn An hưởng = sonanRevenue − sonanEVNCost
-  bqtBorne: number        // BQT chịu = tổng đồng hồ − sonanEVNCost
-  totalKwh: number; commonKwh: number; companyKwh: number
-  tenantKwh: number; bqtKwh: number
-}
-// Tỷ lệ phân bổ khung giờ cho ki ốt (chung 3 tầng TM) khi tính chi phí EVN
-const KIOSK_BAND_RATIO = { caoDiem: 0.15, thapDiem: 0.35, binhThuong: 0.50 } as const
-function splitDh1ThreeWay(split: ReturnType<typeof computeLightingSplit>, reading: MeterReading, customers: Customer[], usages: CustomerUsage[]): Dh1Split3 {
-  const total = split.meterTotal
-  const vatMul = 1 + (reading.vatPercent || 0) / 100
-
-  // ① Sơn An thu hộ = tiền thực tế thu từ khách (theo đơn giá cấu hình từng khách)
-  const sonanRevenue = meterAllocation(reading, customers, usages).allocated
-
-  // ② Sơn An chịu phí EVN = tiền EVN tính cho phần kWh của ki ốt + công ty
-  // Ki ốt (chung 3 tầng TM): phân bổ 15% CĐ / 35% TĐ / 50% BT × đơn giá EVN × VAT
-  const commonKwh = split.commonPoolKwh
-  const kioskEVNCost = (['caoDiem', 'thapDiem', 'binhThuong'] as const).reduce((s, k) =>
-    s + commonKwh * KIOSK_BAND_RATIO[k] * (reading.bands[k]?.donGia || 0), 0) * vatMul
-  // Công ty (ownMeter): kWh thực từng khung giờ × đơn giá EVN × VAT
-  const companyEVNCost = split.companies.reduce((s, co) =>
-    s + (['caoDiem', 'thapDiem', 'binhThuong'] as const).reduce((ss, k) =>
-      ss + co[k] * (reading.bands[k]?.donGia || 0), 0) * vatMul, 0)
-  const sonanEVNCost = kioskEVNCost + companyEVNCost
-
-  const sonanProfit = sonanRevenue - sonanEVNCost
-  const bqtBorne = Math.max(0, total - sonanEVNCost)
-
-  // kWh thông tin (không dùng để tính tiền)
-  const companyKwh = split.companies.reduce((s, co) => s + co.total, 0)
-  const tenantKwh = commonKwh + companyKwh
-  const totKwh = BAND_KEYS.reduce((s, k) => s + (reading.bands[k]?.kwh || 0), 0)
-  const bqtc = computeBqt(reading, customers, usages, reading.bqtRatio ?? DEFAULT_BQT_RATIO)
-  const commonGroups = new Set((reading.floorReadings ?? []).filter(f => f.commonTM).map(f => (f.group || '').trim()))
-  const bqtKwh = bqtc.floors.filter(fr => !commonGroups.has((fr.group || '').trim())).reduce((s, fr) => s + fr.bqtKwh, 0)
-  return { total, sonanRevenue, sonanEVNCost, sonanProfit, bqtBorne, totalKwh: totKwh, commonKwh, companyKwh, tenantKwh, bqtKwh }
-}
+// splitDh1ThreeWay, Dh1Split3, KIOSK_BAND_RATIO imported from dien-nuoc-types
 
 // ── Đồng hồ 1: tách "Sơn An thu hộ" & "Ban quản trị" (theo sheet Điện chiếu sáng) ──
 function BqtSection({ reading, readings, month, customers, usages, floorReadings, setFloorReadings, bqtRatio, setBqtRatio, onSave, saving, savedAt }: {
