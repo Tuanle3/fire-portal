@@ -504,48 +504,56 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
         if (series.length === 0) return null
         const d1 = (s: typeof series[number]) => s.meterDetails.find(d => d.meterId === 1)
         const d2 = (s: typeof series[number]) => s.meterDetails.find(d => d.meterId === 2)
-        const thCol = (s: typeof series[number]) => ({
-          background: s.m === M.dataMonth ? '#D6E8FA' : undefined,
-          textAlign: 'right' as const,
-        })
-        // nhóm chỉ số: label + 3 dòng con (Tổng / ĐH1 / ĐH2)
-        type SubRow = { sub: string; vals: (s: typeof series[number]) => { v: number | null; pctOf?: number } }
-        interface Group { label: string; color?: string; rows: SubRow[] }
+        // nhóm chỉ số: label (có tổng inline) + dòng con ĐH1/ĐH2
+        type SubRow = { sub: string; vals: (s: typeof series[number]) => { v: number | null; pctOf?: number }; isProfit?: boolean }
+        interface Group { label: string; color?: string; totalVals: (s: typeof series[number]) => { v: number | null; pctOf?: number }; rows: SubRow[]; isProfit?: boolean }
         const groups: Group[] = [
           {
-            label: 'Tổng chi phí điện', rows: [
-              { sub: 'Tổng', vals: s => ({ v: s.total }) },
+            label: 'Tổng chi phí điện',
+            totalVals: s => ({ v: s.total }),
+            rows: [
               { sub: 'ĐH 1', vals: s => ({ v: d1(s)?.hasData ? d1(s)!.total : null }) },
               { sub: 'ĐH 2', vals: s => ({ v: d2(s)?.hasData ? d2(s)!.total : null }) },
             ],
           },
           {
-            label: 'BQT chịu', color: 'var(--navy3)', rows: [
-              { sub: 'Tổng', vals: s => ({ v: s.bqt, pctOf: s.total }) },
+            label: 'BQT chịu', color: 'var(--navy3)',
+            totalVals: s => ({ v: s.bqt, pctOf: s.total }),
+            rows: [
               { sub: 'ĐH 1', vals: s => ({ v: d1(s)?.hasData ? d1(s)!.bqt : null, pctOf: d1(s)?.total }) },
               { sub: 'ĐH 2', vals: s => ({ v: null }) },
             ],
           },
           {
-            label: 'Sơn An chịu EVN', color: '#8A5A12', rows: [
-              { sub: 'Tổng', vals: s => ({ v: s.sonan, pctOf: s.total }) },
+            label: 'Sơn An chịu EVN', color: '#8A5A12',
+            totalVals: s => ({ v: s.sonan, pctOf: s.total }),
+            rows: [
               { sub: 'ĐH 1', vals: s => ({ v: d1(s)?.hasData ? d1(s)!.saLoss : null, pctOf: d1(s)?.total }) },
               { sub: 'ĐH 2', vals: s => ({ v: d2(s)?.hasData && d2(s)!.saLoss > 0 ? d2(s)!.saLoss : null, pctOf: d2(s)?.total }) },
             ],
           },
           {
-            label: 'Sơn An thu hộ', color: '#1F6B3D', rows: [
-              { sub: 'Tổng', vals: s => ({ v: s.tenant }) },
+            label: 'Sơn An thu hộ', color: '#1F6B3D',
+            totalVals: s => ({ v: s.tenant }),
+            rows: [
               { sub: 'ĐH 1', vals: s => ({ v: d1(s)?.hasData ? d1(s)!.saCollects : null }) },
               { sub: 'ĐH 2', vals: s => ({ v: d2(s)?.hasData ? d2(s)!.saCollects : null }) },
             ],
           },
           {
-            label: 'Chênh lệch SA hưởng', color: '#1F6B3D', rows: [
-              { sub: 'ĐH 1', vals: s => ({ v: d1(s)?.hasData ? d1(s)!.saProfit : null }) },
-            ],
+            label: 'Chênh lệch SA hưởng', color: '#1F6B3D', isProfit: true,
+            totalVals: s => ({ v: d1(s)?.hasData ? d1(s)!.saProfit : null }),
+            rows: [],
           },
         ]
+        const renderVal = (v: number | null, pctOf: number | undefined, isProfit?: boolean, color?: string) => {
+          if (v === null) return <span style={{ color: 'var(--muted2)' }}>—</span>
+          const valColor = isProfit ? (v >= 0 ? '#1F6B3D' : '#8C1F1F') : color
+          return <span style={{ color: valColor, fontWeight: 600 }}>
+            {isProfit && v >= 0 ? '+' : ''}{fmt(v)}
+            {pctOf != null && pctOf > 0 && <span className="ov-mini" style={{ marginLeft: 4 }}>{pct(v, pctOf).toFixed(0)}%</span>}
+          </span>
+        }
         return (
           <div className="sc ov-tight" style={{ marginTop: 14 }}>
             <div className="sc-head">
@@ -557,8 +565,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
                 <table className="dn-table ov-dense" style={{ minWidth: 600 }}>
                   <thead>
                     <tr>
-                      <th style={{ minWidth: 120 }}>Chỉ số</th>
-                      <th style={{ width: 40, color: 'var(--muted)', fontWeight: 600 }}></th>
+                      <th style={{ minWidth: 160 }}>Chỉ số</th>
                       {series.map(s => (
                         <th key={s.m} style={{ textAlign: 'right', background: s.m === M.dataMonth ? '#D6E8FA' : undefined, whiteSpace: 'nowrap' }}>
                           {s.m}{s.m === M.dataMonth && <span className="ov-mini" style={{ display: 'block', fontWeight: 400 }}>hiện tại</span>}
@@ -569,28 +576,25 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
                   <tbody>
                     {groups.map((g, gi) => (
                       <Fragment key={gi}>
-                        {/* Dòng nhãn nhóm */}
-                        <tr style={{ background: 'var(--surf2)' }}>
-                          <td colSpan={2 + series.length} style={{ fontWeight: 700, fontSize: 11, color: g.color ?? 'var(--navy)', paddingTop: gi === 0 ? undefined : 8, letterSpacing: '.02em' }}>
-                            {g.label}
-                          </td>
+                        {/* Dòng nhãn nhóm — có tổng inline */}
+                        <tr style={{ background: 'var(--surf2)', borderTop: gi > 0 ? '2px solid var(--border3)' : undefined }}>
+                          <td style={{ fontWeight: 700, fontSize: 11.5, color: g.color ?? 'var(--navy)' }}>{g.label}</td>
+                          {series.map(s => {
+                            const { v, pctOf } = g.totalVals(s)
+                            return <td key={s.m} style={{ textAlign: 'right', background: s.m === M.dataMonth ? '#D6E8FA' : undefined }}>
+                              {renderVal(v, pctOf, g.isProfit, g.color)}
+                            </td>
+                          })}
                         </tr>
-                        {/* Dòng con */}
+                        {/* Dòng con ĐH1/ĐH2 */}
                         {g.rows.map((row, ri) => (
                           <tr key={ri}>
-                            <td style={{ paddingLeft: 14, color: 'var(--muted)', fontSize: 11.5 }}>{row.sub}</td>
-                            <td />
+                            <td style={{ paddingLeft: 16, color: 'var(--muted)', fontSize: 11.5 }}>{row.sub}</td>
                             {series.map(s => {
                               const { v, pctOf } = row.vals(s)
-                              const isProfit = g.label === 'Chênh lệch SA hưởng'
                               return (
-                                <td key={s.m} style={{ ...thCol(s), color: g.color, fontWeight: v !== null ? 600 : undefined }}>
-                                  {v === null ? <span style={{ color: 'var(--muted2)' }}>—</span> : (
-                                    <>
-                                      {isProfit && v >= 0 ? '+' : ''}{fmt(v)}
-                                      {pctOf != null && pctOf > 0 && <span className="ov-mini" style={{ marginLeft: 4 }}>{pct(v, pctOf).toFixed(0)}%</span>}
-                                    </>
-                                  )}
+                                <td key={s.m} style={{ textAlign: 'right', background: s.m === M.dataMonth ? '#F5F8FD' : undefined }}>
+                                  {renderVal(v, pctOf, row.isProfit, g.color)}
                                 </td>
                               )
                             })}
