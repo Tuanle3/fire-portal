@@ -165,7 +165,8 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
         saCollects: number; saProfit: number; hasData: boolean
         dh1?: Dh1Split3
       }
-      const meterDetails: MeterDetail[] = ([1, 2, 3] as MeterId[]).map(id => {
+      // ĐH3 (nước) không tổng hợp vào bảng phân bổ điện
+      const meterDetails: MeterDetail[] = ([1, 2] as MeterId[]).map(id => {
         const r = readings.find(x => x.meterId === id && x.month === mm)
         if (!r) return { meterId: id, total: 0, bqt: 0, saLoss: 0, saCollects: 0, saProfit: 0, hasData: false }
         const total = meterTotal(r.bands, r.vatPercent)
@@ -174,8 +175,9 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
           const d = splitDh1ThreeWay(lSplit, r, customers, usages)
           return { meterId: id, total: d.total, bqt: d.bqtBorne, saLoss: d.sonanEVNCost, saCollects: d.sonanRevenue, saProfit: d.sonanProfit, hasData: true, dh1: d }
         } else {
+          // ĐH2 (máy lạnh): chỉ SA & khách dùng — phần chưa phân bổ là SA chịu (không phải BQT)
           const allocated = meterAllocation(r, customers, usages).allocated
-          return { meterId: id, total, bqt: total - allocated, saLoss: 0, saCollects: allocated, saProfit: 0, hasData: true }
+          return { meterId: id, total, bqt: 0, saLoss: total - allocated, saCollects: allocated, saProfit: 0, hasData: true }
         }
       })
       const mgmtFee = customers.reduce((sum, c) => sum + (c.feeByMonth?.[mm] ?? 0), 0)
@@ -352,7 +354,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
             {delta(M.inputCost, M.yoyInput) !== null && <>, <span className={delta(M.inputCost, M.yoyInput)! > 0 ? 'up' : 'down'}>{delta(M.inputCost, M.yoyInput)! > 0 ? '▲' : '▼'}{Math.abs(delta(M.inputCost, M.yoyInput)!).toFixed(0)}% so cùng kỳ</span></>})</>}.
             {' '}Chia 3 bên: SA thu hộ từ khách (điện/nước) <b>{fmt(M.split3.tenant)} đ</b> ({pct(M.split3.tenant, M.split3.total).toFixed(0)}%),
             Ban quản trị chịu <b>{fmt(M.split3.bqt)} đ</b> ({pct(M.split3.bqt, M.split3.total).toFixed(0)}%),
-            SA chịu phí EVN ki ốt/công ty (ĐH1) <b style={{ color: '#8A5A12' }}>{fmt(M.split3.sonan)} đ</b> ({pct(M.split3.sonan, M.split3.total).toFixed(0)}%); chênh lệch SA hưởng <b style={{ color: '#1F6B3D' }}>{M.split3.saNet >= 0 ? '+' : ''}{fmt(M.split3.saNet)} đ</b>.
+            SA chịu (EVN ki ốt/cty ĐH1 + máy lạnh ĐH2 dư) <b style={{ color: '#8A5A12' }}>{fmt(M.split3.sonan)} đ</b> ({pct(M.split3.sonan, M.split3.total).toFixed(0)}%); chênh lệch SA hưởng <b style={{ color: '#1F6B3D' }}>{M.split3.saNet >= 0 ? '+' : ''}{fmt(M.split3.saNet)} đ</b>.
             {' '}Tổng phải thu hộ <b>{fmt(M.receivable)} đ</b> (gồm phí QL {fmt(M.managementDue)} đ{M.otherFeesDue > 0 ? `, phí khác ${fmt(M.otherFeesDue)} đ` : ''}); đã thu <b>{fmt(M.collected)} đ</b> —
             tỷ lệ thu hồi <span className={M.recoveryPct >= 70 ? 'down' : 'up'}>{M.recoveryPct.toFixed(0)}% ({verdict})</span>.
             {' '}Công nợ quá hạn <b className={M.overdueTotal > 0 ? undefined : undefined} style={{ color: M.overdueTotal > 0 ? '#8C1F1F' : '#1F6B3D' }}>{fmt(M.overdueTotal)} đ</b> từ {M.overdueCount} khách
@@ -379,7 +381,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
           <div className="ov-progress"><span style={{ width: `${Math.min(100, M.recoveryPct)}%`, background: M.recoveryPct >= 80 ? 'var(--green)' : M.recoveryPct >= 50 ? 'var(--gold)' : '#DC2626' }} /></div>
         </div>
         <div className="ov-kpi ov-kpi-gold">
-          <div className="ov-kpi-lbl">🏢 SA chịu EVN ki ốt/cty (ĐH1)</div>
+          <div className="ov-kpi-lbl">🏢 SA chịu (ĐH1 EVN + ĐH2 dư)</div>
           <div className="ov-kpi-val">{fmt(M.split3.sonan)} đ</div>
           <div className="ov-kpi-sub">Chênh lệch SA hưởng {M.split3.saNet >= 0 ? '+' : ''}{fmtShort(M.split3.saNet)} · BQT {fmtShort(M.split3.bqt)}</div>
         </div>
@@ -512,7 +514,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
                 <th>Tháng</th>
                 <th style={{ textAlign: 'right' }}>Chi phí điện nước</th>
                 <th style={{ textAlign: 'right' }}>BQT chịu</th>
-                <th style={{ textAlign: 'right', color: '#8A5A12' }}>SA chịu EVN</th>
+                <th style={{ textAlign: 'right', color: '#8A5A12' }}>SA chịu</th>
                 <th style={{ textAlign: 'right', color: '#1F6B3D' }}>SA thu hộ</th>
                 <th style={{ textAlign: 'right' }}>Chênh lệch SA</th>
                 <th style={{ width: 130 }}>Tỷ trọng 3 bên</th>
@@ -581,8 +583,8 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
           <div className="ov-legend" style={{ marginTop: 10 }}>
             <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--navy)' }} />SA thu hộ điện/nước từ khách thuê</span>
             <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--navy3)' }} />Ban quản trị chịu (khu chung cư dân + ĐH2/ĐH3 chưa phân bổ)</span>
-            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--gold)' }} />SA chịu phí EVN cho ki ốt + công ty (chỉ ĐH1)</span>
-            <span className="ov-legend-item ov-mini" style={{ color: '#1F6B3D' }}>SA thu hộ = điện/nước khách + phí QL · Chênh lệch = thu hộ ĐH1 − trả EVN ĐH1</span>
+            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--gold)' }} />SA chịu: phí EVN ki ốt/cty (ĐH1) + máy lạnh chưa phân bổ (ĐH2)</span>
+            <span className="ov-legend-item ov-mini" style={{ color: '#1F6B3D' }}>SA thu hộ = điện khách + phí QL · Chênh lệch = thu hộ ĐH1 − trả EVN ĐH1 · Đồng hồ nước không tổng hợp</span>
           </div>
         </div>
       </div>
