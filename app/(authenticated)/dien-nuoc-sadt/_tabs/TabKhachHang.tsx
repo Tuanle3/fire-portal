@@ -387,6 +387,19 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
             <ServiceConfigBlock key={s} sub={services.find(x => x.service === s)!} meterNames={meterNames} onChange={patch => setSvc(s, patch)} />
           ))}
         </div>
+        {hasSvc('nuoc') && (
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#EEF6FF', borderRadius: 8, border: '1px solid #BDD6F0', width: 'fit-content' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--navy)', whiteSpace: 'nowrap' }}>💧 Số đồng hồ nước:</span>
+            <select className="dn-input" style={{ width: 120, padding: '4px 8px' }}
+              value={form.waterSubMeters ?? 1}
+              onChange={e => set('waterSubMeters', Number(e.target.value))}>
+              <option value={1}>1 đồng hồ</option>
+              <option value={2}>2 đồng hồ</option>
+              <option value={3}>3 đồng hồ</option>
+            </select>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{(form.waterSubMeters ?? 1) >= 2 ? '→ Sẽ hiện 2 dòng nhập chỉ số' : '→ 1 dòng nhập bình thường'}</span>
+          </div>
+        )}
       </div>
 
       <div style={{ marginBottom: 10 }}>
