@@ -76,15 +76,18 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
     if (priceDrafts[c.id] !== undefined) return priceDrafts[c.id]
     const bd = managementFeeBreakdown(c, month)
     const saved = c.feeByMonth?.[month] ?? c.feeAccruedByMonth?.[month]
-    if (bd.isArea && bd.areaM2 > 0 && saved !== undefined) return Math.abs(saved) / bd.areaM2
+    // Chỉ back-calc khi vatIncluded (saved = base = unitPrice × area).
+    // Khi !vatIncluded: saved = total (có VAT), không thể back-calc chính xác → dùng giá từ config.
+    if (bd.isArea && bd.areaM2 > 0 && saved !== undefined && bd.vatIncluded) return Math.abs(saved) / bd.areaM2
     return bd.unitPrice
   }
 
-  // Số tiền = đơn giá × diện tích (nếu theo m²) hoặc đơn giá (flat)
+  // Số tiền cuối = base + VAT (nếu !vatIncluded)
   const getAmt = (c: Customer) => {
     const bd = managementFeeBreakdown(c, month)
     const unitPrice = getUnitPrice(c)
-    return bd.isArea && bd.areaM2 > 0 ? unitPrice * bd.areaM2 : unitPrice
+    const base = bd.isArea && bd.areaM2 > 0 ? unitPrice * bd.areaM2 : unitPrice
+    return !bd.vatIncluded && bd.vatPercent > 0 ? base * (1 + bd.vatPercent / 100) : base
   }
 
   const setUnitPrice = (id: string, v: number) => setPriceDrafts(prev => ({ ...prev, [id]: v }))
@@ -192,7 +195,9 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
               {displayed.map(c => {
                 const bd = managementFeeBreakdown(c, month)
                 const unitPrice = getUnitPrice(c)
-                const amt = bd.isArea && bd.areaM2 > 0 ? unitPrice * bd.areaM2 : unitPrice
+                const base = bd.isArea && bd.areaM2 > 0 ? unitPrice * bd.areaM2 : unitPrice
+                const hasVat = !bd.vatIncluded && bd.vatPercent > 0
+                const amt = hasVat ? base * (1 + bd.vatPercent / 100) : base
                 const mode = getMode(c)
                 const isCharge = mode === 'charge'
                 const savedCharge = c.feeByMonth?.[month]
@@ -225,16 +230,35 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <span style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{bd.areaM2} m² ×</span>
                             <NumberInput style={{ width: 90 }} value={unitPrice} onValueChange={v => setUnitPrice(c.id, v)} />
+                            {hasVat && <span style={{ fontSize: 10, color: 'var(--muted)', whiteSpace: 'nowrap' }}>(chưa VAT)</span>}
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span style={{ fontSize: 10.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>= {fmt(amt)} đ</span>
-                            {unsaved && !changed && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
-                          </div>
+                          {hasVat ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                              <span style={{ fontSize: 10.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>= {fmt(base)} + VAT {bd.vatPercent}% ({fmt(Math.round(base * bd.vatPercent / 100))})</span>
+                              <span style={{ fontSize: 10.5, color: 'var(--navy)', fontWeight: 700, whiteSpace: 'nowrap' }}>= {fmt(amt)} đ
+                                {unsaved && !changed && <span style={{ fontSize: 9.5, color: '#C87000', fontWeight: 400 }}> chưa lưu</span>}
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ fontSize: 10.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>= {fmt(amt)} đ</span>
+                              {unsaved && !changed && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <NumberInput style={{ width: 110 }} value={unitPrice} onValueChange={v => setUnitPrice(c.id, v)} />
-                          {unsaved && !changed && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <NumberInput style={{ width: 110 }} value={unitPrice} onValueChange={v => setUnitPrice(c.id, v)} />
+                            {hasVat && <span style={{ fontSize: 10, color: 'var(--muted)', whiteSpace: 'nowrap' }}>(chưa VAT)</span>}
+                          </div>
+                          {hasVat && (
+                            <span style={{ fontSize: 10.5, color: 'var(--navy)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                              + VAT {bd.vatPercent}% = {fmt(amt)} đ
+                              {unsaved && !changed && <span style={{ fontSize: 9.5, color: '#C87000', fontWeight: 400 }}> chưa lưu</span>}
+                            </span>
+                          )}
+                          {!hasVat && unsaved && !changed && <span style={{ fontSize: 9.5, color: '#C87000' }}>chưa lưu</span>}
                         </div>
                       )}
                     </td>
