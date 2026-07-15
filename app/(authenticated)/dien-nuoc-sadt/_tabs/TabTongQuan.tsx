@@ -279,8 +279,6 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
   const critCount = M.alerts.filter(a => a.sev === 'critical').length
   const warnCount = M.alerts.filter(a => a.sev === 'warning').length
   const verdict = M.recoveryPct >= 90 ? 'tốt' : M.recoveryPct >= 70 ? 'khá' : M.recoveryPct >= 50 ? 'cần cải thiện' : 'yếu'
-  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
-  const toggleMonth = (m: string) => setExpandedMonths(prev => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n })
 
   return (
     <div>
@@ -500,80 +498,72 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
         </div>
       </div>
 
-      {/* ── Chia 3 bên chịu chi phí — theo tháng ─────────────────────────── */}
+      {/* ── Phân bổ chi phí điện ĐH1 + ĐH2 theo tháng ──────────────────────── */}
       <div className="sc ov-tight" style={{ marginTop: 14 }}>
         <div className="sc-head">
-          <span className="sc-title">Phân bổ chi phí điện nước cho 3 bên — theo tháng</span>
-          <span className="ov-sub">Khách thuê · Ban quản trị · Sơn An chịu (hao hụt)</span>
+          <span className="sc-title">Phân bổ chi phí điện — ĐH1 &amp; ĐH2 theo tháng</span>
+          <span className="ov-sub">BQT chịu · Sơn An chịu · SA thu hộ · Chênh lệch</span>
         </div>
         <div className="sc-body">
           <div className="dn-scroll">
             <table className="dn-table ov-dense">
               <thead><tr>
-                <th style={{ width: 28 }} />
                 <th>Tháng</th>
-                <th style={{ textAlign: 'right' }}>Chi phí điện nước</th>
+                <th style={{ textAlign: 'right' }}>Tổng chi phí điện</th>
                 <th style={{ textAlign: 'right' }}>BQT chịu</th>
-                <th style={{ textAlign: 'right', color: '#8A5A12' }}>SA chịu</th>
-                <th style={{ textAlign: 'right', color: '#1F6B3D' }}>SA thu hộ</th>
-                <th style={{ textAlign: 'right' }}>Chênh lệch SA</th>
-                <th style={{ width: 130 }}>Tỷ trọng 3 bên</th>
+                <th style={{ textAlign: 'right', color: '#8A5A12' }}>Sơn An chịu EVN</th>
+                <th style={{ textAlign: 'right', color: '#1F6B3D' }}>Sơn An thu hộ</th>
+                <th style={{ textAlign: 'right' }}>Chênh lệch SA hưởng</th>
               </tr></thead>
               <tbody>
-                {M.split3Series.length === 0 && <tr><td colSpan={8} className="ov-empty">Chưa có tháng nào nhập chỉ số điện nước.</td></tr>}
+                {M.split3Series.length === 0 && <tr><td colSpan={6} className="ov-empty">Chưa có tháng nào nhập chỉ số điện nước.</td></tr>}
                 {[...M.split3Series].reverse().map(s => {
-                  const expanded = expandedMonths.has(s.m)
                   const isCur = s.m === M.dataMonth
+                  const meterRows = s.meterDetails.filter(d => d.hasData)
                   return (
                     <Fragment key={s.m}>
-                      <tr style={isCur ? { background: '#EEF3FA' } : undefined}>
-                        <td style={{ textAlign: 'center', padding: '0 4px' }}>
-                          <button onClick={() => toggleMonth(s.m)} style={{ width: 18, height: 18, lineHeight: '16px', padding: 0, border: '1px solid var(--border3)', borderRadius: 4, background: 'var(--surface)', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--navy)' }}>
-                            {expanded ? '−' : '+'}
-                          </button>
+                      {/* Dòng tổng tháng */}
+                      <tr style={{ background: isCur ? '#EEF3FA' : 'var(--surf2)', fontWeight: 700 }}>
+                        <td>
+                          <span style={{ fontWeight: 800 }}>{s.m}</span>
+                          {isCur && <span className="ov-mini" style={{ marginLeft: 4 }}>· hiện tại</span>}
+                          <span className="ov-mini" style={{ marginLeft: 4, color: 'var(--muted)' }}>Tổng:</span>
                         </td>
-                        <td style={{ fontWeight: 600 }}>{s.m}{isCur && <span className="ov-mini"> ·hiện tại</span>}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(s.total)}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(s.bqt)} <span className="ov-mini">{pct(s.bqt, s.total).toFixed(0)}%</span></td>
-                        <td style={{ textAlign: 'right', color: '#8A5A12', fontWeight: 600 }}>{fmt(s.sonan)} <span className="ov-mini">{s.total > 0 ? pct(s.sonan, s.total).toFixed(0) : 0}%</span></td>
-                        <td style={{ textAlign: 'right', color: '#1F6B3D', fontWeight: 600 }}>{fmt(s.saCollects)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: s.saNet >= 0 ? '#1F6B3D' : '#8C1F1F' }}>
+                        <td style={{ textAlign: 'right' }}>{fmt(s.total)}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          {fmt(s.bqt)}
+                          {s.total > 0 && <span className="ov-mini" style={{ marginLeft: 4 }}>{pct(s.bqt, s.total).toFixed(0)}%</span>}
+                        </td>
+                        <td style={{ textAlign: 'right', color: '#8A5A12' }}>
+                          {fmt(s.sonan)}
+                          {s.total > 0 && <span className="ov-mini" style={{ marginLeft: 4 }}>{pct(s.sonan, s.total).toFixed(0)}%</span>}
+                        </td>
+                        <td style={{ textAlign: 'right', color: '#1F6B3D' }}>{fmt(s.tenant)}</td>
+                        <td style={{ textAlign: 'right', color: s.saNet >= 0 ? '#1F6B3D' : '#8C1F1F' }}>
                           {s.saNet >= 0 ? '+' : ''}{fmt(s.saNet)}
                         </td>
-                        <td>
-                          <div className="ov-bar" style={{ height: 14, borderRadius: 4 }}>
-                            <div style={{ width: `${pct(s.tenant, s.total)}%`, background: 'var(--navy)' }} title={`SA thu hộ (khách thuê điện/nước): ${fmt(s.tenant)}`} />
-                            <div style={{ width: `${pct(s.bqt, s.total)}%`, background: 'var(--navy3)' }} title={`BQT: ${fmt(s.bqt)}`} />
-                            <div style={{ width: `${pct(s.sonan, s.total)}%`, background: 'var(--gold)' }} title={`SA chịu EVN: ${fmt(s.sonan)}`} />
-                          </div>
-                        </td>
                       </tr>
-                      {expanded && s.meterDetails.filter(d => d.hasData).map(d => (
-                        <tr key={`${s.m}-dh${d.meterId}`} style={{ background: 'var(--surf2)', fontSize: 11 }}>
-                          <td />
-                          <td style={{ paddingLeft: 20, color: 'var(--muted)', fontWeight: 600 }}>
-                            ↳ {meterLabel(meterNames, d.meterId as MeterId)}
+                      {/* Dòng chi tiết từng đồng hồ */}
+                      {meterRows.map(d => (
+                        <tr key={`${s.m}-dh${d.meterId}`} style={{ fontSize: 11.5, background: isCur ? '#F5F8FD' : undefined }}>
+                          <td style={{ paddingLeft: 18, color: 'var(--txt2)', fontWeight: 600 }}>
+                            ĐH {d.meterId}: {meterLabel(meterNames, d.meterId as MeterId)}
                           </td>
-                          <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{fmt(d.total)}</td>
-                          <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{fmt(d.bqt)}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--txt2)' }}>{fmt(d.total)}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--muted)' }}>
+                            {d.bqt > 0 ? <>{fmt(d.bqt)}{d.total > 0 && <span className="ov-mini" style={{ marginLeft: 4 }}>{pct(d.bqt, d.total).toFixed(0)}%</span>}</> : '—'}
+                          </td>
                           <td style={{ textAlign: 'right', color: d.saLoss > 0 ? '#8A5A12' : 'var(--muted)' }}>
-                            {d.saLoss > 0 ? fmt(d.saLoss) : '—'}
+                            {d.saLoss > 0 ? <>{fmt(d.saLoss)}{d.total > 0 && <span className="ov-mini" style={{ marginLeft: 4 }}>{pct(d.saLoss, d.total).toFixed(0)}%</span>}</> : '—'}
                           </td>
-                          <td style={{ textAlign: 'right', color: '#1F6B3D' }}>{d.saCollects > 0 ? fmt(d.saCollects) : '—'}</td>
+                          <td style={{ textAlign: 'right', color: '#1F6B3D' }}>
+                            {d.saCollects > 0 ? fmt(d.saCollects) : '—'}
+                          </td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: d.saProfit > 0 ? '#1F6B3D' : d.saProfit < 0 ? '#8C1F1F' : 'var(--muted)' }}>
-                            {d.meterId === 1 ? (d.saProfit >= 0 ? '+' : '') + fmt(d.saProfit) : '—'}
+                            {d.meterId === 1 ? <>{d.saProfit >= 0 ? '+' : ''}{fmt(d.saProfit)}</> : '—'}
                           </td>
-                          <td />
                         </tr>
                       ))}
-                      {expanded && (
-                        <tr key={`${s.m}-mgmt`} style={{ background: 'var(--surf2)', fontSize: 11 }}>
-                          <td /><td style={{ paddingLeft: 20, color: 'var(--muted)', fontWeight: 600 }}>↳ Phí quản lý</td>
-                          <td /><td /><td />
-                          <td style={{ textAlign: 'right', color: '#1F6B3D' }}>{fmt(s.mgmtFee)}</td>
-                          <td /><td />
-                        </tr>
-                      )}
                     </Fragment>
                   )
                 })}
@@ -581,10 +571,9 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
             </table>
           </div>
           <div className="ov-legend" style={{ marginTop: 10 }}>
-            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--navy)' }} />SA thu hộ điện/nước từ khách thuê</span>
-            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--navy3)' }} />Ban quản trị chịu (khu chung cư dân + ĐH2/ĐH3 chưa phân bổ)</span>
-            <span className="ov-legend-item ov-mini"><span className="ov-legend-dot" style={{ background: 'var(--gold)' }} />SA chịu: phí EVN ki ốt/cty (ĐH1) + máy lạnh chưa phân bổ (ĐH2)</span>
-            <span className="ov-legend-item ov-mini" style={{ color: '#1F6B3D' }}>SA thu hộ = điện khách + phí QL · Chênh lệch = thu hộ ĐH1 − trả EVN ĐH1 · Đồng hồ nước không tổng hợp</span>
+            <span className="ov-legend-item ov-mini">BQT chịu: điện cư dân khu chung (chỉ ĐH1)</span>
+            <span className="ov-legend-item ov-mini" style={{ color: '#8A5A12' }}>SA chịu: phí EVN ki ốt/cty (ĐH1) + máy lạnh chưa phân bổ (ĐH2)</span>
+            <span className="ov-legend-item ov-mini" style={{ color: '#1F6B3D' }}>SA thu hộ = điện thuần từ khách (ĐH1 + ĐH2) · Chênh lệch = thu hộ ĐH1 − trả EVN ĐH1</span>
           </div>
         </div>
       </div>
