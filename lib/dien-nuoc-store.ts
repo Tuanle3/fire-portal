@@ -96,6 +96,7 @@ function parseCustomer(id: string, d: Record<string, unknown>): Customer {
             : {}]))
       : undefined,
     oldDebt:    d.oldDebt != null ? Number(d.oldDebt) : undefined,
+    internalSA: d.internalSA === true ? true : undefined,
     createdAt:  (d.createdAt as string) ?? '',
   }
 }
