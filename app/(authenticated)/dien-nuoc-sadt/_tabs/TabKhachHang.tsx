@@ -364,6 +364,10 @@ function CustomerForm({ initial, meterNames, groupSuggestions, onSave, onCancel 
             <option value="inactive">Chưa thuê</option>
           </select>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
+          <input type="checkbox" id="chk-internalSA" checked={!!form.internalSA} onChange={e => set('internalSA', e.target.checked)} />
+          <label htmlFor="chk-internalSA" className="dn-label" style={{ marginBottom: 0, cursor: 'pointer' }}>Nội bộ Sơn An (không theo dõi công nợ)</label>
+        </div>
       </div>
 
       {/* LOẠI SỬ DỤNG: tích nhiều dịch vụ; mỗi dịch vụ có cấu hình tính tiền riêng và hiện ở tab tương ứng */}

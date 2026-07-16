@@ -208,7 +208,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
     const aging = { cur: 0, m1: 0, m2: 0, m3: 0 }
     interface DebtRow { id: string; name: string; group: string; overdue: number; cur: number; age: number }
     const debtRows: DebtRow[] = []
-    for (const c of customers) {
+    for (const c of customers.filter(x => !x.internalSA)) {
       // Pool approach: nhất quán với TabCongNo — tránh tính trùng khi khách trả thừa 1 tháng bù tháng khác
       let pool = c.oldDebt ?? 0   // pool > 0 = còn nợ, < 0 = đang thừa tiền
       // Đếm số tháng liên tiếp có tiền phát sinh chưa thu đủ (bỏ qua oldDebt để khớp Tab Công nợ)

@@ -604,10 +604,11 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
   )
 }
 
-export function TabCongNo({ readings, customers, usages, payments, month, meterNames }: {
+export function TabCongNo({ readings, customers: allCustomers, usages, payments, month, meterNames }: {
   readings: MeterReading[]; customers: Customer[]; usages: CustomerUsage[]; payments: Payment[]; month: string
   meterNames: Record<number, string>
 }) {
+  const customers = allCustomers.filter(c => !c.internalSA)
   const [collecting, setCollecting] = useState<CollectArgs | null>(null)
   const [picking, setPicking] = useState<Customer | null>(null)
   const [printing, setPrinting] = useState<Customer | null>(null)

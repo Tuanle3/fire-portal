@@ -208,6 +208,7 @@ export interface Customer {
   waterSubMeters?: number       // Số đồng hồ nước con (mặc định 1). Hồ bơi = 2.
   otherFeesByType?: Record<string, Record<string, number>>
   oldDebt?: number              // Công nợ cũ trước khi dùng hệ thống (đ)
+  internalSA?: boolean          // Ki-ốt nội bộ Sơn An — không theo dõi công nợ
   createdAt: string
 }
 
