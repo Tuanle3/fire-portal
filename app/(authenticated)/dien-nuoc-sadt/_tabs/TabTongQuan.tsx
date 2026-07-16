@@ -206,7 +206,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
     for (const m of pastMonths) { dueByCM.set(m, dueMapForMonth(readings, customers, usages, m)); paidByCM.set(m, paidMapForMonth(payments, m)) }
 
     const aging = { cur: 0, m1: 0, m2: 0, m3: 0 }
-    interface DebtRow { id: string; name: string; group: string; overdue: number; cur: number; age: number }
+    interface DebtRow { id: string; name: string; group: string; overdue: number; cur: number; age: number; oldDebtOnly: boolean }
     const debtRows: DebtRow[] = []
     for (const c of customers.filter(x => !x.internalSA)) {
       // Pool approach: nhất quán với TabCongNo — tránh tính trùng khi khách trả thừa 1 tháng bù tháng khác
@@ -226,9 +226,9 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
         if (pool <= 0) streakStart = -1  // trả dư hết nợ cũ, reset toàn bộ
       }
       const streak = streakStart === -1 ? 0 : pastMonths.length - streakStart
-      // Nợ cũ (oldDebt) chưa tất toán & không có mạch nợ tháng → xếp bucket m3
+      // Nợ cũ (oldDebt) chưa tất toán mà không có mạch tháng mới → xếp bucket m3
       const hasUnpaidOldDebt = (c.oldDebt ?? 0) > 0 && pool > 0
-      const oldestAge = hasUnpaidOldDebt && streak < 3 ? 3 : streak
+      const oldestAge = hasUnpaidOldDebt && streak === 0 ? 3 : streak
       const totalRemain = Math.max(0, pool)
       if (totalRemain <= 1) continue
       // Tách phần hiện tháng vs quá hạn
@@ -242,7 +242,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
         else if (oldestAge === 2) aging.m2 += overNet
         else aging.m3 += overNet
       }
-      debtRows.push({ id: c.id, name: c.name, group: c.group?.trim() || '', overdue: overNet, cur: curNet, age: oldestAge > 0 ? oldestAge : 0 })
+      debtRows.push({ id: c.id, name: c.name, group: c.group?.trim() || '', overdue: overNet, cur: curNet, age: oldestAge > 0 ? oldestAge : 0, oldDebtOnly: hasUnpaidOldDebt && streak === 0 })
     }
     const overdueTotal = aging.m1 + aging.m2 + aging.m3
     const outstandingTotal = aging.cur + overdueTotal
@@ -259,7 +259,7 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
       if (m.loss?.negative) alerts.push({ sev: 'critical', title: `Ghi tầng vượt đồng hồ tổng (${meterLabel(meterNames, m.id)})`, detail: `Lệch ${fmt(-m.loss.kwh)} kWh — sai/nhập nhầm chỉ số. Rà soát lại số ghi các tầng.` })
       else if (m.loss && m.loss.pct > 15) alerts.push({ sev: 'warning', title: `Điện hao hụt cao ${m.loss.pct.toFixed(0)}% (${meterLabel(meterNames, m.id)})`, detail: `Chênh ${fmt(m.loss.kwh)} kWh do BQT/cư dân gánh (ngưỡng ≤15%). Kiểm tra rò rỉ, đấu nối, đồng hồ hỏng.` })
     }
-    if (sev3Count > 0) alerts.push({ sev: 'critical', title: `${sev3Count} khách quá hạn ≥3 tháng (${fmt(aging.m3)} đ)`, detail: `Nợ khó đòi: ${overdueRows.filter(d => d.age >= 3).slice(0, 3).map(d => `${d.name} (${d.age}th)`).join(', ')}${sev3Count > 3 ? '…' : ''}. Đề xuất khoá dịch vụ / lập biên bản / cấn trừ tiền cọc.` })
+    if (sev3Count > 0) alerts.push({ sev: 'critical', title: `${sev3Count} khách quá hạn ≥3 tháng (${fmt(aging.m3)} đ)`, detail: `Nợ khó đòi: ${overdueRows.filter(d => d.age >= 3).slice(0, 3).map(d => `${d.name} (${d.oldDebtOnly ? 'nợ cũ' : `${d.age}th`})`).join(', ')}${sev3Count > 3 ? '…' : ''}. Đề xuất khoá dịch vụ / lập biên bản / cấn trừ tiền cọc.` })
     const m2Rows = overdueRows.filter(d => d.age === 2)
     if (m2Rows.length > 0) alerts.push({ sev: 'warning', title: `Quá hạn 2 tháng: ${m2Rows.length} khách (${fmt(aging.m2)} đ)`, detail: `${m2Rows.slice(0, 4).map(d => `${d.name} (${fmt(d.overdue)} đ)`).join(', ')}${m2Rows.length > 4 ? '…' : ''}. Gửi công văn nhắc nợ chính thức, hẹn mốc thanh toán trước khi chuyển nhóm nợ xấu.` })
     if (gánhPct > 25) alerts.push({ sev: 'warning', title: `Sơn An/BQT gánh ${gánhPct.toFixed(0)}% chi phí đầu vào`, detail: `${fmt(remainderBorne)} đ không phân bổ cho khách thuê. Rà soát phần hao hụt & ki-ốt trống; xem lại cách phân bổ.` })
@@ -490,10 +490,12 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
                   {M.overdueRows.slice(0, 6).map(d => (
                     <tr key={d.id}>
                       <td style={{ fontWeight: 600 }}>{d.name}{d.group && <span className="ov-mini"> · {d.group}</span>}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: d.age >= 3 ? '#8C1F1F' : d.age === 2 ? '#C2410C' : '#B78319' }}>{d.age} th</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: d.age >= 3 ? '#8C1F1F' : d.age === 2 ? '#C2410C' : '#B78319' }}>
+                        {d.oldDebtOnly ? <span style={{ fontSize: 10, fontWeight: 600, color: '#8C1F1F' }}>Nợ cũ</span> : `${d.age} th`}
+                      </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>{fmt(d.overdue)} đ</td>
                       <td style={{ textAlign: 'center' }}>
-                        {d.age >= 3 ? <span className="badge badge-red">Khoá / cấn cọc</span> : d.age === 2 ? <span className="badge badge-amber">Công văn nhắc</span> : <span className="badge badge-amber">Nhắc lần 1</span>}
+                        {d.oldDebtOnly ? <span className="badge badge-red">Đòi nợ cũ</span> : d.age >= 3 ? <span className="badge badge-red">Khoá / cấn cọc</span> : d.age === 2 ? <span className="badge badge-amber">Công văn nhắc</span> : <span className="badge badge-amber">Nhắc lần 1</span>}
                       </td>
                     </tr>
                   ))}
