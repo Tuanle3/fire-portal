@@ -479,7 +479,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
       if (pool >= cell.due) { cell.remain = 0; pool -= cell.due }
       else { cell.remain = cell.due - pool; pool = 0 }
       R.totalRemain += cell.remain
-      if (cell.due > 0 && cell.remain > 0) R.unpaid += 1
+      if (cell.due > 0 && cell.remain >= 5000) R.unpaid += 1
     }
     R.totalPaid = Array.from(R.m.values()).reduce((s, c) => s + c.paid, 0)
     R.totalRemain = Math.max(0, R.totalDue - R.totalPaid)

@@ -218,10 +218,10 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
         const due = dueByCM.get(m)!.get(c.id) ?? 0
         const paid = paidByCM.get(m)!.get(c.id) ?? 0
         pool = pool + due - paid
-        if (due > 0 && due > paid) {
+        if (due > 0 && due - paid >= 5000) {
           if (streakStart === -1) streakStart = i
-        } else if (due > 0 && paid >= due) {
-          streakStart = -1  // thanh toán đủ tháng này, reset mạch nợ
+        } else if (due > 0 && due - paid < 5000) {
+          streakStart = -1  // lệch < 5.000đ coi như đã thanh toán, reset mạch nợ
         }
         if (pool <= 0) streakStart = -1  // trả dư hết nợ cũ, reset toàn bộ
       }
