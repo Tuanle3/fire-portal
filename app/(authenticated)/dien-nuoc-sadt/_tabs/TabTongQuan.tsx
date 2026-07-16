@@ -211,18 +211,24 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
     for (const c of customers) {
       // Pool approach: nhất quán với TabCongNo — tránh tính trùng khi khách trả thừa 1 tháng bù tháng khác
       let pool = c.oldDebt ?? 0   // pool > 0 = còn nợ, < 0 = đang thừa tiền
-      let oldestAge = pool > 0 ? 999 : 0   // nợ cũ (oldDebt) = rất cũ, xếp vào bucket m3
-      let foundOldest = pool > 0
-      for (const m of pastMonths) {
+      // Đếm số tháng liên tiếp có tiền phát sinh chưa thu đủ (bỏ qua oldDebt để khớp Tab Công nợ)
+      let streakStart = -1
+      for (let i = 0; i < pastMonths.length; i++) {
+        const m = pastMonths[i]
         const due = dueByCM.get(m)!.get(c.id) ?? 0
         const paid = paidByCM.get(m)!.get(c.id) ?? 0
         pool = pool + due - paid
-        if (pool > 0 && due > 0 && !foundOldest) {
-          oldestAge = monthsBetween(m, mo)   // tháng đầu tiên bắt đầu phát sinh nợ mới
-          foundOldest = true
+        if (due > 0 && due > paid) {
+          if (streakStart === -1) streakStart = i
+        } else if (due > 0 && paid >= due) {
+          streakStart = -1  // thanh toán đủ tháng này, reset mạch nợ
         }
-        if (pool <= 0) { foundOldest = false; oldestAge = 0 }  // tiền thừa xoá hết nợ cũ
+        if (pool <= 0) streakStart = -1  // trả dư hết nợ cũ, reset toàn bộ
       }
+      const streak = streakStart === -1 ? 0 : pastMonths.length - streakStart
+      // Nợ cũ (oldDebt) chưa tất toán & không có mạch nợ tháng → xếp bucket m3
+      const hasUnpaidOldDebt = (c.oldDebt ?? 0) > 0 && pool > 0
+      const oldestAge = hasUnpaidOldDebt && streak < 3 ? 3 : streak
       const totalRemain = Math.max(0, pool)
       if (totalRemain <= 1) continue
       // Tách phần hiện tháng vs quá hạn
@@ -254,7 +260,8 @@ export function TabTongQuan({ readings, customers, usages, payments, month, mete
       else if (m.loss && m.loss.pct > 15) alerts.push({ sev: 'warning', title: `Điện hao hụt cao ${m.loss.pct.toFixed(0)}% (${meterLabel(meterNames, m.id)})`, detail: `Chênh ${fmt(m.loss.kwh)} kWh do BQT/cư dân gánh (ngưỡng ≤15%). Kiểm tra rò rỉ, đấu nối, đồng hồ hỏng.` })
     }
     if (sev3Count > 0) alerts.push({ sev: 'critical', title: `${sev3Count} khách quá hạn ≥3 tháng (${fmt(aging.m3)} đ)`, detail: `Nợ khó đòi: ${overdueRows.filter(d => d.age >= 3).slice(0, 3).map(d => `${d.name} (${d.age}th)`).join(', ')}${sev3Count > 3 ? '…' : ''}. Đề xuất khoá dịch vụ / lập biên bản / cấn trừ tiền cọc.` })
-    if (aging.m2 > 1) alerts.push({ sev: 'warning', title: `Quá hạn 2 tháng: ${fmt(aging.m2)} đ`, detail: `Gửi công văn nhắc nợ chính thức, hẹn mốc thanh toán trước khi chuyển nhóm nợ xấu.` })
+    const m2Rows = overdueRows.filter(d => d.age === 2)
+    if (m2Rows.length > 0) alerts.push({ sev: 'warning', title: `Quá hạn 2 tháng: ${m2Rows.length} khách (${fmt(aging.m2)} đ)`, detail: `${m2Rows.slice(0, 4).map(d => `${d.name} (${fmt(d.overdue)} đ)`).join(', ')}${m2Rows.length > 4 ? '…' : ''}. Gửi công văn nhắc nợ chính thức, hẹn mốc thanh toán trước khi chuyển nhóm nợ xấu.` })
     if (gánhPct > 25) alerts.push({ sev: 'warning', title: `Sơn An/BQT gánh ${gánhPct.toFixed(0)}% chi phí đầu vào`, detail: `${fmt(remainderBorne)} đ không phân bổ cho khách thuê. Rà soát phần hao hụt & ki-ốt trống; xem lại cách phân bổ.` })
     const inYoY = delta(inputCost, yoyInput)
     if (inYoY !== null && Math.abs(inYoY) > 20) alerts.push({ sev: 'warning', title: `Tiền điện nước ${inYoY > 0 ? 'tăng' : 'giảm'} ${Math.abs(inYoY).toFixed(0)}% so cùng kỳ năm trước`, detail: `Tháng ${mo}: ${fmt(inputCost)} đ vs ${yoyM}: ${fmt(yoyInput)} đ. Đối chiếu sản lượng & biểu giá.` })
