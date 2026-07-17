@@ -1,7 +1,91 @@
 'use client'
-import { useState } from 'react'
-import { NganSachThang, NganSachItem } from '@/lib/ngan-sach-types'
-import { addItem, removeItem, updateItem } from '@/lib/ngan-sach-store'
+import { useState, useRef } from 'react'
+import * as XLSX from 'xlsx'
+import { NganSachThang, NganSachItem, GiaiPhap } from '@/lib/ngan-sach-types'
+import { addItem, removeItem, updateItem, makeDefault } from '@/lib/ngan-sach-store'
+
+function parseExcel(file: File): Promise<{ items: NganSachItem[]; giai_phap: GiaiPhap[] }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = e => {
+      try {
+        const data = new Uint8Array(e.target!.result as ArrayBuffer)
+        const wb = XLSX.read(data, { type: 'array' })
+
+        // ── Sheet "Kế hoạch" ──
+        const ws1 = wb.Sheets['Kế hoạch'] ?? wb.Sheets[wb.SheetNames[0]]
+        const rows: unknown[][] = XLSX.utils.sheet_to_json(ws1, { header: 1, defval: '' })
+        // Row 0 = title, Row 1 = header, Row 2+ = data
+        const template = makeDefault('__parse__')
+        const templateItems = template.items
+        const items: NganSachItem[] = []
+
+        // Build a lookup: stt → template item, so we preserve is_section / nhom / id
+        const bySTT = new Map<string, NganSachItem>()
+        for (const it of templateItems) bySTT.set(String(it.stt).trim(), it)
+
+        let templateIdx = 0
+        for (let r = 2; r < rows.length; r++) {
+          const row = rows[r] as unknown[]
+          const stt        = String(row[0] ?? '').trim()
+          const dien_giai  = String(row[1] ?? '').trim()
+          const kmcp       = String(row[2] ?? '').trim()
+          const ke_hoach   = Math.abs(Number(String(row[3]).replace(/[^0-9.-]/g, '')) || 0)
+          const thuc_hien  = Math.abs(Number(String(row[4]).replace(/[^0-9.-]/g, '')) || 0)
+          const ghi_chu    = String(row[5] ?? '').trim()
+
+          if (!stt && !dien_giai) continue  // blank row
+
+          // Match to template by stt or sequential
+          const tmpl = bySTT.get(stt) ?? templateItems[templateIdx]
+          templateIdx++
+
+          items.push({
+            id:               tmpl?.id ?? Math.random().toString(36).slice(2),
+            nhom:             tmpl?.nhom ?? 'C',
+            is_section:       tmpl?.is_section ?? false,
+            stt,
+            dien_giai:        dien_giai || (tmpl?.dien_giai ?? ''),
+            kmcp:             kmcp || (tmpl?.kmcp ?? ''),
+            ke_hoach,
+            thuc_hien,
+            thuc_hien_manual: tmpl ? !tmpl.is_section && tmpl.nhom !== 'A' : true,
+            ghi_chu,
+          })
+        }
+
+        // ── Sheet "Giải pháp" ──
+        const ws2 = wb.Sheets['Giải pháp'] ?? wb.Sheets[wb.SheetNames[1]]
+        const giai_phap: GiaiPhap[] = []
+        if (ws2) {
+          const gpRows: unknown[][] = XLSX.utils.sheet_to_json(ws2, { header: 1, defval: '' })
+          for (let r = 2; r < gpRows.length; r++) {
+            const row = gpRows[r] as unknown[]
+            const raw_tt   = String(row[0] ?? '').trim().toLowerCase()
+            const mo_ta    = String(row[1] ?? '').trim()
+            const so_kh    = Math.abs(Number(String(row[2]).replace(/[^0-9.-]/g, '')) || 0)
+            const so_th    = Math.abs(Number(String(row[3]).replace(/[^0-9.-]/g, '')) || 0)
+            const ghi_chu  = String(row[4] ?? '').trim()
+            if (!mo_ta && so_kh === 0) continue
+            const trang_thai: GiaiPhap['trang_thai'] =
+              raw_tt === 'yes' ? 'yes' : raw_tt === 'no' ? 'no' : 'pending'
+            giai_phap.push({
+              id: Math.random().toString(36).slice(2),
+              mo_ta, so_tien_ke_hoach: so_kh,
+              so_tien_thuc_hien: so_th, trang_thai, ghi_chu,
+            })
+          }
+        }
+
+        resolve({ items: items.length ? items : templateItems, giai_phap })
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = () => reject(new Error('Không đọc được file'))
+    reader.readAsArrayBuffer(file)
+  })
+}
 
 const SECTION_COLORS: Record<string, string> = {
   A: '#ECFDF5', B: '#EFF6FF', C: '#FFF7ED', D: '#FEF3C7', E: '#F0FDF4',
@@ -16,6 +100,26 @@ interface Props {
 
 export function TabKeHoach({ data, onChange, onSave, saving }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportMsg('')
+    try {
+      const { items, giai_phap } = await parseExcel(file)
+      onChange({ ...data, items, giai_phap })
+      setImportMsg(`✓ Đã import ${items.length} dòng${giai_phap.length ? ` + ${giai_phap.length} giải pháp` : ''}. Nhớ nhấn Lưu.`)
+    } catch (err: unknown) {
+      setImportMsg('Lỗi: ' + (err instanceof Error ? err.message : 'Không đọc được file'))
+    } finally {
+      setImporting(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
 
   const upd = (id: string, field: keyof NganSachItem, val: string | number | boolean) => {
     onChange(updateItem(data, id, { [field]: val }))
@@ -41,21 +145,62 @@ export function TabKeHoach({ data, onChange, onSave, saving }: Props) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 14, color: '#1C3557' }}>Nhập kế hoạch & thực hiện</div>
-          <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 2 }}>Nhập số tiền kế hoạch và thực hiện cho từng mục. Mục "Tồn quỹ" thực hiện được tự động lấy từ Firebase.</div>
+          <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 2 }}>Nhập trực tiếp hoặc import từ file Excel theo mẫu. Mục "Tồn quỹ" thực hiện tự động từ Firebase.</div>
+          {importMsg && (
+            <div style={{ marginTop: 6, fontSize: 12, color: importMsg.startsWith('Lỗi') ? '#991B1B' : '#166534', fontWeight: 600 }}>
+              {importMsg}
+            </div>
+          )}
         </div>
-        <button
-          onClick={onSave}
-          disabled={saving}
-          style={{
-            padding: '8px 20px', background: saving ? '#9CA3AF' : '#1C3557', color: '#fff',
-            border: 'none', borderRadius: 7, fontWeight: 600, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {saving ? 'Đang lưu…' : '💾 Lưu'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Download template */}
+          <a
+            href="/api/ngan-sach-template"
+            download="mau-ngan-sach.xlsx"
+            style={{
+              padding: '8px 14px', background: '#F0FDF4', color: '#166534',
+              border: '1px solid #86EFAC', borderRadius: 7, fontWeight: 600, fontSize: 12.5,
+              textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5,
+            }}
+          >
+            ⬇ Tải mẫu Excel
+          </a>
+
+          {/* Import button */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={handleImport}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            style={{
+              padding: '8px 14px', background: importing ? '#F3F4F6' : '#EFF6FF', color: importing ? '#9CA3AF' : '#1D4ED8',
+              border: '1px solid #BFDBFE', borderRadius: 7, fontWeight: 600, fontSize: 12.5, cursor: importing ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
+          >
+            {importing ? '⏳ Đang đọc…' : '📂 Import Excel'}
+          </button>
+
+          {/* Save */}
+          <button
+            onClick={onSave}
+            disabled={saving}
+            style={{
+              padding: '8px 20px', background: saving ? '#9CA3AF' : '#1C3557', color: '#fff',
+              border: 'none', borderRadius: 7, fontWeight: 600, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {saving ? 'Đang lưu…' : '💾 Lưu'}
+          </button>
+        </div>
       </div>
 
       <div style={{ overflowX: 'auto' }}>
