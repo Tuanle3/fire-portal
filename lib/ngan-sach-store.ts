@@ -1,7 +1,7 @@
 import {
   collection, doc, getDoc, setDoc, onSnapshot, serverTimestamp,
 } from 'firebase/firestore'
-import { getMainFirestore } from '@/lib/firebase'
+import { diennuocDb } from '@/lib/firebase-diennuoc'
 import { NganSachThang, NganSachItem, GiaiPhap, DEFAULT_ITEMS, DEFAULT_GIAI_PHAP } from '@/lib/ngan-sach-types'
 
 const COL = 'ngan_sach'
@@ -14,7 +14,7 @@ export function subscribeNganSach(
   thang: string,
   cb: (data: NganSachThang) => void,
 ): () => void {
-  const db = getMainFirestore()
+  const db = diennuocDb
   const ref = doc(collection(db, COL), thang)
   return onSnapshot(ref, snap => {
     if (snap.exists()) {
@@ -35,7 +35,7 @@ export function makeDefault(thang: string): NganSachThang {
 }
 
 export async function saveNganSach(data: NganSachThang): Promise<void> {
-  const db = getMainFirestore()
+  const db = diennuocDb
   const ref = doc(collection(db, COL), data.thang)
   await setDoc(ref, {
     ...data,
@@ -45,7 +45,7 @@ export async function saveNganSach(data: NganSachThang): Promise<void> {
 }
 
 export async function getNganSach(thang: string): Promise<NganSachThang> {
-  const db = getMainFirestore()
+  const db = diennuocDb
   const snap = await getDoc(doc(collection(db, COL), thang))
   if (snap.exists()) return snap.data() as NganSachThang
   return makeDefault(thang)
