@@ -469,70 +469,217 @@ export function exportPhiQuanLy(customers: Customer[], month: string) {
   download(wb, `dien-nuoc_phi-quan-ly_${month}.xlsx`)
 }
 
-// ── Tab: Công nợ & Thu tiền ──────────────────────────────────────────────────
-export function exportCongNo(
+// ── Tab: Công nợ & Thu tiền — bảng multi-month compact ──────────────────────
+export async function exportCongNo(
   readings: MeterReading[], customers: Customer[], usages: CustomerUsage[], payments: Payment[],
-  month: string, meterNames: Record<number, string>,
+  month: string, _meterNames: Record<number, string>,
 ) {
-  const monthReadings = readings.filter(r => r.month === month)
-  const paidOf = (cid: string) => payments.filter(p => p.customerId === cid && p.month === month).reduce((s, p) => s + p.amount, 0)
-  const wb = XLSX.utils.book_new()
+  // ── Tính toán (giống TabCongNo) ───────────────────────────────────────────
+  const months = Array.from(new Set(readings.map(r => r.month))).sort((a, b) => b.localeCompare(a))
 
-  // Sheet 1 — Tổng hợp theo nhóm (gộp tiền đồng hồ + phí quản lý)
-  const dueByCustomer = new Map<string, number>()
-  for (const r of monthReadings) for (const row of meterAllocation(r, customers, usages).rows) {
-    dueByCustomer.set(row.customer.id, (dueByCustomer.get(row.customer.id) ?? 0) + row.amount)
+  type MCell = { due: number; paid: number; remain: number }
+  type CRow  = { c: Customer; m: Map<string, MCell>; totalDue: number; totalPaid: number; totalRemain: number; unpaid: number }
+  const rowMap = new Map<string, CRow>()
+  const ensureRow = (c: Customer): CRow => {
+    let r = rowMap.get(c.id)
+    if (!r) { r = { c, m: new Map(), totalDue: 0, totalPaid: 0, totalRemain: 0, unpaid: 0 }; rowMap.set(c.id, r) }
+    return r
   }
-  for (const c of customers) { const fee = managementFeeOf(c, month); if (fee > 0) dueByCustomer.set(c.id, (dueByCustomer.get(c.id) ?? 0) + fee) }
-  const custById = new Map(customers.map(c => [c.id, c]))
-  const groups = new Map<string, { due: number; paid: number; count: number }>()
-  for (const [cid, due] of dueByCustomer) {
-    const g = custById.get(cid)?.group?.trim() || 'Chưa phân nhóm'
-    const cur = groups.get(g) ?? { due: 0, paid: 0, count: 0 }
-    cur.due += due; cur.paid += paidOf(cid); cur.count += 1
-    groups.set(g, cur)
+  const ensureCell = (r: CRow, m: string): MCell => {
+    let x = r.m.get(m); if (!x) { x = { due: 0, paid: 0, remain: 0 }; r.m.set(m, x) }; return x
   }
-  const gRows = Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0], 'vi'))
-  const s1: Aoa = [['Nhóm', 'Số KH', 'Phải trả (đ)', 'Đã thu (đ)', 'Còn nợ (đ)']]
-  gRows.forEach(([g, v]) => s1.push([g, v.count, r0(v.due), r0(v.paid), r0(Math.max(0, v.due - v.paid))]))
-  const totDue = gRows.reduce((s, [, v]) => s + v.due, 0)
-  const totPaid = gRows.reduce((s, [, v]) => s + v.paid, 0)
-  if (gRows.length > 0) s1.push(['Tổng cộng', '', r0(totDue), r0(totPaid), r0(Math.max(0, totDue - totPaid))])
-  if (gRows.length === 0) s1.push(['(Chưa có dữ liệu tháng này)'])
-  XLSX.utils.book_append_sheet(wb, sheetFromAoa(s1, [26, 10, 16, 16, 16], [0]), safeSheetName(`Tong hop nhom ${month}`))
+  for (const reading of readings)
+    for (const row of meterAllocation(reading, customers, usages).rows) {
+      if (row.amount <= 0) continue
+      ensureCell(ensureRow(row.customer), reading.month).due += row.amount
+    }
+  for (const c of customers) for (const m of months) {
+    const fee = c.feeByMonth?.[m] ?? 0
+    if (fee > 0) ensureCell(ensureRow(c), m).due += fee
+  }
+  for (const c of customers) for (const m of months) {
+    const total = Object.values(c.otherFeesByType ?? {}).reduce((s, byMonth) => s + ((byMonth as Record<string,number>)[m] ?? 0), 0)
+    if (total > 0) ensureCell(ensureRow(c), m).due += total
+  }
+  for (const p of payments) {
+    const R = rowMap.get(p.customerId); if (!R) continue
+    const cell = R.m.get(p.month); if (!cell) continue
+    cell.paid += p.amount
+  }
+  for (const R of rowMap.values()) {
+    const sortedM = Array.from(R.m.keys()).sort()
+    let pool = Array.from(R.m.values()).reduce((s, c) => s + c.paid, 0)
+    const oldDebt = R.c.oldDebt ?? 0
+    R.totalDue += oldDebt
+    if (pool >= oldDebt) pool -= oldDebt; else pool = 0
+    for (const m of sortedM) {
+      const cell = R.m.get(m)!
+      R.totalDue += cell.due
+      if (pool >= cell.due) { cell.remain = 0; pool -= cell.due }
+      else { cell.remain = cell.due - pool; pool = 0 }
+      R.totalRemain += cell.remain
+      if (cell.due > 0 && cell.remain >= 5000) R.unpaid += 1
+    }
+    R.totalPaid = Array.from(R.m.values()).reduce((s, c) => s + c.paid, 0)
+    R.totalRemain = Math.max(0, R.totalDue - R.totalPaid)
+  }
+  const accruedPQL = (c: Customer) => Object.values(c.feeAccruedByMonth ?? {}).reduce((s, v) => s + Math.abs(v), 0)
+  for (const c of customers)
+    if (accruedPQL(c) > 0 && !rowMap.has(c.id))
+      rowMap.set(c.id, { c, m: new Map(), totalDue: 0, totalPaid: 0, totalRemain: 0, unpaid: 0 })
 
-  // Sheet 2 — Chi tiết theo đồng hồ
-  const rows: Row[] = []
-  ;([1, 2, 3] as MeterId[]).forEach(id => {
-    const r = monthReadings.find(x => x.meterId === id)
-    if (!r) return
-    meterAllocation(r, customers, usages).rows.forEach(({ customer: c, amount }) => {
-      const paid = payments.filter(p => p.customerId === c.id && p.month === month && paymentService(p, primaryService(c)) === METER_SERVICE[id]).reduce((s, p) => s + p.amount, 0)
-      rows.push({
-        'Đồng hồ':    meterLabel(meterNames, id),
-        'Khách hàng': c.name,
-        'Nhóm':       c.group?.trim() || '',
-        'Phải trả (đ)': r0(amount),
-        'Đã thu (đ)':   r0(paid),
-        'Còn nợ (đ)':   r0(Math.max(0, amount - paid)),
-      })
-    })
-  })
-  // Phí quản lý (đã thu chỉ tính khoản kind='management')
-  customers.filter(c => managementFeeOf(c, month) > 0).forEach(c => {
-    const due = managementFeeOf(c, month)
-    const paid = payments.filter(p => p.customerId === c.id && p.month === month && paymentService(p, primaryService(c)) === 'phiql').reduce((s, p) => s + p.amount, 0)
-    rows.push({
-      'Đồng hồ':    'Phí quản lý',
-      'Khách hàng': c.name,
-      'Nhóm':       c.group?.trim() || '',
-      'Phải trả (đ)': r0(due),
-      'Đã thu (đ)':   r0(paid),
-      'Còn nợ (đ)':   r0(Math.max(0, due - paid)),
-    })
-  })
-  if (rows.length === 0) rows.push({ 'Đồng hồ': '(Chưa có dữ liệu tháng này)' } as Row)
-  XLSX.utils.book_append_sheet(wb, sheetFromRows(rows, [26, 26, 18, 16, 16, 16]), safeSheetName(`Chi tiet ${month}`))
+  const cmp = { numeric: true, sensitivity: 'base' } as const
+  const dataRows = Array.from(rowMap.values())
+    .filter(r => r.totalDue > 0 || accruedPQL(r.c) > 0)
+    .sort((x, y) => (x.c.group?.trim() || 'zzz').localeCompare(y.c.group?.trim() || 'zzz', 'vi', cmp) || x.c.name.localeCompare(y.c.name, 'vi', cmp))
 
-  download(wb, `dien-nuoc_cong-no_${month}.xlsx`)
+  // ── Dựng workbook ExcelJS ────────────────────────────────────────────────
+  const wb2 = new ExcelJS.Workbook()
+  const ws = wb2.addWorksheet(safeSheetName(`Cong no ${month}`))
+
+  const LEAD = 7 // Khách hàng | Nhóm | Tổng PT | Tổng ĐT | Tổng CN | PQL CD | Ghi chú
+  const nM = months.length
+
+  // Độ rộng cột
+  ws.columns = [
+    { width: 20 }, // Khách hàng
+    { width: 10 }, // Nhóm
+    { width: 14 }, // Tổng PT
+    { width: 14 }, // Tổng ĐT
+    { width: 14 }, // Tổng CN
+    { width: 12 }, // PQL CD
+    { width: 9  }, // Ghi chú
+    ...months.map(() => ({ width: 13 })),
+  ]
+
+  const NUM_FMT  = '#,##0'
+  const C_NAVY   = { argb: 'FF1C3557' }
+  const C_WHITE  = { argb: 'FFFFFFFF' }
+  const C_RED    = { argb: 'FFDC2626' }
+  const C_GREEN  = { argb: 'FF15803D' }
+  const C_GRAY   = { argb: 'FF9CA3AF' }
+  const C_AMBER  = { argb: 'FF92400E' }
+  const C_HEAD   = { argb: 'FF2A4D7A' }
+  const C_CURHD  = { argb: 'FF1C5A9A' }
+  const C_FOOT   = { argb: 'FFD6E6F6' }
+  const bdThin   = { style: 'thin' as const, color: { argb: 'FFC7CED8' } }
+  const border   = { top: bdThin, bottom: bdThin, left: bdThin, right: bdThin }
+  const applyBorder = (cell: ExcelJS.Cell) => { cell.border = border }
+
+  // ── Hàng tiêu đề ─────────────────────────────────────────────────────────
+  const titleRow = ws.addRow([`CÔNG NỢ THEO THÁNG — ${dataRows.length} khách · ${nM} tháng · Xuất: ${month}`])
+  titleRow.font = { name: FONT, size: 12, bold: true, color: C_NAVY }
+  titleRow.height = 20
+  ws.mergeCells(1, 1, 1, LEAD + nM)
+
+  // ── Hàng header ──────────────────────────────────────────────────────────
+  const heads = ['KHÁCH HÀNG', 'NHÓM', 'TỔNG PHẢI THU', 'TỔNG ĐÃ THU', 'TỔNG CÒN NỢ', 'PQL CỘNG DỒN', 'GHI CHÚ', ...months]
+  const hRow = ws.addRow(heads)
+  hRow.height = 28
+  hRow.eachCell((cell, ci) => {
+    const isCur = ci > LEAD && months[ci - LEAD - 1] === month
+    cell.font  = { name: FONT, size: 9, bold: true, color: C_WHITE }
+    cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: isCur ? C_CURHD : C_HEAD }
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    cell.border = border
+  })
+
+  // ── Hàng dữ liệu ─────────────────────────────────────────────────────────
+  const fmt2 = (n: number) => n === 0 ? '' : n
+  for (const R of dataRows) {
+    const pql = accruedPQL(R.c)
+    const ghi = R.unpaid > 0 ? `${R.unpaid} tháng` : 'Đủ'
+    const vals: (string | number)[] = [
+      R.c.name, R.c.group?.trim() || '—',
+      r0(R.totalDue), r0(R.totalPaid), r0(R.totalRemain),
+      pql > 0 ? r0(pql) : '', ghi,
+      ...months.map(() => 0 as number),
+    ]
+    const row = ws.addRow(vals)
+    row.height = 30
+
+    // Khách hàng
+    const cName = row.getCell(1)
+    cName.font = { name: FONT, size: 9, bold: true }; applyBorder(cName)
+    cName.alignment = { vertical: 'middle' }
+
+    // Nhóm
+    const cGrp = row.getCell(2)
+    cGrp.font = { name: FONT, size: 9, color: C_GRAY }; applyBorder(cGrp)
+    cGrp.alignment = { vertical: 'middle' }
+
+    // Tổng PT
+    const cPT = row.getCell(3)
+    cPT.numFmt = NUM_FMT; cPT.font = { name: FONT, size: 9, bold: true }
+    cPT.alignment = { horizontal: 'right', vertical: 'middle' }; applyBorder(cPT)
+
+    // Tổng ĐT
+    const cDT = row.getCell(4)
+    cDT.numFmt = NUM_FMT; cDT.font = { name: FONT, size: 9, color: C_GREEN }
+    cDT.alignment = { horizontal: 'right', vertical: 'middle' }; applyBorder(cDT)
+
+    // Tổng CN
+    const cCN = row.getCell(5)
+    cCN.numFmt = NUM_FMT
+    cCN.font = { name: FONT, size: 9, bold: true, color: R.totalRemain > 0 ? C_RED : C_GREEN }
+    cCN.alignment = { horizontal: 'right', vertical: 'middle' }; applyBorder(cCN)
+
+    // PQL CD
+    const cPQL = row.getCell(6)
+    if (pql > 0) { cPQL.numFmt = NUM_FMT; cPQL.font = { name: FONT, size: 9, color: C_AMBER } }
+    else cPQL.font = { name: FONT, size: 9, color: C_GRAY }
+    cPQL.alignment = { horizontal: 'right', vertical: 'middle' }; applyBorder(cPQL)
+
+    // Ghi chú (badge)
+    const cGhi = row.getCell(7)
+    cGhi.font = { name: FONT, size: 9, bold: R.unpaid > 0, color: R.unpaid > 0 ? C_RED : C_GREEN }
+    cGhi.alignment = { horizontal: 'center', vertical: 'middle' }; applyBorder(cGhi)
+
+    // Các tháng — richText: dòng 1 nhỏ (phải thu), dòng 2 đậm (còn nợ)
+    months.forEach((m, i) => {
+      const cell2 = R.m.get(m)
+      const mCell = row.getCell(LEAD + 1 + i)
+      const isCurCol = m === month
+      if (isCurCol) mCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F7FD' } }
+      applyBorder(mCell)
+      if (!cell2 || cell2.due <= 0) {
+        mCell.value = '–'
+        mCell.font = { name: FONT, size: 8, color: C_GRAY }
+        mCell.alignment = { horizontal: 'center', vertical: 'middle' }
+        return
+      }
+      // richText hai dòng
+      mCell.value = {
+        richText: [
+          { text: r0(cell2.due).toLocaleString('vi-VN') + '\n', font: { name: FONT, size: 7, color: { argb: 'FF9CA3AF' } } },
+          { text: fmt2(r0(cell2.remain)) === '' ? '0' : r0(cell2.remain).toLocaleString('vi-VN'), font: { name: FONT, size: 9, bold: true, color: cell2.remain > 0 ? { argb: 'FFDC2626' } : { argb: 'FF15803D' } } },
+        ],
+      }
+      mCell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true }
+    })
+  }
+
+  // ── Hàng tổng cộng ───────────────────────────────────────────────────────
+  const sumDue    = dataRows.reduce((s, r) => s + r.totalDue, 0)
+  const sumPaid   = dataRows.reduce((s, r) => s + r.totalPaid, 0)
+  const sumRemain = dataRows.reduce((s, r) => s + r.totalRemain, 0)
+  const sumPQL    = dataRows.reduce((s, r) => s + accruedPQL(r.c), 0)
+  const footVals  = ['TỔNG CỘNG', '', r0(sumDue), r0(sumPaid), r0(sumRemain), sumPQL > 0 ? r0(sumPQL) : '', '', ...months.map(m => r0(dataRows.reduce((s, r) => s + (r.m.get(m)?.remain ?? 0), 0)))]
+  const footRow   = ws.addRow(footVals)
+  footRow.height = 20
+  footRow.eachCell((cell, ci) => {
+    cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: C_FOOT }
+    cell.font   = { name: FONT, size: 9, bold: true, color: C_NAVY }
+    cell.border = border
+    if (ci >= 3) { cell.numFmt = NUM_FMT; cell.alignment = { horizontal: 'right', vertical: 'middle' } }
+    else cell.alignment = { vertical: 'middle' }
+  })
+
+  // Download
+  const buf  = await wb2.xlsx.writeBuffer()
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = safeFileName(`dien-nuoc_cong-no_${month}.xlsx`); a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1500)
 }
