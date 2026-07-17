@@ -4,13 +4,14 @@ import { usePathname } from 'next/navigation'
 import { useUserSession } from '@/contexts/user-session'
 
 const NAV = [
-  { section: 'TỔNG QUAN',    mod: 'm:dashboard', href: '/dashboard',  icon: '⊞',  label: 'Tổng quan CEO' },
-  { section: 'MODULE CHÍNH', mod: 'm:dashboard', href: '/ecosystem',  icon: '🌐', label: 'Hệ sinh thái' },
-  { section: 'MODULE CHÍNH', mod: 'm:ccn-pricing', href: '/ccn-pricing', icon: '🏭', label: 'Tính giá cho thuê CCN' },
-  { section: 'MODULE CHÍNH', mod: 'm:noxh', href: '/noxh-nguyen-trai', icon: '🏗', label: 'NOXH Nguyễn Trãi' },
-  { section: 'MODULE CHÍNH', mod: 'm:dien-nuoc', href: '/dien-nuoc-sadt', icon: '⚡', label: 'Điện nước SA.ĐT' },
-  { section: 'VẬN HÀNH',     mod: 'm:tasks',     href: '/tasks',      icon: '✓',  label: 'Công việc' },
-  { section: 'HỆ THỐNG',     mod: 'm:users',     href: '/users',      icon: '👤', label: 'Quản lý User' },
+  { section: 'TỔNG QUAN',    mod: 'm:dashboard',   href: '/dashboard',       icon: '⊞',  label: 'Tổng quan CEO' },
+  { section: 'MODULE CHÍNH', mod: 'm:dashboard',   href: '/ecosystem',       icon: '🌐', label: 'Hệ sinh thái' },
+  { section: 'MODULE CHÍNH', mod: 'm:ngan-sach',   href: '/ngan-sach',       icon: '💰', label: 'Ngân sách dòng tiền' },
+  { section: 'MODULE CHÍNH', mod: 'm:ccn-pricing', href: '/ccn-pricing',     icon: '🏭', label: 'Tính giá cho thuê CCN' },
+  { section: 'MODULE CHÍNH', mod: 'm:noxh',        href: '/noxh-nguyen-trai', icon: '🏗', label: 'NOXH Nguyễn Trãi' },
+  { section: 'MODULE CHÍNH', mod: 'm:dien-nuoc',   href: '/dien-nuoc-sadt',  icon: '⚡', label: 'Điện nước SA.ĐT' },
+  { section: 'VẬN HÀNH',     mod: 'm:tasks',       href: '/tasks',           icon: '✓',  label: 'Công việc' },
+  { section: 'HỆ THỐNG',     mod: 'm:users',       href: '/users',           icon: '👤', label: 'Quản lý User' },
 ]
 
 const ROLE_LABEL: Record<string, string> = { ceo: 'CEO', finance: 'CFO', admin: 'Admin', pm: 'PM', viewer: 'Viewer' }
