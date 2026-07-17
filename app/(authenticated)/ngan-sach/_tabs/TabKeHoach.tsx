@@ -125,6 +125,20 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
     }
   }
 
+  // Sum ke_hoach / thuc_hien of all direct children of a group
+  const groupSum = (groupId: string) => {
+    let kh = 0, th = 0
+    for (const it of data.items) {
+      if (it.parent_id === groupId) {
+        kh += it.ke_hoach
+        // use auto value if available
+        const autoVal = it.kmcp ? kmcpActual[it.kmcp] : undefined
+        th += autoVal !== undefined ? autoVal : it.thuc_hien
+      }
+    }
+    return { kh, th }
+  }
+
   const upd = (id: string, field: keyof NganSachItem, val: string | number | boolean) => {
     onChange(updateItem(data, id, { [field]: val }))
   }
@@ -266,9 +280,20 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
                         placeholder="DT-..."
                         style={{ width: '100%', textAlign: 'center', border: '1px solid #BFDBFE', borderRadius: 5, padding: '4px 4px', fontSize: 11.5, fontFamily: 'monospace', background: 'transparent' }} />
                     </td>
-                    <td colSpan={2} style={{ padding: '5px 10px', color: '#6B7280', fontSize: 11.5, textAlign: 'center' }}>
-                      Tổng tự tính từ các dòng con
-                    </td>
+                    {(() => {
+                      const { kh, th } = groupSum(it.id)
+                      const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
+                      return (
+                        <>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}>
+                            {fmt(kh)}
+                          </td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 12.5 }}>
+                            {fmt(th)}
+                          </td>
+                        </>
+                      )
+                    })()}
                     <td style={{ padding: '5px 6px' }}>
                       <input value={it.ghi_chu} onChange={e => upd(it.id, 'ghi_chu', e.target.value)}
                         style={{ width: '100%', border: '1px solid #BFDBFE', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent' }} />
