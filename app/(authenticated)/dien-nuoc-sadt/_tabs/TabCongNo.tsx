@@ -420,6 +420,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
   const [filterName, setFilterName] = useState('')
   const [filterGroup, setFilterGroup] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'con-no' | 'du'>('all')
+  const [filterMonths, setFilterMonths] = useState('')
 
   const months = Array.from(new Set(readings.map(r => r.month))).sort((a, b) => b.localeCompare(a)) // mới → cũ
 
@@ -505,6 +506,7 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
     .filter(r => !filterName || r.c.name.toLowerCase().includes(filterName.toLowerCase()))
     .filter(r => !filterGroup || (r.c.group?.trim() || '') === filterGroup)
     .filter(r => filterStatus === 'all' || (filterStatus === 'con-no' ? r.totalRemain > 0 : r.totalRemain <= 0))
+    .filter(r => !filterMonths || r.unpaid === Number(filterMonths))
 
   const leadCols = 9 // Khách · Nhóm · Tổng phải thu · Tổng đã thu · Tổng còn nợ · PQL cộng dồn · Ghi chú · Thu tiền · In phiếu
   const sum = (fn: (r: Row) => number) => rows.reduce((s, r) => s + fn(r), 0)
@@ -532,9 +534,15 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
           <option value="con-no">Còn nợ</option>
           <option value="du">Đã đủ</option>
         </select>
-        {(filterName || filterGroup || filterStatus !== 'all') && (
+        <select value={filterMonths} onChange={e => setFilterMonths(e.target.value)}
+          style={{ border: '1px solid var(--border2)', borderRadius: 6, padding: '4px 10px', fontSize: 12.5, background: 'var(--card)', color: 'var(--text)' }}>
+          <option value="">Tất cả tháng nợ</option>
+          {Array.from(new Set(Array.from(rowMap.values()).filter(r => r.unpaid > 0).map(r => r.unpaid))).sort((a, b) => a - b)
+            .map(n => <option key={n} value={n}>{n} tháng</option>)}
+        </select>
+        {(filterName || filterGroup || filterStatus !== 'all' || filterMonths) && (
           <button className="btn-ghost" style={{ fontSize: 12, padding: '3px 10px' }}
-            onClick={() => { setFilterName(''); setFilterGroup(''); setFilterStatus('all') }}>
+            onClick={() => { setFilterName(''); setFilterGroup(''); setFilterStatus('all'); setFilterMonths('') }}>
             ✕ Xóa lọc
           </button>
         )}
