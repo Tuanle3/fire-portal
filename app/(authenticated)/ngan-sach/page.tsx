@@ -131,6 +131,7 @@ export default function NganSachPage() {
   const autoCount = Object.keys(kmcpActual).length
 
   return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', minHeight: 0 }}>
     <>
       <style>{`
         .ns-tab-bar { display:flex; gap:4px; border-bottom:2px solid #E5E7EB; margin-bottom:20px; }
@@ -193,6 +194,7 @@ export default function NganSachPage() {
         <TabGiaiPhap data={localData} onChange={setLocalData} onSave={handleSave} saving={saving} />
       )}
     </>
+    </div>
   )
 }
 
