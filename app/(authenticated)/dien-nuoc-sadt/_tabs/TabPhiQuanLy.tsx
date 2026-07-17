@@ -151,7 +151,7 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
               {floorOptions.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </span>
-          <button className="btn-ghost" onClick={() => exportPhiQuanLy(customers, month)}>⬇ Xuất Excel</button>
+          <button className="btn-ghost" onClick={() => exportPhiQuanLy(customers, month).catch(console.error)}>⬇ Xuất Excel</button>
           <button className="btn-primary" onClick={saveAll} disabled={savingAll || displayed.length === 0}>
             {savingAll ? '…' : `✓ Lưu tất cả (${displayed.length})`}
           </button>

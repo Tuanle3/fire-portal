@@ -441,32 +441,161 @@ export function exportKhachHang(customers: Customer[], meterNames: Record<number
   download(wb, `dien-nuoc_khach-hang.xlsx`)
 }
 
-// ── Tab: Phí quản lý ─────────────────────────────────────────────────────────
-export function exportPhiQuanLy(customers: Customer[], month: string) {
-  const feeCustomers = customers.filter(c => c.hasManagementFee)
-  const rows: Row[] = feeCustomers.map((c, i) => {
-    const bd = managementFeeBreakdown(c, month)
-    return {
-      'STT':            i + 1,
-      'Khách hàng':     c.name,
-      'Nhóm':           c.group?.trim() || '',
-      'Tầng':           c.floor || '',
-      'Mã ki-ốt':       c.kioskCode || '',
-      'Khách thuê':     c.tenantName || c.kioskOwner || '',
-      'Cách tính':      bd.isArea ? 'Theo diện tích' : 'Cố định',
-      'Diện tích (m²)': bd.isArea ? bd.areaM2 : '',
-      'Đơn giá':        r0(bd.unitPrice),   // đ/m²/tháng nếu theo diện tích, ngược lại đ/tháng
-      [`Phải thu (${month}) (đ)`]: r0(bd.total),
-      [`Trạng thái (${month})`]: feeStatus(c, month) === 'none' ? 'Không tính phí' : feeStatus(c, month) === 'accrue' ? 'Tính dồn (thu bù)' : 'Có tính phí',
-    }
-  })
-  const total = feeCustomers.reduce((s, c) => s + managementFeeOf(c, month), 0)
-  if (rows.length === 0) rows.push({ 'STT': '', 'Khách hàng': '(Chưa có khách nào bật phí quản lý)' } as Row)
-  else rows.push({ 'Khách hàng': 'TỔNG CỘNG', [`Phải thu (${month}) (đ)`]: r0(total) } as Row)
+// ── Tab: Phí quản lý — bảng ngang theo tháng ────────────────────────────────
+export async function exportPhiQuanLy(customers: Customer[], month: string) {
+  const feeCusts = customers.filter(c => c.hasManagementFee)
 
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, sheetFromRows(rows, [5, 26, 18, 12, 12, 20, 14, 12, 16, 20, 16]), safeSheetName(`Phi quan ly ${month}`))
-  download(wb, `dien-nuoc_phi-quan-ly_${month}.xlsx`)
+  // Gom tất cả tháng có dữ liệu (feeByMonth + feeAccruedByMonth), sắp mới → cũ
+  const allMonths = Array.from(new Set(feeCusts.flatMap(c => [
+    ...Object.keys(c.feeByMonth ?? {}),
+    ...Object.keys(c.feeAccruedByMonth ?? {}),
+  ]))).sort((a, b) => b.localeCompare(a))
+
+  const wb2 = new ExcelJS.Workbook()
+  const ws  = wb2.addWorksheet(safeSheetName(`Phi QL ${month}`))
+
+  const LEAD = 5  // Khách hàng | Nhóm | Tầng·KiốtCode | Cách tính | Đơn giá
+  const nM   = allMonths.length
+
+  const C_WHITE = { argb: 'FFFFFFFF' }
+  const C_NAVY  = { argb: 'FF1C3557' }
+  const C_HEAD  = { argb: 'FF2A4D7A' }
+  const C_CURHD = { argb: 'FF1C5A9A' }
+  const C_GREEN = { argb: 'FF15803D' }
+  const C_AMBER = { argb: 'FF92400E' }
+  const C_GRAY  = { argb: 'FF9CA3AF' }
+  const C_FOOT  = { argb: 'FFD6E6F6' }
+  const C_YELL  = { argb: 'FFFFF4E0' }
+  const bdThin  = { style: 'thin' as const, color: { argb: 'FFC7CED8' } }
+  const border  = { top: bdThin, bottom: bdThin, left: bdThin, right: bdThin }
+  const ab = (cell: ExcelJS.Cell) => { cell.border = border }
+
+  ws.columns = [
+    { width: 20 }, // Khách hàng
+    { width: 10 }, // Nhóm
+    { width: 14 }, // Tầng · Mã
+    { width: 12 }, // Cách tính
+    { width: 10 }, // Đơn giá
+    ...allMonths.map(() => ({ width: 14 })),
+  ]
+
+  // Tiêu đề
+  const titleRow = ws.addRow([`PHÍ QUẢN LÝ — ${feeCusts.length} khách · ${nM} tháng · Xuất: ${month}`])
+  titleRow.font = { name: FONT, size: 12, bold: true, color: C_NAVY }
+  titleRow.height = 20
+  ws.mergeCells(1, 1, 1, LEAD + nM)
+
+  // Header
+  const heads = ['KHÁCH HÀNG', 'NHÓM', 'TẦNG · MÃ', 'CÁCH TÍNH', 'ĐƠN GIÁ', ...allMonths]
+  const hRow  = ws.addRow(heads)
+  hRow.height = 28
+  hRow.eachCell((cell, ci) => {
+    const isCur = ci > LEAD && allMonths[ci - LEAD - 1] === month
+    cell.font      = { name: FONT, size: 9, bold: true, color: C_WHITE }
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: isCur ? C_CURHD : C_HEAD }
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    cell.border    = border
+  })
+
+  // Chú thích màu
+  const noteRow = ws.addRow(['Ghi chú màu:', '', '● Xanh = Thu ngay (tính vào công nợ)', '', '', ...allMonths.map(() => '')])
+  noteRow.height = 14
+  const noteRow2 = ws.addRow(['', '', '● Cam = Cộng dồn CN (tích lũy, chưa vào công nợ)', '', '', ...allMonths.map(() => '')])
+  noteRow2.height = 14
+  ;[noteRow, noteRow2].forEach(r => r.eachCell(cell => {
+    cell.font = { name: FONT, size: 8, italic: true }
+    cell.alignment = { vertical: 'middle' }
+  }))
+  ws.mergeCells(3, 3, 3, LEAD + nM)
+  ws.mergeCells(4, 3, 4, LEAD + nM)
+
+  // Dữ liệu
+  let sumCharge = 0, sumAccrue = 0
+  const monthSumCharge = new Map<string, number>()
+  const monthSumAccrue = new Map<string, number>()
+
+  for (const c of feeCusts) {
+    const bd = managementFeeBreakdown(c, month)
+    const label = [c.floor, c.kioskCode].filter(Boolean).join(' · ') || '—'
+    const row = ws.addRow([
+      c.name,
+      c.group?.trim() || '—',
+      label,
+      bd.isArea ? `${bd.areaM2} m²` : 'Cố định',
+      r0(bd.unitPrice),
+      ...allMonths.map(() => ''),
+    ])
+    row.height = 18
+
+    // Lead cells
+    const cName = row.getCell(1); cName.font = { name: FONT, size: 9, bold: true }; cName.alignment = { vertical: 'middle' }; ab(cName)
+    const cGrp  = row.getCell(2); cGrp.font  = { name: FONT, size: 9, color: C_GRAY }; cGrp.alignment = { vertical: 'middle' }; ab(cGrp)
+    const cLbl  = row.getCell(3); cLbl.font  = { name: FONT, size: 9 }; cLbl.alignment = { vertical: 'middle' }; ab(cLbl)
+    const cCach = row.getCell(4); cCach.font = { name: FONT, size: 9, color: C_GRAY }; cCach.alignment = { vertical: 'middle' }; ab(cCach)
+    const cDg   = row.getCell(5); cDg.numFmt = '#,##0'; cDg.font = { name: FONT, size: 9 }; cDg.alignment = { horizontal: 'right', vertical: 'middle' }; ab(cDg)
+
+    // Tháng
+    allMonths.forEach((m, i) => {
+      const mCell = row.getCell(LEAD + 1 + i)
+      const charge = Math.abs(c.feeByMonth?.[m] ?? 0)
+      const accrued = Math.abs(c.feeAccruedByMonth?.[m] ?? 0)
+      const isCur = m === month
+
+      if (isCur) mCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F7FD' } }
+      ab(mCell)
+      mCell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true }
+
+      if (charge > 0) {
+        // Thu ngay — xanh lá
+        mCell.value = charge
+        mCell.numFmt = '#,##0'
+        mCell.font = { name: FONT, size: 9, bold: true, color: C_GREEN }
+        sumCharge += charge
+        monthSumCharge.set(m, (monthSumCharge.get(m) ?? 0) + charge)
+      } else if (accrued > 0) {
+        // Cộng dồn — cam, nền vàng nhạt
+        mCell.value = accrued
+        mCell.numFmt = '#,##0'
+        mCell.font = { name: FONT, size: 9, bold: true, color: C_AMBER }
+        mCell.fill = { type: 'pattern', pattern: 'solid', fgColor: isCur ? { argb: 'FFFFF8EE' } : C_YELL }
+        sumAccrue += accrued
+        monthSumAccrue.set(m, (monthSumAccrue.get(m) ?? 0) + accrued)
+      } else {
+        mCell.value = '–'
+        mCell.font = { name: FONT, size: 8, color: C_GRAY }
+        mCell.alignment = { horizontal: 'center', vertical: 'middle' }
+      }
+    })
+  }
+
+  // Tổng cộng — 2 dòng: Thu ngay + Cộng dồn
+  const makeFootRow = (label: string, sums: Map<string, number>, color: ExcelJS.Color, bgColor: string) => {
+    const totals = allMonths.map(m => sums.get(m) ?? 0)
+    const fRow = ws.addRow([label, '', '', '', '', ...totals])
+    fRow.height = 16
+    fRow.eachCell((cell, ci) => {
+      cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }
+      cell.font   = { name: FONT, size: 9, bold: true, color }
+      cell.border = border
+      if (ci >= LEAD + 1) {
+        const v = totals[ci - LEAD - 1]
+        if (v > 0) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' } }
+        else { cell.value = ''; cell.alignment = { horizontal: 'center', vertical: 'middle' } }
+      } else cell.alignment = { vertical: 'middle' }
+    })
+  }
+
+  makeFootRow(`Tổng Thu ngay (${feeCusts.filter(c => Object.keys(c.feeByMonth ?? {}).length > 0).length} KH)`,
+    monthSumCharge, C_GREEN, 'FFE8F5E9')
+  makeFootRow(`Tổng Cộng dồn (${feeCusts.filter(c => Object.keys(c.feeAccruedByMonth ?? {}).length > 0).length} KH)`,
+    monthSumAccrue, C_AMBER, 'FFFFF4E0')
+
+  const buf  = await wb2.xlsx.writeBuffer()
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = safeFileName(`dien-nuoc_phi-quan-ly_${month}.xlsx`); a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1500)
 }
 
 // ── Tab: Công nợ & Thu tiền — bảng multi-month compact ──────────────────────
