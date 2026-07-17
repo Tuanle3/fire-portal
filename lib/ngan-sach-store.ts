@@ -51,9 +51,22 @@ export async function getNganSach(thang: string): Promise<NganSachThang> {
   return makeDefault(thang)
 }
 
+// Returns the index of the last item belonging to nhom (excludes next section).
+// Used so "+Dòng" / "+Nhóm" on a section header appends to the END of that section.
+function lastIdxInSection(items: NganSachItem[], nhom: string, startIdx: number): number {
+  let last = startIdx
+  for (let i = startIdx + 1; i < items.length; i++) {
+    if (items[i].is_section && items[i].nhom !== nhom) break
+    if (items[i].nhom === nhom) last = i
+  }
+  return last
+}
+
 // helpers
 export function addItem(data: NganSachThang, after_id: string, nhom: string, parent_id?: string): NganSachThang {
-  const idx = data.items.findIndex(i => i.id === after_id)
+  let idx = data.items.findIndex(i => i.id === after_id)
+  // If triggered from a section header → insert at end of section
+  if (data.items[idx]?.is_section) idx = lastIdxInSection(data.items, nhom, idx)
   const newItem: NganSachItem = {
     id: makeId(), nhom, is_section: false, stt: '',
     dien_giai: '', kmcp: '', ke_hoach: 0, thuc_hien: 0,
@@ -65,9 +78,10 @@ export function addItem(data: NganSachThang, after_id: string, nhom: string, par
   return { ...data, items }
 }
 
-// Add a collapsible sub-group header after after_id
+// Add a collapsible sub-group header — appends to end of section
 export function addGroup(data: NganSachThang, after_id: string, nhom: string): NganSachThang {
-  const idx = data.items.findIndex(i => i.id === after_id)
+  let idx = data.items.findIndex(i => i.id === after_id)
+  if (data.items[idx]?.is_section) idx = lastIdxInSection(data.items, nhom, idx)
   const newGroup: NganSachItem = {
     id: makeId(), nhom, is_section: false, is_group: true, stt: '',
     dien_giai: '', kmcp: '', ke_hoach: 0, thuc_hien: 0,

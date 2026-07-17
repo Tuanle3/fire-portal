@@ -101,6 +101,9 @@ interface Props {
 
 export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const toggleCollapse = (id: string) =>
+    setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -219,6 +222,8 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
           </thead>
           <tbody>
             {data.items.map(it => {
+              // Hide child rows when parent group is collapsed
+              if (it.parent_id && collapsed.has(it.parent_id)) return null
               // ── MAJOR SECTION ───────────────────────────────────────────────
               if (it.is_section) {
                 const bg = SECTION_COLORS[it.nhom] ?? '#F9FAFB'
@@ -270,6 +275,10 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
                     </td>
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+                        <button title={collapsed.has(it.id) ? 'Mở rộng' : 'Thu gọn'} onClick={() => toggleCollapse(it.id)}
+                          style={{ ...BtnSmall('#F3F4F6', '#374151'), fontSize: 13, fontFamily: 'monospace' }}>
+                          {collapsed.has(it.id) ? '＋' : '－'}
+                        </button>
                         <button title="Thêm dòng con" onClick={() => onChange(addChildItem(data, it.id))}
                           style={{ ...BtnSmall('#DCFCE7', '#166534'), fontSize: 14 }}>＋</button>
                         <button title="Xóa nhóm và tất cả dòng con" onClick={() => { if (confirm('Xóa nhóm và tất cả dòng con?')) onChange(removeGroup(data, it.id)) }}
