@@ -216,9 +216,13 @@ export default function DashboardPage() {
     const totalDuNo  = dataTs.reduce((s, r) => s + nf(r,'Dư nợ phân bổ theo TSĐB'), 0)
     const cnDuNo     = cn.reduce((s, r) => s + nf(r,'Dư nợ phân bổ theo TSĐB'), 0)
     const pnDuNo     = pn.reduce((s, r) => s + nf(r,'Dư nợ phân bổ theo TSĐB'), 0)
-    const tcSA       = tc.filter(r => String(f(r,'Đại diện vay') ?? '').trim().startsWith('SA.'))
+    const tcSA       = tc.filter(r => {
+      const dd = String(f(r,'Đại diện vay') ?? '').trim()
+      const ht = String(f(r,'Hình thức vay') ?? '').toLowerCase()
+      return dd.startsWith('SA.') && (ht.includes('ngắn') || ht.includes('ngan'))
+    })
     const hanMucTC   = tcSA.reduce((s, r) => s + nf(r,'Hạn mức cho vay'), 0)
-    const duNoTC     = tcSA.reduce((s, r) => s + nf(r,'Dư nợ phân bổ theo TSĐB'), 0)
+    const duNoTC     = tcSA.reduce((s, r) => s + nf(r,'Dư nợ hiện tại'), 0)
     const roomTC     = hanMucTC - duNoTC
     const chuaDinhGia = chua.reduce((s, r) => s + nf(r,'Định giá'), 0)
     const chuaRoom    = chua.reduce((s, r) => s + nf(r,'Hạn mức cho vay'), 0)
