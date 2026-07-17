@@ -96,9 +96,10 @@ interface Props {
   onChange: (d: NganSachThang) => void
   onSave: () => void
   saving: boolean
+  kmcpActual: Record<string, number>
 }
 
-export function TabKeHoach({ data, onChange, onSave, saving }: Props) {
+export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
@@ -239,11 +240,14 @@ export function TabKeHoach({ data, onChange, onSave, saving }: Props) {
                 )
               }
 
-              const isAutoTonQuy = it.nhom === 'A' && !it.thuc_hien_manual
+              const isAutoTonQuy = it.nhom === 'A' && !it.is_section
+              const autoVal = it.kmcp ? kmcpActual[it.kmcp] : undefined
+              const hasAuto = isAutoTonQuy || autoVal !== undefined
+
               return (
-                <tr key={it.id} style={{ borderBottom: '1px solid #F3F4F6' }}
+                <tr key={it.id} style={{ borderBottom: '1px solid #F3F4F6', background: hasAuto ? '#FAFFF8' : undefined }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '')}
+                  onMouseLeave={e => (e.currentTarget.style.background = hasAuto ? '#FAFFF8' : '')}
                 >
                   <td style={{ padding: '5px 10px', textAlign: 'center' }}>
                     <input value={it.stt} onChange={e => upd(it.id, 'stt', e.target.value)}
@@ -259,9 +263,15 @@ export function TabKeHoach({ data, onChange, onSave, saving }: Props) {
                   </td>
                   <td style={{ padding: '5px 6px' }}>{numInput(it.id, 'ke_hoach', it.ke_hoach)}</td>
                   <td style={{ padding: '5px 6px', position: 'relative' }}>
-                    {isAutoTonQuy
-                      ? <div style={{ textAlign: 'right', color: '#9CA3AF', fontSize: 11.5, padding: '4px 6px' }}>Tự động từ Quỹ</div>
-                      : numInput(it.id, 'thuc_hien', it.thuc_hien)}
+                    {hasAuto ? (
+                      <div style={{ textAlign: 'right', padding: '4px 6px' }}>
+                        <span style={{ fontWeight: 600, color: '#166534', fontSize: 12.5 }}>
+                          {(isAutoTonQuy ? 0 : autoVal ?? 0).toLocaleString('vi-VN')}
+                        </span>
+                        <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>
+                        {isAutoTonQuy && <div style={{ fontSize: 10, color: '#9CA3AF' }}>Tồn quỹ thực tế</div>}
+                      </div>
+                    ) : numInput(it.id, 'thuc_hien', it.thuc_hien)}
                   </td>
                   <td style={{ padding: '5px 6px' }}>
                     <input value={it.ghi_chu} onChange={e => upd(it.id, 'ghi_chu', e.target.value)}
