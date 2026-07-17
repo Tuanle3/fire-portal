@@ -417,6 +417,9 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
   const [open, setOpen] = useState<Set<string>>(new Set())
   const toggle = (m: string) => setOpen(prev => { const n = new Set(prev); if (n.has(m)) n.delete(m); else n.add(m); return n })
   const [chotting, setChotting] = useState<Customer | null>(null)
+  const [filterName, setFilterName] = useState('')
+  const [filterGroup, setFilterGroup] = useState('')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'con-no' | 'du'>('all')
 
   const months = Array.from(new Set(readings.map(r => r.month))).sort((a, b) => b.localeCompare(a)) // mới → cũ
 
@@ -496,8 +499,12 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
   }
 
   const cmp = { numeric: true, sensitivity: 'base' } as const
+  const allGroups = Array.from(new Set(customers.map(c => c.group?.trim()).filter(Boolean))).sort((a, b) => a!.localeCompare(b!, 'vi', cmp)) as string[]
   const rows = Array.from(rowMap.values()).filter(r => r.totalDue > 0 || accruedPQL(r.c) > 0)
     .sort((x, y) => (x.c.group?.trim() || 'zzz').localeCompare(y.c.group?.trim() || 'zzz', 'vi', cmp) || x.c.name.localeCompare(y.c.name, 'vi', cmp))
+    .filter(r => !filterName || r.c.name.toLowerCase().includes(filterName.toLowerCase()))
+    .filter(r => !filterGroup || (r.c.group?.trim() || '') === filterGroup)
+    .filter(r => filterStatus === 'all' || (filterStatus === 'con-no' ? r.totalRemain > 0 : r.totalRemain <= 0))
 
   const leadCols = 9 // Khách · Nhóm · Tổng phải thu · Tổng đã thu · Tổng còn nợ · PQL cộng dồn · Ghi chú · Thu tiền · In phiếu
   const sum = (fn: (r: Row) => number) => rows.reduce((s, r) => s + fn(r), 0)
@@ -507,6 +514,30 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
       <div className="sc-head">
         <span className="sc-title">Công nợ theo tháng — {rows.length} khách · {months.length} tháng</span>
         <button className="btn-ghost" onClick={() => exportCongNo(readings, customers, usages, payments, month, meterNames)}>⬇ Xuất Excel (tháng {month})</button>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0 4px', flexWrap: 'wrap' }}>
+        <input
+          type="text" placeholder="🔍 Tìm tên khách hàng…" value={filterName}
+          onChange={e => setFilterName(e.target.value)}
+          style={{ border: '1px solid var(--border2)', borderRadius: 6, padding: '4px 10px', fontSize: 12.5, minWidth: 200, background: 'var(--card)', color: 'var(--text)' }}
+        />
+        <select value={filterGroup} onChange={e => setFilterGroup(e.target.value)}
+          style={{ border: '1px solid var(--border2)', borderRadius: 6, padding: '4px 10px', fontSize: 12.5, background: 'var(--card)', color: 'var(--text)' }}>
+          <option value="">Tất cả nhóm</option>
+          {allGroups.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as 'all' | 'con-no' | 'du')}
+          style={{ border: '1px solid var(--border2)', borderRadius: 6, padding: '4px 10px', fontSize: 12.5, background: 'var(--card)', color: 'var(--text)' }}>
+          <option value="all">Tất cả trạng thái</option>
+          <option value="con-no">Còn nợ</option>
+          <option value="du">Đã đủ</option>
+        </select>
+        {(filterName || filterGroup || filterStatus !== 'all') && (
+          <button className="btn-ghost" style={{ fontSize: 12, padding: '3px 10px' }}
+            onClick={() => { setFilterName(''); setFilterGroup(''); setFilterStatus('all') }}>
+            ✕ Xóa lọc
+          </button>
+        )}
       </div>
       <style>{`.cn-mm-scroll .dn-table thead th { top: 0 !important; } .cn-mm-scroll .dn-table tfoot tr { position: sticky; bottom: 0; z-index: 4; }`}</style>
       <div className="dn-scroll cn-mm-scroll" style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
