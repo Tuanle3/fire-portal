@@ -241,11 +241,28 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
               // ── MAJOR SECTION ───────────────────────────────────────────────
               if (it.is_section) {
                 const bg = SECTION_COLORS[it.nhom] ?? '#F9FAFB'
+                // Sum all non-section items in this nhom for section totals
+                const secKh = data.items
+                  .filter(x => x.nhom === it.nhom && !x.is_section && !x.is_group)
+                  .reduce((s, x) => s + x.ke_hoach, 0)
+                const secTh = data.items
+                  .filter(x => x.nhom === it.nhom && !x.is_section && !x.is_group)
+                  .reduce((s, x) => {
+                    const auto = x.kmcp ? kmcpActual[x.kmcp] : undefined
+                    return s + (auto !== undefined ? auto : x.thuc_hien)
+                  }, 0)
+                const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : ''
                 return (
                   <tr key={it.id} style={{ background: bg }}>
                     <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 700, color: '#1C3557' }}>{it.stt}</td>
-                    <td style={{ padding: '7px 10px', fontWeight: 700, color: '#1C3557', letterSpacing: '.02em' }} colSpan={5}>
+                    <td style={{ padding: '7px 10px', fontWeight: 700, color: '#1C3557', letterSpacing: '.02em' }} colSpan={3}>
                       {it.dien_giai}
+                    </td>
+                    <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 13 }}>
+                      {fmt(secKh)}
+                    </td>
+                    <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 13 }}>
+                      {fmt(secTh)}
                     </td>
                     <td style={{ padding: '7px 6px', textAlign: 'center' }}>
                       {(it.nhom === 'B' || it.nhom === 'C') && (
