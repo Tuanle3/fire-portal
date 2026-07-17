@@ -826,3 +826,207 @@ export async function exportCongNo(
   a.href = url; a.download = safeFileName(`dien-nuoc_cong-no_${month}.xlsx`); a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1500)
 }
+
+// ── Tab: Thu tiền — tổng hợp & chi tiết giao dịch ────────────────────────────
+export async function exportThuTien(
+  readings: MeterReading[], customers: Customer[], usages: CustomerUsage[], payments: Payment[],
+  month: string,
+) {
+  const months = Array.from(new Set(readings.map(r => r.month))).sort((a, b) => b.localeCompare(a))
+  const cmp = { numeric: true, sensitivity: 'base' } as const
+
+  // ── Tính phải thu và đã thu theo từng (customer, month) ──────────────────
+  type MonthCell = { due: number; paid: number }
+  type CRow = { c: Customer; cells: Map<string, MonthCell>; totalDue: number; totalPaid: number }
+  const rowMap = new Map<string, CRow>()
+  const ensureRow = (c: Customer): CRow => {
+    let r = rowMap.get(c.id)
+    if (!r) { r = { c, cells: new Map(), totalDue: 0, totalPaid: 0 }; rowMap.set(c.id, r) }
+    return r
+  }
+  const ensureCell = (r: CRow, m: string): MonthCell => {
+    let x = r.cells.get(m); if (!x) { x = { due: 0, paid: 0 }; r.cells.set(m, x) }; return x
+  }
+
+  // Phải thu từ đồng hồ
+  for (const rd of readings)
+    for (const row of meterAllocation(rd, customers, usages).rows) {
+      if (row.amount <= 0) continue
+      ensureCell(ensureRow(row.customer), rd.month).due += row.amount
+    }
+  // Phải thu: phí quản lý + phí khác
+  for (const c of customers) for (const m of months) {
+    const fee = c.feeByMonth?.[m] ?? 0
+    if (fee > 0) ensureCell(ensureRow(c), m).due += fee
+    const other = Object.values(c.otherFeesByType ?? {}).reduce((s, byM) => s + ((byM as Record<string,number>)[m] ?? 0), 0)
+    if (other > 0) ensureCell(ensureRow(c), m).due += other
+  }
+  // Đã thu
+  for (const p of payments) {
+    const R = rowMap.get(p.customerId); if (!R) continue
+    const mc = ensureCell(R, p.month)
+    mc.paid += p.amount
+  }
+  // Totals
+  for (const R of rowMap.values()) {
+    for (const mc of R.cells.values()) { R.totalDue += mc.due; R.totalPaid += mc.paid }
+  }
+
+  const dataRows = Array.from(rowMap.values())
+    .filter(r => r.totalDue > 0 || r.totalPaid > 0)
+    .sort((x, y) => (x.c.group?.trim() || 'zzz').localeCompare(y.c.group?.trim() || 'zzz', 'vi', cmp) || x.c.name.localeCompare(y.c.name, 'vi', cmp))
+
+  const wb2 = new ExcelJS.Workbook()
+
+  // ── Sheet 1: Tổng hợp theo tháng ─────────────────────────────────────────
+  const ws1 = wb2.addWorksheet('Tổng hợp')
+  const LEAD = 5  // Khách hàng | Nhóm | Tổng PT | Tổng ĐT | Tỷ lệ thu
+  const nM = months.length
+  ws1.columns = [
+    { width: 20 }, { width: 10 }, { width: 14 }, { width: 14 }, { width: 10 },
+    ...months.map(() => ({ width: 17 })),
+  ]
+  const C_W  = { argb: 'FFFFFFFF' }, C_NV = { argb: 'FF1C3557' }
+  const C_GR = { argb: 'FF15803D' }, C_RD = { argb: 'FFDC2626' }
+  const C_GY = { argb: 'FF9CA3AF' }, C_HD = { argb: 'FF2A4D7A' }
+  const C_CU = { argb: 'FF1C5A9A' }, C_FT = { argb: 'FFD6E6F6' }
+  const bd = { style: 'thin' as const, color: { argb: 'FFC7CED8' } }
+  const bx = { top: bd, bottom: bd, left: bd, right: bd }
+  const ab = (c: ExcelJS.Cell) => { c.border = bx }
+
+  // Tiêu đề
+  const t1 = ws1.addRow([`THU TIỀN THEO THÁNG — ${dataRows.length} khách · ${nM} tháng · Xuất: ${month}`])
+  t1.font = { name: FONT, size: 12, bold: true, color: C_NV }; t1.height = 20
+  ws1.mergeCells(1, 1, 1, LEAD + nM)
+
+  // Hàng header
+  const hRow = ws1.addRow(['KHÁCH HÀNG', 'NHÓM', 'TỔNG PHẢI THU', 'TỔNG ĐÃ THU', 'TỶ LỆ', ...months])
+  hRow.height = 26
+  hRow.eachCell((cell, ci) => {
+    const isCur = ci > LEAD && months[ci - LEAD - 1] === month
+    cell.font      = { name: FONT, size: 9, bold: true, color: C_W }
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: isCur ? C_CU : C_HD }
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    cell.border    = bx
+  })
+
+  // Chú thích
+  const noteR = ws1.addRow(['Ô màu: Xanh = đã thu đủ · Đỏ = còn nợ · Xám nhỏ = phải thu · Đậm = đã thu'])
+  noteR.height = 13
+  noteR.getCell(1).font = { name: FONT, size: 8, italic: true, color: C_GY }
+  ws1.mergeCells(3, 1, 3, LEAD + nM)
+
+  // Dữ liệu
+  for (const R of dataRows) {
+    const totalRemain = Math.max(0, R.totalDue - R.totalPaid)
+    const pct = R.totalDue > 0 ? Math.round(R.totalPaid / R.totalDue * 100) : 100
+    const rowVals = [
+      R.c.name, R.c.group?.trim() || '—',
+      r0(R.totalDue), r0(R.totalPaid), `${pct}%`,
+      ...months.map(() => ''),
+    ]
+    const row = ws1.addRow(rowVals)
+    row.height = 32
+
+    const c1 = row.getCell(1); c1.font = { name: FONT, size: 9, bold: true }; c1.alignment = { vertical: 'middle' }; ab(c1)
+    const c2 = row.getCell(2); c2.font = { name: FONT, size: 9, color: C_GY }; c2.alignment = { vertical: 'middle' }; ab(c2)
+    const c3 = row.getCell(3); c3.numFmt = '#,##0'; c3.font = { name: FONT, size: 9 }; c3.alignment = { horizontal: 'right', vertical: 'middle' }; ab(c3)
+    const c4 = row.getCell(4); c4.numFmt = '#,##0'; c4.font = { name: FONT, size: 9, bold: true, color: totalRemain > 0 ? C_RD : C_GR }; c4.alignment = { horizontal: 'right', vertical: 'middle' }; ab(c4)
+    const c5 = row.getCell(5); c5.font = { name: FONT, size: 9, color: pct >= 100 ? C_GR : C_RD }; c5.alignment = { horizontal: 'center', vertical: 'middle' }; ab(c5)
+
+    months.forEach((m, i) => {
+      const mc = R.cells.get(m)
+      const mCell = row.getCell(LEAD + 1 + i)
+      const isCur = m === month
+      if (isCur) mCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F7FD' } }
+      ab(mCell); mCell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true }
+      if (!mc || mc.due <= 0) { mCell.value = '–'; mCell.font = { name: FONT, size: 8, color: C_GY }; mCell.alignment = { horizontal: 'center', vertical: 'middle' }; return }
+      const remain = Math.max(0, mc.due - mc.paid)
+      mCell.value = {
+        richText: [
+          { text: r0(mc.due).toLocaleString('vi-VN') + '\n',  font: { name: FONT, size: 7, color: { argb: 'FF9CA3AF' } } },
+          { text: r0(mc.paid).toLocaleString('vi-VN'),        font: { name: FONT, size: 9, bold: true, color: remain > 0 ? { argb: 'FFDC2626' } : { argb: 'FF15803D' } } },
+          ...(remain > 0 ? [{ text: `\n-${r0(remain).toLocaleString('vi-VN')}`, font: { name: FONT, size: 7, color: { argb: 'FFDC2626' } } }] : []),
+        ],
+      }
+    })
+  }
+
+  // Hàng tổng
+  const mTotals = months.map(m => r0(dataRows.reduce((s, R) => s + (R.cells.get(m)?.paid ?? 0), 0)))
+  const footR = ws1.addRow(['TỔNG CỘNG', '', r0(dataRows.reduce((s,R)=>s+R.totalDue,0)), r0(dataRows.reduce((s,R)=>s+R.totalPaid,0)), '', ...mTotals])
+  footR.height = 18
+  footR.eachCell((cell, ci) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: C_FT }
+    cell.font = { name: FONT, size: 9, bold: true, color: C_NV }
+    cell.border = bx
+    if (ci >= 3 && ci !== 5) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' } }
+    else cell.alignment = { vertical: 'middle' }
+  })
+
+  // ── Sheet 2: Chi tiết giao dịch ──────────────────────────────────────────
+  const ws2 = wb2.addWorksheet('Chi tiết GD')
+  ws2.columns = [
+    { width: 6  }, // STT
+    { width: 20 }, // Khách hàng
+    { width: 10 }, // Nhóm
+    { width: 10 }, // Tháng CN
+    { width: 12 }, // Ngày thu
+    { width: 14 }, // Số tiền
+    { width: 12 }, // Phương thức
+    { width: 18 }, // Tài khoản
+    { width: 22 }, // Ghi chú
+  ]
+
+  const t2 = ws2.addRow([`CHI TIẾT THU TIỀN — Xuất: ${month}`])
+  t2.font = { name: FONT, size: 12, bold: true, color: C_NV }; t2.height = 20
+  ws2.mergeCells(1, 1, 1, 9)
+
+  const hRow2 = ws2.addRow(['STT', 'KHÁCH HÀNG', 'NHÓM', 'THÁNG CN', 'NGÀY THU', 'SỐ TIỀN (đ)', 'PHƯƠNG THỨC', 'TÀI KHOẢN', 'GHI CHÚ'])
+  hRow2.height = 24
+  hRow2.eachCell(cell => {
+    cell.font = { name: FONT, size: 9, bold: true, color: C_W }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: C_HD }
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    cell.border = bx
+  })
+
+  // Sắp xếp payment: mới nhất trước
+  const sortedPayments = [...payments].sort((a, b) => (b.paidAt || b.month).localeCompare(a.paidAt || a.month))
+  let stt = 1
+  for (const p of sortedPayments) {
+    const c = customers.find(x => x.id === p.customerId)
+    if (!c) continue
+    const method = p.paymentMethod === 'transfer' ? 'Chuyển khoản' : p.paymentMethod === 'cash' ? 'Tiền mặt' : '—'
+    const dRow = ws2.addRow([stt++, c.name, c.group?.trim() || '—', p.month, p.paidAt || '—', r0(p.amount), method, p.bankAccount || '—', p.note || '—'])
+    dRow.height = 16
+    dRow.eachCell((cell, ci) => {
+      cell.font = { name: FONT, size: 9 }
+      cell.border = bx
+      if (ci === 1) { cell.alignment = { horizontal: 'center', vertical: 'middle' }; cell.font = { name: FONT, size: 9, color: C_GY } }
+      else if (ci === 6) { cell.numFmt = '#,##0'; cell.font = { name: FONT, size: 9, bold: true, color: C_GR }; cell.alignment = { horizontal: 'right', vertical: 'middle' } }
+      else if (ci === 5 || ci === 4) cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      else cell.alignment = { vertical: 'middle' }
+    })
+    // Tô hàng cách nhau theo khách hàng
+    if (stt % 2 === 0) dRow.eachCell(cell => { if (!cell.fill || (cell.fill as any).fgColor?.argb === 'FF000000') cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } } })
+  }
+
+  // Footer sheet 2
+  const f2 = ws2.addRow(['', 'TỔNG CỘNG', '', '', '', r0(payments.reduce((s,p)=>s+p.amount,0)), '', '', ''])
+  f2.height = 18
+  f2.eachCell((cell, ci) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: C_FT }
+    cell.font = { name: FONT, size: 9, bold: true, color: C_NV }
+    cell.border = bx
+    if (ci === 6) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' } }
+    else cell.alignment = { vertical: 'middle' }
+  })
+
+  const buf  = await wb2.xlsx.writeBuffer()
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = safeFileName(`dien-nuoc_thu-tien_${month}.xlsx`); a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1500)
+}

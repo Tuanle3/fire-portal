@@ -5,7 +5,7 @@ import {
   meterAllocation, METER_SERVICE, primaryService, paymentService,
 } from '@/lib/dien-nuoc-types'
 import { savePayment, deletePayment, saveCustomer } from '@/lib/dien-nuoc-store'
-import { exportCongNo } from '@/lib/dien-nuoc-excel'
+import { exportCongNo, exportThuTien } from '@/lib/dien-nuoc-excel'
 import { NumberInput } from '../_components/NumberInput'
 import { PhieuThongBaoModal } from './PhieuThongBao'
 
@@ -515,7 +515,8 @@ function CongNoMultiMonth({ readings, customers, usages, payments, month, meterN
     <div className="sc">
       <div className="sc-head">
         <span className="sc-title">Công nợ theo tháng — {rows.length} khách · {months.length} tháng</span>
-        <button className="btn-ghost" onClick={() => exportCongNo(readings, customers, usages, payments, month, meterNames)}>⬇ Xuất Excel (tháng {month})</button>
+        <button className="btn-ghost" onClick={() => exportCongNo(readings, customers, usages, payments, month, meterNames).catch(console.error)}>⬇ Công nợ</button>
+        <button className="btn-ghost" onClick={() => exportThuTien(readings, customers, usages, payments, month).catch(console.error)}>⬇ Thu tiền</button>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0 4px', flexWrap: 'wrap' }}>
         <input
