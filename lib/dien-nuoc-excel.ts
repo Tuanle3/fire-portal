@@ -784,9 +784,8 @@ export async function exportCongNo(
       // richText: phải thu + còn nợ + breakdown chi tiết
       const bdLines: { text: string; font?: Partial<ExcelJS.Font> }[] = []
       const elecLbl  = meterLabel(_meterNames as any, 1)
-      const coolLbl  = meterLabel(_meterNames as any, 2)
       if (cell2.elec  > 0) bdLines.push({ text: `\n${elecLbl}: ${r0(cell2.elec).toLocaleString('vi-VN')}`,  font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
-      if (cell2.cool  > 0) bdLines.push({ text: `\n${coolLbl}: ${r0(cell2.cool).toLocaleString('vi-VN')}`,  font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
+      if (cell2.cool  > 0) bdLines.push({ text: `\nMáy lạnh: ${r0(cell2.cool).toLocaleString('vi-VN')}`,   font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
       if (cell2.water > 0) bdLines.push({ text: `\nNước: ${r0(cell2.water).toLocaleString('vi-VN')}`,       font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
       if (cell2.pql   > 0) bdLines.push({ text: `\nPhí QL: ${r0(cell2.pql).toLocaleString('vi-VN')}`,      font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
       if (cell2.other > 0) bdLines.push({ text: `\nPhí khác: ${r0(cell2.other).toLocaleString('vi-VN')}`,  font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
