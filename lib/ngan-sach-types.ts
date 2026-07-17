@@ -4,14 +4,16 @@ export type NhomRow = 'section' | 'item'
 
 export interface NganSachItem {
   id: string           // unique within a month doc
-  nhom: string         // "A" | "B" | "C" | "D" | "E" | "F" (section header) or "item"
-  is_section: boolean
-  stt: string          // "A", "B", "11", "12", etc.
+  nhom: string         // "A" | "B" | "C" | "D" section
+  is_section: boolean  // true = major section header (A/B/C/D)
+  is_group?: boolean   // true = collapsible sub-group header (I/II/III...)
+  parent_id?: string   // set on detail rows that belong to a group
+  stt: string          // "A", "B", "I", "II", "11", "12", etc.
   dien_giai: string
   kmcp: string
   ke_hoach: number
-  thuc_hien: number    // auto from data_quy (tồn quỹ) or manual
-  thuc_hien_manual: boolean  // true = manually entered, false = auto
+  thuc_hien: number    // auto from data_quy or manual
+  thuc_hien_manual: boolean
   ghi_chu: string
 }
 

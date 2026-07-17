@@ -2,7 +2,7 @@
 import { useState, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { NganSachThang, NganSachItem, GiaiPhap } from '@/lib/ngan-sach-types'
-import { addItem, removeItem, updateItem, makeDefault } from '@/lib/ngan-sach-store'
+import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup, makeDefault } from '@/lib/ngan-sach-store'
 
 function parseExcel(file: File): Promise<{ items: NganSachItem[]; giai_phap: GiaiPhap[] }> {
   return new Promise((resolve, reject) => {
@@ -208,17 +208,18 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
           <thead>
             <tr style={{ background: '#1C3557', color: '#fff' }}>
-              <th style={TH(36)}>STT</th>
+              <th style={TH(44)}>STT</th>
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Diễn giải</th>
               <th style={TH(80)}>KMCP</th>
               <th style={TH(150)}>Kế hoạch (₫)</th>
               <th style={TH(150)}>Thực hiện (₫)</th>
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Ghi chú</th>
-              <th style={TH(60)}></th>
+              <th style={TH(72)}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {data.items.map(it => {
+              // ── MAJOR SECTION ───────────────────────────────────────────────
               if (it.is_section) {
                 const bg = SECTION_COLORS[it.nhom] ?? '#F9FAFB'
                 return (
@@ -228,32 +229,74 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
                       {it.dien_giai}
                     </td>
                     <td style={{ padding: '7px 6px', textAlign: 'center' }}>
-                      {it.nhom !== 'A' && it.nhom !== 'D' && (
-                        <button
-                          title="Thêm dòng"
-                          onClick={() => onChange(addItem(data, it.id, it.nhom))}
-                          style={BtnSmall('#EFF6FF', '#1C3557')}
-                        >＋</button>
+                      {(it.nhom === 'B' || it.nhom === 'C') && (
+                        <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+                          <button title="Thêm nhóm con" onClick={() => onChange(addGroup(data, it.id, it.nhom))}
+                            style={{ ...BtnSmall('#DBEAFE', '#1D4ED8'), fontSize: 10, width: 'auto', padding: '2px 6px' }}>＋Nhóm</button>
+                          <button title="Thêm dòng" onClick={() => onChange(addItem(data, it.id, it.nhom))}
+                            style={{ ...BtnSmall('#EFF6FF', '#1C3557'), fontSize: 10, width: 'auto', padding: '2px 6px' }}>＋Dòng</button>
+                        </div>
                       )}
                     </td>
                   </tr>
                 )
               }
 
+              // ── SUB-GROUP HEADER ─────────────────────────────────────────────
+              if (it.is_group) {
+                const bg = it.nhom === 'B' ? '#DBEAFE' : it.nhom === 'C' ? '#FFEDD5' : '#F3F4F6'
+                return (
+                  <tr key={it.id} style={{ background: bg, fontWeight: 600 }}>
+                    <td style={{ padding: '5px 6px', textAlign: 'center' }}>
+                      <input value={it.stt} onChange={e => upd(it.id, 'stt', e.target.value)}
+                        style={{ width: 32, textAlign: 'center', border: '1px solid #BFDBFE', borderRadius: 4, padding: '2px 4px', fontSize: 12, background: 'transparent' }} />
+                    </td>
+                    <td style={{ padding: '5px 10px' }}>
+                      <input value={it.dien_giai} onChange={e => upd(it.id, 'dien_giai', e.target.value)}
+                        placeholder="Tên nhóm…"
+                        style={{ width: '100%', border: '1px solid #BFDBFE', borderRadius: 5, padding: '4px 8px', fontSize: 12.5, fontFamily: 'inherit', fontWeight: 600, background: 'transparent' }} />
+                    </td>
+                    <td style={{ padding: '5px 6px' }}>
+                      <input value={it.kmcp} onChange={e => upd(it.id, 'kmcp', e.target.value)}
+                        placeholder="DT-..."
+                        style={{ width: '100%', textAlign: 'center', border: '1px solid #BFDBFE', borderRadius: 5, padding: '4px 4px', fontSize: 11.5, fontFamily: 'monospace', background: 'transparent' }} />
+                    </td>
+                    <td colSpan={2} style={{ padding: '5px 10px', color: '#6B7280', fontSize: 11.5, textAlign: 'center' }}>
+                      Tổng tự tính từ các dòng con
+                    </td>
+                    <td style={{ padding: '5px 6px' }}>
+                      <input value={it.ghi_chu} onChange={e => upd(it.id, 'ghi_chu', e.target.value)}
+                        style={{ width: '100%', border: '1px solid #BFDBFE', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent' }} />
+                    </td>
+                    <td style={{ padding: '5px 6px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+                        <button title="Thêm dòng con" onClick={() => onChange(addChildItem(data, it.id))}
+                          style={{ ...BtnSmall('#DCFCE7', '#166534'), fontSize: 14 }}>＋</button>
+                        <button title="Xóa nhóm và tất cả dòng con" onClick={() => { if (confirm('Xóa nhóm và tất cả dòng con?')) onChange(removeGroup(data, it.id)) }}
+                          style={BtnSmall('#FEE2E2', '#991B1B')}>✕</button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              }
+
+              // ── DETAIL ITEM ──────────────────────────────────────────────────
               const isAutoTonQuy = it.nhom === 'A' && !it.is_section
               const autoVal = it.kmcp ? kmcpActual[it.kmcp] : undefined
               const hasAuto = isAutoTonQuy || autoVal !== undefined
+              const isChild = !!it.parent_id
 
               return (
                 <tr key={it.id} style={{ borderBottom: '1px solid #F3F4F6', background: hasAuto ? '#FAFFF8' : undefined }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
                   onMouseLeave={e => (e.currentTarget.style.background = hasAuto ? '#FAFFF8' : '')}
                 >
-                  <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                  <td style={{ padding: '5px 6px', textAlign: 'center', paddingLeft: isChild ? 16 : 6 }}>
+                    {isChild && <span style={{ color: '#D1D5DB', marginRight: 2 }}>└</span>}
                     <input value={it.stt} onChange={e => upd(it.id, 'stt', e.target.value)}
-                      style={{ width: 32, textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 4, padding: '2px 4px', fontSize: 12 }} />
+                      style={{ width: 28, textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 4, padding: '2px 3px', fontSize: 12 }} />
                   </td>
-                  <td style={{ padding: '5px 10px' }}>
+                  <td style={{ padding: '5px 10px', paddingLeft: isChild ? 24 : 10 }}>
                     <input value={it.dien_giai} onChange={e => upd(it.id, 'dien_giai', e.target.value)}
                       style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 5, padding: '4px 6px', fontSize: 12.5, fontFamily: 'inherit' }} />
                   </td>
@@ -262,14 +305,14 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
                       style={{ width: '100%', textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 5, padding: '4px 4px', fontSize: 11.5, fontFamily: 'monospace' }} />
                   </td>
                   <td style={{ padding: '5px 6px' }}>{numInput(it.id, 'ke_hoach', it.ke_hoach)}</td>
-                  <td style={{ padding: '5px 6px', position: 'relative' }}>
+                  <td style={{ padding: '5px 6px' }}>
                     {hasAuto ? (
                       <div style={{ textAlign: 'right', padding: '4px 6px' }}>
                         <span style={{ fontWeight: 600, color: '#166534', fontSize: 12.5 }}>
                           {(isAutoTonQuy ? 0 : autoVal ?? 0).toLocaleString('vi-VN')}
                         </span>
                         <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>
-                        {isAutoTonQuy && <div style={{ fontSize: 10, color: '#9CA3AF' }}>Tồn quỹ thực tế</div>}
+                        {isAutoTonQuy && <div style={{ fontSize: 10, color: '#9CA3AF' }}>Tồn quỹ TT</div>}
                       </div>
                     ) : numInput(it.id, 'thuc_hien', it.thuc_hien)}
                   </td>
@@ -278,11 +321,8 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
                       style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit' }} />
                   </td>
                   <td style={{ padding: '5px 6px', textAlign: 'center' }}>
-                    <button
-                      title="Xóa dòng"
-                      onClick={() => onChange(removeItem(data, it.id))}
-                      style={BtnSmall('#FEE2E2', '#991B1B')}
-                    >✕</button>
+                    <button title="Xóa dòng" onClick={() => onChange(removeItem(data, it.id))}
+                      style={BtnSmall('#FEE2E2', '#991B1B')}>✕</button>
                   </td>
                 </tr>
               )

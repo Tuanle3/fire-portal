@@ -52,16 +52,58 @@ export async function getNganSach(thang: string): Promise<NganSachThang> {
 }
 
 // helpers
-export function addItem(data: NganSachThang, after_id: string, nhom: string): NganSachThang {
+export function addItem(data: NganSachThang, after_id: string, nhom: string, parent_id?: string): NganSachThang {
   const idx = data.items.findIndex(i => i.id === after_id)
   const newItem: NganSachItem = {
     id: makeId(), nhom, is_section: false, stt: '',
     dien_giai: '', kmcp: '', ke_hoach: 0, thuc_hien: 0,
     thuc_hien_manual: true, ghi_chu: '',
+    ...(parent_id ? { parent_id } : {}),
   }
   const items = [...data.items]
   items.splice(idx + 1, 0, newItem)
   return { ...data, items }
+}
+
+// Add a collapsible sub-group header after after_id
+export function addGroup(data: NganSachThang, after_id: string, nhom: string): NganSachThang {
+  const idx = data.items.findIndex(i => i.id === after_id)
+  const newGroup: NganSachItem = {
+    id: makeId(), nhom, is_section: false, is_group: true, stt: '',
+    dien_giai: '', kmcp: '', ke_hoach: 0, thuc_hien: 0,
+    thuc_hien_manual: true, ghi_chu: '',
+  }
+  const items = [...data.items]
+  items.splice(idx + 1, 0, newGroup)
+  return { ...data, items }
+}
+
+// Add child item under a group — inserts before next group or section boundary
+export function addChildItem(data: NganSachThang, group_id: string): NganSachThang {
+  // Find last item that belongs to this group
+  let lastChildIdx = data.items.findIndex(i => i.id === group_id)
+  for (let i = lastChildIdx + 1; i < data.items.length; i++) {
+    const it = data.items[i]
+    if (it.is_section || it.is_group || (it.parent_id && it.parent_id !== group_id)) break
+    if (it.parent_id === group_id) lastChildIdx = i
+  }
+  const group = data.items.find(i => i.id === group_id)!
+  const newItem: NganSachItem = {
+    id: makeId(), nhom: group.nhom, is_section: false, parent_id: group_id,
+    stt: '', dien_giai: '', kmcp: '', ke_hoach: 0, thuc_hien: 0,
+    thuc_hien_manual: true, ghi_chu: '',
+  }
+  const items = [...data.items]
+  items.splice(lastChildIdx + 1, 0, newItem)
+  return { ...data, items }
+}
+
+// Remove a group and all its children
+export function removeGroup(data: NganSachThang, group_id: string): NganSachThang {
+  return {
+    ...data,
+    items: data.items.filter(i => i.id !== group_id && i.parent_id !== group_id),
+  }
 }
 
 export function removeItem(data: NganSachThang, id: string): NganSachThang {
