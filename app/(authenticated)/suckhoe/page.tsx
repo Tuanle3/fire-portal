@@ -189,8 +189,9 @@ export default function SuckhoePage() {
     const pnDebt = totalDebt - cnDebt
     const cnPct  = totalDebt > 0 ? cnDebt / totalDebt * 100 : 0
 
-    const nhCap   = mortgaged.reduce((s, r) => s + nf(r, 'Hạn mức cho vay'), 0)
-    const nhUsed  = mortgaged.reduce((s, r) => s + nf(r, 'Dư nợ phân bổ theo TSĐB'), 0)
+    const mortgagedSA = mortgaged.filter(r => String(f(r, 'Đại diện vay') ?? '').trim().startsWith('SA.'))
+    const nhCap   = mortgagedSA.reduce((s, r) => s + nf(r, 'Hạn mức cho vay'), 0)
+    const nhUsed  = mortgagedSA.reduce((s, r) => s + nf(r, 'Dư nợ phân bổ theo TSĐB'), 0)
     const nhAvail = nhCap - nhUsed
 
     return { totalDebt, cnDebt, pnDebt, cnPct, freeCount, freeVal, freeRoom, nhCap, nhUsed, nhAvail }
