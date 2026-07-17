@@ -569,7 +569,7 @@ export async function exportPhiQuanLy(customers: Customer[], month: string) {
   }
 
   // Tổng cộng — 2 dòng: Thu ngay + Cộng dồn
-  const makeFootRow = (label: string, sums: Map<string, number>, color: ExcelJS.Color, bgColor: string) => {
+  const makeFootRow = (label: string, sums: Map<string, number>, color: { argb: string }, bgColor: string) => {
     const totals = allMonths.map(m => sums.get(m) ?? 0)
     const fRow = ws.addRow([label, '', '', '', '', ...totals])
     fRow.height = 16
@@ -782,7 +782,7 @@ export async function exportCongNo(
         return
       }
       // richText: phải thu + còn nợ + breakdown chi tiết
-      const bdLines: ExcelJS.RichTextOptions[] = []
+      const bdLines: { text: string; font?: Partial<ExcelJS.Font> }[] = []
       const elecLbl  = meterLabel(_meterNames as any, 1)
       const coolLbl  = meterLabel(_meterNames as any, 2)
       if (cell2.elec  > 0) bdLines.push({ text: `\n${elecLbl}: ${r0(cell2.elec).toLocaleString('vi-VN')}`,  font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
