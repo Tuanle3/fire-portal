@@ -606,7 +606,7 @@ export async function exportCongNo(
   // ── Tính toán (giống TabCongNo) ───────────────────────────────────────────
   const months = Array.from(new Set(readings.map(r => r.month))).sort((a, b) => b.localeCompare(a))
 
-  type MCell = { due: number; paid: number; remain: number }
+  type MCell = { due: number; paid: number; remain: number; elec: number; cool: number; water: number; pql: number; other: number }
   type CRow  = { c: Customer; m: Map<string, MCell>; totalDue: number; totalPaid: number; totalRemain: number; unpaid: number }
   const rowMap = new Map<string, CRow>()
   const ensureRow = (c: Customer): CRow => {
@@ -615,20 +615,24 @@ export async function exportCongNo(
     return r
   }
   const ensureCell = (r: CRow, m: string): MCell => {
-    let x = r.m.get(m); if (!x) { x = { due: 0, paid: 0, remain: 0 }; r.m.set(m, x) }; return x
+    let x = r.m.get(m); if (!x) { x = { due: 0, paid: 0, remain: 0, elec: 0, cool: 0, water: 0, pql: 0, other: 0 }; r.m.set(m, x) }; return x
   }
   for (const reading of readings)
     for (const row of meterAllocation(reading, customers, usages).rows) {
       if (row.amount <= 0) continue
-      ensureCell(ensureRow(row.customer), reading.month).due += row.amount
+      const mc = ensureCell(ensureRow(row.customer), reading.month)
+      mc.due += row.amount
+      if (reading.meterId === 1) mc.elec  += row.amount
+      else if (reading.meterId === 2) mc.cool  += row.amount
+      else if (reading.meterId === 3) mc.water += row.amount
     }
   for (const c of customers) for (const m of months) {
     const fee = c.feeByMonth?.[m] ?? 0
-    if (fee > 0) ensureCell(ensureRow(c), m).due += fee
+    if (fee > 0) { const mc = ensureCell(ensureRow(c), m); mc.due += fee; mc.pql += fee }
   }
   for (const c of customers) for (const m of months) {
     const total = Object.values(c.otherFeesByType ?? {}).reduce((s, byMonth) => s + ((byMonth as Record<string,number>)[m] ?? 0), 0)
-    if (total > 0) ensureCell(ensureRow(c), m).due += total
+    if (total > 0) { const mc = ensureCell(ensureRow(c), m); mc.due += total; mc.other += total }
   }
   for (const p of payments) {
     const R = rowMap.get(p.customerId); if (!R) continue
@@ -678,7 +682,7 @@ export async function exportCongNo(
     { width: 14 }, // Tổng CN
     { width: 12 }, // PQL CD
     { width: 9  }, // Ghi chú
-    ...months.map(() => ({ width: 13 })),
+    ...months.map(() => ({ width: 18 })),
   ]
 
   const NUM_FMT  = '#,##0'
@@ -777,13 +781,24 @@ export async function exportCongNo(
         mCell.alignment = { horizontal: 'center', vertical: 'middle' }
         return
       }
-      // richText hai dòng
+      // richText: phải thu + còn nợ + breakdown chi tiết
+      const bdLines: ExcelJS.RichTextOptions[] = []
+      const elecLbl  = meterLabel(_meterNames as any, 1)
+      const coolLbl  = meterLabel(_meterNames as any, 2)
+      if (cell2.elec  > 0) bdLines.push({ text: `\n${elecLbl}: ${r0(cell2.elec).toLocaleString('vi-VN')}`,  font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
+      if (cell2.cool  > 0) bdLines.push({ text: `\n${coolLbl}: ${r0(cell2.cool).toLocaleString('vi-VN')}`,  font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
+      if (cell2.water > 0) bdLines.push({ text: `\nNước: ${r0(cell2.water).toLocaleString('vi-VN')}`,       font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
+      if (cell2.pql   > 0) bdLines.push({ text: `\nPhí QL: ${r0(cell2.pql).toLocaleString('vi-VN')}`,      font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
+      if (cell2.other > 0) bdLines.push({ text: `\nPhí khác: ${r0(cell2.other).toLocaleString('vi-VN')}`,  font: { name: FONT, size: 7, color: { argb: 'FF6B7280' } } })
       mCell.value = {
         richText: [
           { text: r0(cell2.due).toLocaleString('vi-VN') + '\n', font: { name: FONT, size: 7, color: { argb: 'FF9CA3AF' } } },
           { text: fmt2(r0(cell2.remain)) === '' ? '0' : r0(cell2.remain).toLocaleString('vi-VN'), font: { name: FONT, size: 9, bold: true, color: cell2.remain > 0 ? { argb: 'FFDC2626' } : { argb: 'FF15803D' } } },
+          ...bdLines,
         ],
       }
+      const bdCount = bdLines.length
+      row.height = Math.max(row.height ?? 18, 16 + bdCount * 11)
       mCell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true }
     })
   }
