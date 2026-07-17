@@ -288,7 +288,7 @@ export function TabPhiQuanLy({ customers, month }: { customers: Customer[]; mont
                           {notSaved ? <span style={{ color: 'var(--muted2)' }}>—</span> : (
                             <>
                               {charge > 0 && <div style={{ fontWeight: isCur ? 700 : undefined, color: 'var(--navy)', fontSize: isCur ? undefined : 11 }}>{fmt(charge)}</div>}
-                              {accrued > 0 && <div style={{ fontWeight: isCur ? 700 : undefined, color: '#92400E', fontSize: isCur ? undefined : 11 }} title="Tích lũy (chưa KT)">~{fmt(accrued)}</div>}
+                              {accrued > 0 && <div style={{ fontWeight: isCur ? 700 : undefined, color: '#92400E', fontSize: isCur ? undefined : 11 }} title="Tích lũy (chưa KT)">{fmt(accrued)}</div>}
                               {total === 0 && <span style={{ color: 'var(--muted2)' }}>—</span>}
                             </>
                           )}
