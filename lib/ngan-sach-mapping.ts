@@ -49,40 +49,42 @@ function normalizeKey(k: string): string {
     .replace(/[^a-z0-9]/g, '')
 }
 
-// Tìm key cột "Mã ngân sách" — scan qua nhiều rows vì Firebase bỏ qua ô trống
+// Tìm key theo normalized name — scan nhiều rows vì Firebase bỏ ô trống
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function findMaNSKey(rows: any[]): string | undefined {
+export function findKey(rows: any[], normTarget: string): string | undefined {
   for (const r of rows) {
     if (!r || typeof r !== 'object') continue
-    const key = Object.keys(r).find(k => {
-      const n = normalizeKey(k)
-      return n === 'mangansach' || n === 'mansach' || n === 'mangansach'
-    })
-    if (key) return key  // dừng ngay khi tìm được (row này có cột M)
+    const key = Object.keys(r).find(k => normalizeKey(k) === normTarget)
+    if (key) return key
   }
   return undefined
 }
 
 // Build KMCP → total amount map from data_quy rows for a given month
-// Đọc trực tiếp cột "Mã ngân sách" (tìm key tự động); fallback về keyword matching nếu ô trống
+// Chỉ tính "Thực hiện" cho các row có cột Loại = "Thực tế"
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildKmcpActual(rows: any[], month: string): Record<string, number> {
   const result: Record<string, number> = {}
-  const maNSKey = findMaNSKey(rows)  // tìm key một lần cho toàn bộ rows
+  const maNSKey  = findKey(rows, 'mangansach')  // cột M: Mã ngân sách
+  const loaiKey  = findKey(rows, 'loai')        // cột L: Loại
 
   for (const r of rows) {
     const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
     if (!ngay.startsWith(month)) continue
 
+    // Chỉ lấy dòng "Thực tế", bỏ qua Nội bộ / Kế hoạch / các loại khác
+    if (loaiKey) {
+      const loai = String(r[loaiKey] ?? '').trim()
+      if (loai && loai !== 'Thực tế') continue
+    }
+
     const ps     = Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0)
     const ghiChu = String(r['Ghi_chu'] ?? '')
-
     if (ghiChu === 'Dư đầu kỳ' || ghiChu === 'Dư cuối kỳ') continue
 
-    // Ưu tiên cột "Mã ngân sách" (key tìm động); fallback về keyword matching
-    const maNS = maNSKey ? String(r[maNSKey] ?? '').trim() : ''
+    const maNS  = maNSKey ? String(r[maNSKey] ?? '').trim() : ''
     const nhomCP = String(r['Nhóm_CP'] ?? r['Nhom_CP'] ?? '')
-    const kmcp = maNS || matchKMCP(nhomCP, ghiChu)
+    const kmcp  = maNS || matchKMCP(nhomCP, ghiChu)
     if (!kmcp) continue
 
     result[kmcp] = (result[kmcp] ?? 0) + Math.abs(ps)
@@ -109,13 +111,13 @@ export function buildTonDauKy(rows: any[], month: string): number {
   return total
 }
 
-// Sum total Chi (operating expenses only, Group starts with "1.")
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function sumChiThang(rows: any[], month: string): number {
+export function sumChiThang(rows: any[], month: string, loaiKey?: string): number {
   let total = 0
   for (const r of rows) {
-    const ngay  = String(r['Ngày'] ?? '')
+    const ngay = String(r['Ngày'] ?? '')
     if (!ngay.startsWith(month)) continue
+    if (loaiKey) { const l = String(r[loaiKey] ?? '').trim(); if (l && l !== 'Thực tế') continue }
     const ghiChu = String(r['Ghi_chu'] ?? '')
     const ps     = Number(r['Số_tiền_PS'] ?? 0)
     if (ghiChu === 'Chi' || ps < 0) total += Math.abs(ps)
@@ -124,11 +126,12 @@ export function sumChiThang(rows: any[], month: string): number {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function sumThuThang(rows: any[], month: string): number {
+export function sumThuThang(rows: any[], month: string, loaiKey?: string): number {
   let total = 0
   for (const r of rows) {
-    const ngay  = String(r['Ngày'] ?? '')
+    const ngay = String(r['Ngày'] ?? '')
     if (!ngay.startsWith(month)) continue
+    if (loaiKey) { const l = String(r[loaiKey] ?? '').trim(); if (l && l !== 'Thực tế') continue }
     const ghiChu = String(r['Ghi_chu'] ?? '')
     const ps     = Number(r['Số_tiền_PS'] ?? 0)
     if (ghiChu === 'Thu' || ps > 0) total += Math.abs(ps)

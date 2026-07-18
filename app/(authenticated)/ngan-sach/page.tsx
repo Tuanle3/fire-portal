@@ -6,7 +6,7 @@ import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 import { NganSachThang } from '@/lib/ngan-sach-types'
 import { subscribeNganSach, saveNganSach, makeDefault } from '@/lib/ngan-sach-store'
-import { buildKmcpActual, buildTonDauKy, sumChiThang, sumThuThang } from '@/lib/ngan-sach-mapping'
+import { buildKmcpActual, buildTonDauKy, findKey, sumChiThang, sumThuThang } from '@/lib/ngan-sach-mapping'
 import { TabTongHop } from './_tabs/TabTongHop'
 import { TabKeHoach } from './_tabs/TabKeHoach'
 import { TabGiaiPhap } from './_tabs/TabGiaiPhap'
@@ -89,9 +89,10 @@ export default function NganSachPage() {
       let ton = 0; latestTon.forEach(v => { ton += v })
       setTonQuy(ton)
 
-      // Monthly aggregates
-      setChiThang(sumChiThang(rows, month))
-      setThuThang(sumThuThang(rows, month))
+      // Monthly aggregates (chỉ tính dòng Thực tế)
+      const loaiKey = findKey(rows, 'loai')
+      setChiThang(sumChiThang(rows, month, loaiKey))
+      setThuThang(sumThuThang(rows, month, loaiKey))
 
       // Tồn quỹ đầu kỳ của tháng ngân sách (từ dòng "Dư đầu kỳ")
       setTonDauKy(buildTonDauKy(rows, month))
