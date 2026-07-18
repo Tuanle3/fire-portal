@@ -37,11 +37,29 @@ export function matchKMCP(nhomCP: string, ghi_chu: string): string | null {
   return null
 }
 
+// Tìm key của cột "Mã ngân sách" trong Firebase (tên key phụ thuộc script sync)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findMaNSKey(rows: any[]): string | undefined {
+  const sample = rows.find(r => r && typeof r === 'object' && Object.keys(r).length > 3)
+  if (!sample) return undefined
+  return Object.keys(sample).find(k => {
+    const norm = k.toLowerCase().replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
+                                .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
+                                .replace(/[ìíịỉĩ]/g, 'i')
+                                .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
+                                .replace(/[ùúụủũưừứựửữ]/g, 'u')
+                                .replace(/[đ]/g, 'd')
+                                .replace(/[^a-z0-9]/g, '')
+    return norm === 'mangansach' || norm === 'mansach'
+  })
+}
+
 // Build KMCP → total amount map from data_quy rows for a given month
-// Ưu tiên đọc cột "Mã ngân sách" trực tiếp; fallback về keyword matching nếu chưa có
+// Đọc trực tiếp cột "Mã ngân sách" (tìm key tự động); fallback về keyword matching nếu ô trống
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildKmcpActual(rows: any[], month: string): Record<string, number> {
   const result: Record<string, number> = {}
+  const maNSKey = findMaNSKey(rows)  // tìm key một lần cho toàn bộ rows
 
   for (const r of rows) {
     const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
@@ -52,8 +70,8 @@ export function buildKmcpActual(rows: any[], month: string): Record<string, numb
 
     if (ghiChu === 'Dư đầu kỳ' || ghiChu === 'Dư cuối kỳ') continue
 
-    // Ưu tiên cột "Mã ngân sách" (column M trong GSheets → Firebase key)
-    const maNS = String(r['Mã_ngân_sách'] ?? r['Ma_ngan_sach'] ?? r['Mã ngân sách'] ?? '').trim()
+    // Ưu tiên cột "Mã ngân sách" (key tìm động); fallback về keyword matching
+    const maNS = maNSKey ? String(r[maNSKey] ?? '').trim() : ''
     const nhomCP = String(r['Nhóm_CP'] ?? r['Nhom_CP'] ?? '')
     const kmcp = maNS || matchKMCP(nhomCP, ghiChu)
     if (!kmcp) continue
