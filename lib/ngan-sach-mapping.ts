@@ -37,21 +37,30 @@ export function matchKMCP(nhomCP: string, ghi_chu: string): string | null {
   return null
 }
 
-// Tìm key của cột "Mã ngân sách" trong Firebase (tên key phụ thuộc script sync)
+// Chuẩn hoá tên key Firebase về dạng không dấu, không ký tự đặc biệt
+function normalizeKey(k: string): string {
+  return k.toLowerCase()
+    .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
+    .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
+    .replace(/[ìíịỉĩ]/g, 'i')
+    .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
+    .replace(/[ùúụủũưừứựửữ]/g, 'u')
+    .replace(/[đ]/g, 'd')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+// Tìm key cột "Mã ngân sách" — scan qua nhiều rows vì Firebase bỏ qua ô trống
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function findMaNSKey(rows: any[]): string | undefined {
-  const sample = rows.find(r => r && typeof r === 'object' && Object.keys(r).length > 3)
-  if (!sample) return undefined
-  return Object.keys(sample).find(k => {
-    const norm = k.toLowerCase().replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
-                                .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
-                                .replace(/[ìíịỉĩ]/g, 'i')
-                                .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
-                                .replace(/[ùúụủũưừứựửữ]/g, 'u')
-                                .replace(/[đ]/g, 'd')
-                                .replace(/[^a-z0-9]/g, '')
-    return norm === 'mangansach' || norm === 'mansach'
-  })
+  for (const r of rows) {
+    if (!r || typeof r !== 'object') continue
+    const key = Object.keys(r).find(k => {
+      const n = normalizeKey(k)
+      return n === 'mangansach' || n === 'mansach' || n === 'mangansach'
+    })
+    if (key) return key  // dừng ngay khi tìm được (row này có cột M)
+  }
+  return undefined
 }
 
 // Build KMCP → total amount map from data_quy rows for a given month
