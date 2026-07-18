@@ -188,6 +188,7 @@ export default function NganSachPage() {
           onSave={handleSave}
           saving={saving}
           kmcpActual={kmcpActual}
+          tonQuySoDu={tonQuy}
         />
       )}
       {tab === 'giai-phap' && (

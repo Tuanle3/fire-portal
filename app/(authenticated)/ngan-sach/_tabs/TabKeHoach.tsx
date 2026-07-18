@@ -97,9 +97,10 @@ interface Props {
   onSave: () => void
   saving: boolean
   kmcpActual: Record<string, number>
+  tonQuySoDu: number
 }
 
-export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props) {
+export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuySoDu }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(data.items.filter(it => it.is_group).map(it => it.id))
@@ -230,8 +231,8 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
               <th style={TH(44)}>STT</th>
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Diễn giải</th>
               <th style={TH(80)}>KMCP</th>
-              <th style={TH(150)}>Kế hoạch (₫)</th>
-              <th style={TH(150)}>Thực hiện (₫)</th>
+              <th style={TH(175)}>Kế hoạch (₫)</th>
+              <th style={TH(175)}>Thực hiện (₫)</th>
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Ghi chú</th>
               <th style={TH(72)}>Thao tác</th>
             </tr>
@@ -243,17 +244,27 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
               // ── MAJOR SECTION ───────────────────────────────────────────────
               if (it.is_section) {
                 const bg = SECTION_COLORS[it.nhom] ?? '#F9FAFB'
-                // Sum all non-section items in this nhom for section totals
-                const secKh = data.items
-                  .filter(x => x.nhom === it.nhom && !x.is_section && !x.is_group)
+                // Tồn quỹ (nhóm A): lấy trực tiếp từ tonQuySoDu
+                const isA = it.nhom === 'A'
+                // Sum standalone items (no parent_id) + group subtotals for this nhom
+                const standaloneKh = data.items
+                  .filter(x => x.nhom === it.nhom && !x.is_section && !x.is_group && !x.parent_id)
                   .reduce((s, x) => s + x.ke_hoach, 0)
-                const secTh = data.items
-                  .filter(x => x.nhom === it.nhom && !x.is_section && !x.is_group)
+                const standaloneTh = data.items
+                  .filter(x => x.nhom === it.nhom && !x.is_section && !x.is_group && !x.parent_id)
                   .reduce((s, x) => {
                     const auto = x.kmcp ? kmcpActual[x.kmcp] : undefined
                     return s + (auto !== undefined ? auto : x.thuc_hien)
                   }, 0)
-                const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : ''
+                const groupsKh = data.items
+                  .filter(x => x.nhom === it.nhom && x.is_group)
+                  .reduce((s, g) => s + groupSum(g.id).kh, 0)
+                const groupsTh = data.items
+                  .filter(x => x.nhom === it.nhom && x.is_group)
+                  .reduce((s, g) => s + groupSum(g.id).th, 0)
+                const secKh = isA ? 0 : standaloneKh + groupsKh
+                const secTh = isA ? tonQuySoDu : standaloneTh + groupsTh
+                const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
                 return (
                   <tr key={it.id} style={{ background: bg }}>
                     <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 700, color: '#1C3557' }}>{it.stt}</td>
@@ -261,10 +272,10 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props
                       {it.dien_giai}
                     </td>
                     <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 13 }}>
-                      {fmt(secKh)}
+                      {isA ? '—' : fmt(secKh)}
                     </td>
                     <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 13 }}>
-                      {fmt(secTh)}
+                      {fmt(secTh)}{isA && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
                     </td>
                     <td style={{ padding: '7px 6px', textAlign: 'center' }}>
                       {(it.nhom === 'B' || it.nhom === 'C') && (
