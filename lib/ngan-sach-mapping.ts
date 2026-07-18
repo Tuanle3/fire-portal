@@ -64,6 +64,24 @@ export function buildKmcpActual(rows: any[], month: string): Record<string, numb
   return result
 }
 
+// Tồn quỹ đầu kỳ: sum Tồn của các dòng "Dư đầu kỳ" trong tháng được chọn
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function buildTonDauKy(rows: any[], month: string): number {
+  const byAccount = new Map<string, number>()
+  for (const r of rows) {
+    const ngay   = String(r['Ngày'] ?? r['Ngay'] ?? '')
+    if (!ngay.startsWith(month)) continue
+    const ghiChu = String(r['Ghi_chu'] ?? '')
+    if (ghiChu !== 'Dư đầu kỳ') continue
+    const stk = String(r['Số_tài_khoản'] ?? r['So_tai_khoan'] ?? '')
+    const ton = Number(r['Tồn'] ?? r['Ton'] ?? 0)
+    if (stk) byAccount.set(stk, ton)
+  }
+  let total = 0
+  byAccount.forEach(v => { total += v })
+  return total
+}
+
 // Sum total Chi (operating expenses only, Group starts with "1.")
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function sumChiThang(rows: any[], month: string): number {

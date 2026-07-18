@@ -6,7 +6,7 @@ import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 import { NganSachThang } from '@/lib/ngan-sach-types'
 import { subscribeNganSach, saveNganSach, makeDefault } from '@/lib/ngan-sach-store'
-import { buildKmcpActual, sumChiThang, sumThuThang } from '@/lib/ngan-sach-mapping'
+import { buildKmcpActual, buildTonDauKy, sumChiThang, sumThuThang } from '@/lib/ngan-sach-mapping'
 import { TabTongHop } from './_tabs/TabTongHop'
 import { TabKeHoach } from './_tabs/TabKeHoach'
 import { TabGiaiPhap } from './_tabs/TabGiaiPhap'
@@ -41,6 +41,7 @@ export default function NganSachPage() {
   const [chiThang,    setChiThang]    = useState(0)
   const [thuThang,    setThuThang]    = useState(0)
   const [kmcpActual,  setKmcpActual]  = useState<Record<string, number>>({})
+  const [tonDauKy,    setTonDauKy]    = useState(0)
   const [quyLoaded,   setQuyLoaded]   = useState(false)
 
   // Topbar
@@ -91,6 +92,9 @@ export default function NganSachPage() {
       // Monthly aggregates
       setChiThang(sumChiThang(rows, month))
       setThuThang(sumThuThang(rows, month))
+
+      // Tồn quỹ đầu kỳ của tháng ngân sách (từ dòng "Dư đầu kỳ")
+      setTonDauKy(buildTonDauKy(rows, month))
 
       // KMCP-level actual from Nhóm_CP field
       setKmcpActual(buildKmcpActual(rows, month))
@@ -174,7 +178,7 @@ export default function NganSachPage() {
       {tab === 'tong-hop' && (
         <TabTongHop
           data={localData}
-          tonQuySoDu={tonQuy}
+          tonQuySoDu={tonDauKy}
           tonQuySoDuLoading={tonQuyLoading}
           kmcpActual={kmcpActual}
           thuThang={thuThang}
@@ -188,7 +192,7 @@ export default function NganSachPage() {
           onSave={handleSave}
           saving={saving}
           kmcpActual={kmcpActual}
-          tonQuySoDu={tonQuy}
+          tonQuySoDu={tonDauKy}
         />
       )}
       {tab === 'giai-phap' && (
