@@ -62,13 +62,33 @@ function lastIdxInSection(items: NganSachItem[], nhom: string, startIdx: number)
   return last
 }
 
+// Tự động đặt STT: nhóm top-level → "1","2",...; con → "1.1","1.2",...
+function autoStt(items: NganSachItem[], nhom: string, parentId?: string): string {
+  if (parentId) {
+    const parent = items.find(i => i.id === parentId)
+    const parentStt = parent?.stt ?? ''
+    const children = items.filter(i => i.parent_id === parentId)
+    const maxIdx = children.reduce((max, c) => {
+      const last = String(c.stt).split('.').pop() ?? ''
+      return Math.max(max, parseInt(last) || 0)
+    }, 0)
+    return `${parentStt}.${maxIdx + 1}`
+  }
+  const groups = items.filter(i => i.nhom === nhom && !i.is_section && !i.parent_id)
+  const maxIdx = groups.reduce((max, g) => {
+    const n = parseInt(String(g.stt).split('.')[0]) || 0
+    return Math.max(max, n)
+  }, 0)
+  return String(maxIdx + 1)
+}
+
 // helpers
 export function addItem(data: NganSachThang, after_id: string, nhom: string, parent_id?: string): NganSachThang {
   let idx = data.items.findIndex(i => i.id === after_id)
-  // If triggered from a section header → insert at end of section
   if (data.items[idx]?.is_section) idx = lastIdxInSection(data.items, nhom, idx)
   const newItem: NganSachItem = {
-    id: makeId(), nhom, is_section: false, stt: '',
+    id: makeId(), nhom, is_section: false,
+    stt: autoStt(data.items, nhom, parent_id),
     dien_giai: '', kmcp: '', ke_hoach: 0, thuc_hien: 0,
     thuc_hien_manual: true, ghi_chu: '',
     ...(parent_id ? { parent_id } : {}),
@@ -83,7 +103,8 @@ export function addGroup(data: NganSachThang, after_id: string, nhom: string): N
   let idx = data.items.findIndex(i => i.id === after_id)
   if (data.items[idx]?.is_section) idx = lastIdxInSection(data.items, nhom, idx)
   const newGroup: NganSachItem = {
-    id: makeId(), nhom, is_section: false, is_group: true, stt: '',
+    id: makeId(), nhom, is_section: false, is_group: true,
+    stt: autoStt(data.items, nhom),
     dien_giai: '', kmcp: '', ke_hoach: 0, thuc_hien: 0,
     thuc_hien_manual: true, ghi_chu: '',
   }
@@ -94,7 +115,6 @@ export function addGroup(data: NganSachThang, after_id: string, nhom: string): N
 
 // Add child item under a group — inserts before next group or section boundary
 export function addChildItem(data: NganSachThang, group_id: string): NganSachThang {
-  // Find last item that belongs to this group
   let lastChildIdx = data.items.findIndex(i => i.id === group_id)
   for (let i = lastChildIdx + 1; i < data.items.length; i++) {
     const it = data.items[i]
@@ -104,7 +124,8 @@ export function addChildItem(data: NganSachThang, group_id: string): NganSachTha
   const group = data.items.find(i => i.id === group_id)!
   const newItem: NganSachItem = {
     id: makeId(), nhom: group.nhom, is_section: false, parent_id: group_id,
-    stt: '', dien_giai: '', kmcp: '', ke_hoach: 0, thuc_hien: 0,
+    stt: autoStt(data.items, group.nhom, group_id),
+    dien_giai: '', kmcp: '', ke_hoach: 0, thuc_hien: 0,
     thuc_hien_manual: true, ghi_chu: '',
   }
   const items = [...data.items]
