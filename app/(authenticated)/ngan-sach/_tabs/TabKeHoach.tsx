@@ -101,7 +101,9 @@ interface Props {
 
 export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () => new Set(data.items.filter(it => it.is_group).map(it => it.id))
+  )
   const toggleCollapse = (id: string) =>
     setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   const [importing, setImporting] = useState(false)

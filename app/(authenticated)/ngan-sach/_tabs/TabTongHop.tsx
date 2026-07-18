@@ -29,8 +29,10 @@ export function TabTongHop({ data, tonQuySoDu, tonQuySoDuLoading, kmcpActual, ch
   const [year, mon] = thang.split('-')
   const thangLabel = `T${parseInt(mon)}.${year}`
 
-  // Collapsed group IDs
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Collapsed group IDs — default all groups collapsed
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () => new Set(items.filter(it => it.is_group).map(it => it.id))
+  )
   const toggle = (id: string) =>
     setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
