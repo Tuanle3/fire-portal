@@ -96,6 +96,7 @@ export function buildKmcpActual(rows: any[], month: string): Record<string, numb
 // Tồn quỹ đầu kỳ: sum Tồn của các dòng "Dư đầu kỳ" trong tháng được chọn
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildTonDauKy(rows: any[], month: string): number {
+  // Method 1: explicit "Dư đầu kỳ" rows for this month
   const byAccount = new Map<string, number>()
   for (const r of rows) {
     const ngay   = String(r['Ngày'] ?? r['Ngay'] ?? '')
@@ -106,9 +107,19 @@ export function buildTonDauKy(rows: any[], month: string): number {
     const ton = Number(r['Tồn'] ?? r['Ton'] ?? 0)
     if (stk) byAccount.set(stk, ton)
   }
-  let total = 0
-  byAccount.forEach(v => { total += v })
-  return total
+  if (byAccount.size > 0) {
+    let total = 0; byAccount.forEach(v => { total += v }); return total
+  }
+  // Method 2: fallback — last known Tồn per account strictly before this month
+  const fallback = new Map<string, number>()
+  for (const r of rows) {
+    const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
+    if (!ngay || ngay >= month) continue  // skip current month and future
+    const stk = String(r['Số_tài_khoản'] ?? r['So_tai_khoan'] ?? '')
+    const ton = Number(r['Tồn'] ?? r['Ton'] ?? 0)
+    if (stk) fallback.set(stk, ton)  // keep overwriting → last row per account = latest balance
+  }
+  let total = 0; fallback.forEach(v => { total += v }); return total
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

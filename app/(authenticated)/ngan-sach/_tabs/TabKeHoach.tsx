@@ -97,10 +97,11 @@ interface Props {
   onSave: () => void
   saving: boolean
   kmcpActual: Record<string, number>
-  tonQuySoDu: number
+  tonQuySoDu: number      // opening balance (đầu kỳ) → KH column
+  tonQuyRealtime: number  // current real-time balance → TH column
 }
 
-export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuySoDu }: Props) {
+export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuySoDu, tonQuyRealtime }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(data.items.filter(it => it.is_group).map(it => it.id))
@@ -262,8 +263,8 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                 const groupsTh = data.items
                   .filter(x => x.nhom === it.nhom && x.is_group)
                   .reduce((s, g) => s + groupSum(g.id).th, 0)
-                const secKh = isA ? 0 : standaloneKh + groupsKh
-                const secTh = isA ? tonQuySoDu : standaloneTh + groupsTh
+                const secKh = isA ? tonQuySoDu : standaloneKh + groupsKh
+                const secTh = isA ? tonQuyRealtime : standaloneTh + groupsTh
                 const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
                 return (
                   <tr key={it.id} style={{ background: bg }}>
@@ -272,7 +273,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                       {it.dien_giai}
                     </td>
                     <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 13 }}>
-                      {isA ? '—' : fmt(secKh)}
+                      {fmt(secKh)}
                     </td>
                     <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 13 }}>
                       {fmt(secTh)}{isA && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}

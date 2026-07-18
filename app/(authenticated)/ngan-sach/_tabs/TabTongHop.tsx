@@ -12,20 +12,21 @@ const numColor = (n: number) => n < 0 ? '#B91C1C' : n > 0 ? '#166534' : '#6B7280
 
 interface Props {
   data: NganSachThang
-  tonQuySoDu: number
+  tonQuySoDu: number       // opening balance (đầu kỳ) → KH column
+  tonQuyRealtime: number   // current real-time balance → TH column
   tonQuySoDuLoading: boolean
   kmcpActual: Record<string, number>
   thuThang: number
   chiThang: number
 }
 
-function resolveThucHien(it: NganSachItem, kmcpActual: Record<string, number>, tonQuySoDu: number) {
-  if (it.nhom === 'A' && !it.is_section) return { val: tonQuySoDu, isAuto: true }
+function resolveThucHien(it: NganSachItem, kmcpActual: Record<string, number>, tonQuyRealtime: number) {
+  if (it.nhom === 'A' && !it.is_section) return { val: tonQuyRealtime, isAuto: true }
   if (it.kmcp && it.kmcp in kmcpActual) return { val: kmcpActual[it.kmcp], isAuto: true }
   return { val: it.thuc_hien, isAuto: false }
 }
 
-export function TabTongHop({ data, tonQuySoDu, tonQuySoDuLoading, kmcpActual, chiThang }: Props) {
+export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading, kmcpActual, chiThang }: Props) {
   const { thang, ngay_cap_nhat, items, giai_phap } = data
   const [year, mon] = thang.split('-')
   const thangLabel = `T${parseInt(mon)}.${year}`
@@ -40,14 +41,14 @@ export function TabTongHop({ data, tonQuySoDu, tonQuySoDuLoading, kmcpActual, ch
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
     setExporting(true)
-    try { await exportNganSachExcel(data, tonQuySoDu, kmcpActual, thangLabel) }
+    try { await exportNganSachExcel(data, tonQuySoDu, kmcpActual, thangLabel, tonQuyRealtime) }
     finally { setExporting(false) }
   }
 
   // Resolve all items with auto values
   const resolved = useMemo(() =>
-    items.map(it => ({ ...it, ...resolveThucHien(it, kmcpActual, tonQuySoDu) })),
-    [items, kmcpActual, tonQuySoDu]
+    items.map(it => ({ ...it, ...resolveThucHien(it, kmcpActual, tonQuyRealtime) })),
+    [items, kmcpActual, tonQuyRealtime]
   )
 
   // Build group subtotals: group_id → { kh, th }
@@ -65,12 +66,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuySoDuLoading, kmcpActual, ch
 
   // Section totals (sum of all non-section, non-group items + group subtotals)
   const sectionTotals = useMemo(() => {
-    let tonQuyKH = 0, tonQuyTH = 0, B_kh = 0, B_th = 0, C_kh = 0, C_th = 0
-    for (const it of resolved) {
-      if (it.is_section || it.is_group) continue
-      if (it.parent_id) continue  // counted via groupTotals
-      if (it.nhom === 'A') { tonQuyKH = it.ke_hoach; tonQuyTH = it.val }
-    }
+    let B_kh = 0, B_th = 0, C_kh = 0, C_th = 0
     // Add standalone B/C items (no parent_id)
     for (const it of resolved) {
       if (it.is_section || it.is_group || it.parent_id) continue
@@ -84,10 +80,11 @@ export function TabTongHop({ data, tonQuySoDu, tonQuySoDuLoading, kmcpActual, ch
       if (it.nhom === 'B') { B_kh += gt.kh; B_th += gt.th }
       if (it.nhom === 'C') { C_kh += gt.kh; C_th += gt.th }
     }
-    const D_kh = tonQuyKH + B_kh - C_kh
-    const D_th = tonQuyTH + B_th - C_th
-    return { tonQuyKH, tonQuyTH, B_kh, B_th, C_kh, C_th, D_kh, D_th }
-  }, [resolved, groupTotals])
+    // Section A uses props directly: KH = opening balance, TH = real-time balance
+    const D_kh = tonQuySoDu + B_kh - C_kh
+    const D_th = tonQuyRealtime + B_th - C_th
+    return { B_kh, B_th, C_kh, C_th, D_kh, D_th }
+  }, [resolved, groupTotals, tonQuySoDu, tonQuyRealtime])
 
   const gpTotal = useMemo(() => {
     let kh = 0, th = 0
@@ -152,7 +149,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuySoDuLoading, kmcpActual, ch
 
             // ── MAJOR SECTION (A/B/C/D) ──────────────────────────────────────
             if (it.is_section) {
-              const { tonQuyKH, tonQuyTH, B_kh, B_th, C_kh, C_th, D_kh, D_th } = sectionTotals
+              const { B_kh, B_th, C_kh, C_th, D_kh, D_th } = sectionTotals
               let kh = 0, th = 0
               if (it.nhom === 'B') { kh = B_kh; th = B_th }
               if (it.nhom === 'C') { kh = C_kh; th = C_th }
@@ -165,13 +162,17 @@ export function TabTongHop({ data, tonQuySoDu, tonQuySoDuLoading, kmcpActual, ch
                   <td />
                   {it.nhom === 'A' ? (
                     <>
-                      <td style={TD({ right: true })}>{fmt(tonQuyKH)}</td>
                       <td style={TD({ right: true })}>
                         {tonQuySoDuLoading
                           ? <span style={{ color: '#9CA3AF' }}>…</span>
-                          : <span style={{ color: '#166534' }}>{fmt(tonQuySoDu)} <AutoBadge /></span>}
+                          : <span>{fmt(tonQuySoDu)}</span>}
                       </td>
-                      <td style={TD({ right: true })}>0</td>
+                      <td style={TD({ right: true })}>
+                        {tonQuySoDuLoading
+                          ? <span style={{ color: '#9CA3AF' }}>…</span>
+                          : <span style={{ color: '#166534' }}>{fmt(tonQuyRealtime)} <AutoBadge /></span>}
+                      </td>
+                      <td style={TD({ right: true, color: numColor(tonQuySoDu - tonQuyRealtime) })}>{fmtSigned(tonQuySoDu - tonQuyRealtime)}</td>
                     </>
                   ) : it.nhom === 'B' || it.nhom === 'C' ? (
                     <>

@@ -180,6 +180,7 @@ export default function NganSachPage() {
         <TabTongHop
           data={localData}
           tonQuySoDu={tonDauKy}
+          tonQuyRealtime={tonQuy}
           tonQuySoDuLoading={tonQuyLoading}
           kmcpActual={kmcpActual}
           thuThang={thuThang}
@@ -194,6 +195,7 @@ export default function NganSachPage() {
           saving={saving}
           kmcpActual={kmcpActual}
           tonQuySoDu={tonDauKy}
+          tonQuyRealtime={tonQuy}
         />
       )}
       {tab === 'giai-phap' && (

@@ -3,10 +3,12 @@ import type { NganSachThang, NganSachItem, GiaiPhap } from '@/lib/ngan-sach-type
 
 export async function exportNganSachExcel(
   data: NganSachThang,
-  tonQuySoDu: number,
+  tonQuySoDu: number,      // opening balance (KH)
   kmcpActual: Record<string, number>,
-  thangLabel: string
+  thangLabel: string,
+  tonQuyRealtime?: number  // current balance (TH), defaults to tonQuySoDu if not provided
 ): Promise<void> {
+  if (tonQuyRealtime === undefined) tonQuyRealtime = tonQuySoDu
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet(`Kế hoạch ${thangLabel}`)
 
@@ -115,10 +117,10 @@ export async function exportNganSachExcel(
     if (it.nhom === 'C') { C_kh += gt.kh; C_th += gt.th }
   }
   const D_kh = tonQuySoDu + B_kh - C_kh
-  const D_th = tonQuySoDu + B_th - C_th
+  const D_th = tonQuyRealtime! + B_th - C_th
 
   const sectionTotals: Record<string, { kh: number; th: number }> = {
-    A: { kh: 0, th: tonQuySoDu },
+    A: { kh: tonQuySoDu, th: tonQuyRealtime! },
     B: { kh: B_kh, th: B_th },
     C: { kh: C_kh, th: C_th },
     D: { kh: D_kh, th: D_th },
