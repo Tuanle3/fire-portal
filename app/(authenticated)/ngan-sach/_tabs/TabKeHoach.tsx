@@ -268,7 +268,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                 return (
                   <tr key={it.id} style={{ background: bg }}>
                     <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 700, color: '#1C3557' }}>{it.stt}</td>
-                    <td style={{ padding: '7px 10px', fontWeight: 700, color: '#1C3557', letterSpacing: '.02em' }} colSpan={3}>
+                    <td style={{ padding: '7px 10px', fontWeight: 700, color: '#1C3557', letterSpacing: '.02em' }} colSpan={2}>
                       {it.dien_giai}
                     </td>
                     <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 13 }}>
@@ -277,6 +277,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                     <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 13 }}>
                       {fmt(secTh)}{isA && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
                     </td>
+                    <td />
                     <td style={{ padding: '7px 6px', textAlign: 'center' }}>
                       {(it.nhom === 'B' || it.nhom === 'C') && (
                         <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
