@@ -1,6 +1,7 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { NganSachThang, NganSachItem, GiaiPhap } from '@/lib/ngan-sach-types'
+import { exportNganSachExcel } from '@/lib/ngan-sach-export'
 
 const fmt = (n: number) => n === 0 ? '—' : n.toLocaleString('vi-VN')
 const fmtSigned = (n: number) => {
@@ -35,6 +36,13 @@ export function TabTongHop({ data, tonQuySoDu, tonQuySoDuLoading, kmcpActual, ch
   )
   const toggle = (id: string) =>
     setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+
+  const [exporting, setExporting] = useState(false)
+  const handleExport = async () => {
+    setExporting(true)
+    try { await exportNganSachExcel(data, tonQuySoDu, kmcpActual, thangLabel) }
+    finally { setExporting(false) }
+  }
 
   // Resolve all items with auto values
   const resolved = useMemo(() =>
@@ -111,6 +119,18 @@ export function TabTongHop({ data, tonQuySoDu, tonQuySoDuLoading, kmcpActual, ch
             ⚠ {unallocatedChi.toLocaleString('vi-VN')} ₫ chi chưa phân loại
           </span>
         )}
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          style={{
+            marginLeft: 'auto', padding: '6px 14px', fontSize: 12, fontWeight: 600,
+            background: exporting ? '#F3F4F6' : '#166534', color: exporting ? '#9CA3AF' : '#fff',
+            border: 'none', borderRadius: 7, cursor: exporting ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          {exporting ? '⏳ Đang xuất…' : '⬇ Xuất Excel'}
+        </button>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, fontFamily: 'inherit' }}>
