@@ -38,6 +38,7 @@ export function matchKMCP(nhomCP: string, ghi_chu: string): string | null {
 }
 
 // Build KMCP → total amount map from data_quy rows for a given month
+// Ưu tiên đọc cột "Mã ngân sách" trực tiếp; fallback về keyword matching nếu chưa có
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildKmcpActual(rows: any[], month: string): Record<string, number> {
   const result: Record<string, number> = {}
@@ -46,18 +47,18 @@ export function buildKmcpActual(rows: any[], month: string): Record<string, numb
     const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
     if (!ngay.startsWith(month)) continue
 
-    const ps       = Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0)
-    const nhomCP   = String(r['Nhóm_CP'] ?? r['Nhom_CP'] ?? '')
-    const ghiChu   = String(r['Ghi_chu'] ?? '')
-    const loai     = ghiChu  // "Thu" | "Chi" | "Dư đầu kỳ"
+    const ps     = Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0)
+    const ghiChu = String(r['Ghi_chu'] ?? '')
 
-    if (loai === 'Dư đầu kỳ' || loai === 'Dư cuối kỳ') continue
+    if (ghiChu === 'Dư đầu kỳ' || ghiChu === 'Dư cuối kỳ') continue
 
-    const kmcp = matchKMCP(nhomCP, ghiChu)
+    // Ưu tiên cột "Mã ngân sách" (column M trong GSheets → Firebase key)
+    const maNS = String(r['Mã_ngân_sách'] ?? r['Ma_ngan_sach'] ?? r['Mã ngân sách'] ?? '').trim()
+    const nhomCP = String(r['Nhóm_CP'] ?? r['Nhom_CP'] ?? '')
+    const kmcp = maNS || matchKMCP(nhomCP, ghiChu)
     if (!kmcp) continue
 
-    const amount = Math.abs(ps)
-    result[kmcp] = (result[kmcp] ?? 0) + amount
+    result[kmcp] = (result[kmcp] ?? 0) + Math.abs(ps)
   }
 
   return result
