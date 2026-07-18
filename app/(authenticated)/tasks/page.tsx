@@ -1156,7 +1156,7 @@ function SlideOver({ task, allTasks, currentUser, currentStaff, staffUsers, depa
                   Đầu việc con {subTasks.length > 0 && `(${subTasks.length})`}
                 </div>
                 <button style={{ fontSize: 11, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}
-                  onClick={() => { onAddSubTask(task!); onClose() }}>
+                  onClick={() => { onAddSubTask(task!) }}>
                   + Chia đầu việc
                 </button>
               </div>
