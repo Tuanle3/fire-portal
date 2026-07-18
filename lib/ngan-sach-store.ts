@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDoc, setDoc, onSnapshot, serverTimestamp,
+  collection, doc, getDoc, getDocs, setDoc, onSnapshot, orderBy, query, serverTimestamp, where,
 } from 'firebase/firestore'
 import { diennuocDb } from '@/lib/firebase-diennuoc'
 import { NganSachThang, NganSachItem, GiaiPhap, DEFAULT_ITEMS, DEFAULT_GIAI_PHAP } from '@/lib/ngan-sach-types'
@@ -10,17 +10,52 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
+// Copy cấu trúc tháng cũ, reset số về 0 để dùng làm template tháng mới
+function cloneStructure(prev: NganSachThang, thang: string): NganSachThang {
+  return {
+    thang,
+    ngay_cap_nhat: new Date().toLocaleDateString('vi-VN'),
+    giai_phap: [],
+    items: prev.items.map(it => ({
+      ...it,
+      id: makeId(),
+      ke_hoach: 0,
+      thuc_hien: 0,
+      thuc_hien_manual: true,
+      ghi_chu: '',
+    })),
+  }
+}
+
+// Lấy tháng gần nhất trước `thang` có data trên Firestore
+async function getPrevTemplate(thang: string): Promise<NganSachThang | null> {
+  const db = diennuocDb
+  try {
+    const q = query(
+      collection(db, COL),
+      where('thang', '<', thang),
+      orderBy('thang', 'desc'),
+    )
+    const snap = await getDocs(q)
+    if (snap.empty) return null
+    return snap.docs[0].data() as NganSachThang
+  } catch {
+    return null
+  }
+}
+
 export function subscribeNganSach(
   thang: string,
   cb: (data: NganSachThang) => void,
 ): () => void {
   const db = diennuocDb
   const ref = doc(collection(db, COL), thang)
-  return onSnapshot(ref, snap => {
+  return onSnapshot(ref, async snap => {
     if (snap.exists()) {
       cb(snap.data() as NganSachThang)
     } else {
-      cb(makeDefault(thang))
+      const prev = await getPrevTemplate(thang)
+      cb(prev ? cloneStructure(prev, thang) : makeDefault(thang))
     }
   })
 }
