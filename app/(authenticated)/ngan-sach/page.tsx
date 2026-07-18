@@ -6,7 +6,8 @@ import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 import { NganSachThang } from '@/lib/ngan-sach-types'
 import { subscribeNganSach, saveNganSach, makeDefault } from '@/lib/ngan-sach-store'
-import { buildKmcpActual, buildTonDauKy, findKey, sumChiThang, sumThuThang } from '@/lib/ngan-sach-mapping'
+import { buildKmcpActual, findKey, sumChiThang, sumThuThang } from '@/lib/ngan-sach-mapping'
+import { fetchTonQuyFromCeo01 } from '@/lib/supabase-sag'
 import { TabTongHop } from './_tabs/TabTongHop'
 import { TabKeHoach } from './_tabs/TabKeHoach'
 import { TabGiaiPhap } from './_tabs/TabGiaiPhap'
@@ -72,36 +73,31 @@ export default function NganSachPage() {
     return unsub
   }, [month])
 
-  // Fetch ALL data_quy once, then derive everything from it (tồn quỹ + KMCP map)
+  // Fetch ton quy from Supabase ceo01 (same source as CEO dashboard)
   useEffect(() => {
     setTonQuyLoading(true)
+    fetchTonQuyFromCeo01(month).then(({ dauKy, cuoiKy }) => {
+      setTonDauKy(dauKy)
+      setTonQuy(cuoiKy)
+    }).catch(() => {})
+      .finally(() => setTonQuyLoading(false))
+  }, [month])
+
+  // Fetch ALL data_quy once, then derive everything from it (KMCP map + chi/thu)
+  useEffect(() => {
     setQuyLoaded(false)
     get(ref(getDb(), 'data_quy')).then(snap => {
       const rows = toArr(snap)
-
-      // Tồn quỹ = sum of latest balance per account
-      const latestTon = new Map<string, number>()
-      for (const r of rows) {
-        const stk = String(r['Số_tài_khoản'] ?? '')
-        const ton = Number(r['Tồn'] ?? 0)
-        if (stk) latestTon.set(stk, ton)
-      }
-      let ton = 0; latestTon.forEach(v => { ton += v })
-      setTonQuy(ton)
 
       // Monthly aggregates (chỉ tính dòng Thực tế)
       const loaiKey = findKey(rows, 'loai')
       setChiThang(sumChiThang(rows, month, loaiKey))
       setThuThang(sumThuThang(rows, month, loaiKey))
 
-      // Tồn quỹ đầu kỳ của tháng ngân sách (từ dòng "Dư đầu kỳ")
-      setTonDauKy(buildTonDauKy(rows, month))
-
       // KMCP-level actual from Nhóm_CP field
       setKmcpActual(buildKmcpActual(rows, month))
       setQuyLoaded(true)
     }).catch(() => {})
-      .finally(() => setTonQuyLoading(false))
   }, [month])
 
   const handleSave = useCallback(async () => {
