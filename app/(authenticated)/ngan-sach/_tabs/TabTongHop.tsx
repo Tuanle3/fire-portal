@@ -10,7 +10,7 @@ const fmtSigned = (n: number) => {
 }
 const numColor = (n: number) => n < 0 ? '#B91C1C' : n > 0 ? '#166534' : '#6B7280'
 
-interface TonQuyAcc { stk: string; bank: string; unit: string; ton: number }
+interface TonQuyAcc { stk: string; bank: string; unit: string; dauKy: number; ton: number }
 
 interface Props {
   data: NganSachThang
@@ -218,10 +218,12 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
                       {d.stk && <span style={{ marginLeft: 6, color: '#9CA3AF', fontSize: 11, fontFamily: 'monospace' }}>({d.stk})</span>}
                     </td>
                     <td />
-                    <td />
+                    <td style={{ ...TD({ right: true }), color: d.dauKy < 0 ? '#991B1B' : '#374151', fontSize: 12 }}>
+                      {d.dauKy !== 0 ? d.dauKy.toLocaleString('vi-VN') + ' ₫' : '—'}
+                    </td>
                     <td />
                     <td style={{ ...TD({ right: true }), fontWeight: 600, color: d.ton < 0 ? '#991B1B' : '#166534', fontSize: 12 }}>
-                      {d.ton.toLocaleString('vi-VN')} ₫
+                      {d.ton !== 0 ? d.ton.toLocaleString('vi-VN') + ' ₫' : '—'}
                     </td>
                     <td />
                   </tr>

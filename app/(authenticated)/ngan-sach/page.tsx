@@ -43,7 +43,7 @@ export default function NganSachPage() {
   const [kmcpActual,  setKmcpActual]  = useState<Record<string, number>>({})
   const [tonDauKy,    setTonDauKy]    = useState(0)
   const [quyLoaded,   setQuyLoaded]   = useState(false)
-  const [tonQuyDetail, setTonQuyDetail] = useState<{ stk: string; bank: string; unit: string; ton: number }[]>([])
+  const [tonQuyDetail, setTonQuyDetail] = useState<{ stk: string; bank: string; unit: string; dauKy: number; ton: number }[]>([])
   const [showDetail,   setShowDetail]   = useState(false)
 
   // Topbar
@@ -113,20 +113,17 @@ export default function NganSachPage() {
       latestTon.forEach(v => { realtime += v })
       setTonQuy(realtime)
 
-      // Chi tiết từng tài khoản để kiểm tra
-      const detail: { stk: string; bank: string; unit: string; ton: number }[] = []
-      latestTon.forEach((ton, stk) => {
-        detail.push({ stk, bank: accBank.get(stk) ?? '', unit: accUnit.get(stk) ?? '', ton })
-      })
-      detail.sort((a, b) => b.ton - a.ton)
-      setTonQuyDetail(detail)
+      // Tính cuoiky của từng tháng + capture per-account balance tại cuối tháng trước
+      const [selY, selM] = month.split('-')
+      const prevM = parseInt(selM) - 1
+      const prevMm = prevM > 0 ? String(prevM).padStart(2, '0') : null
 
-      // Tính cuoiky của từng tháng (giống monthRows trong dashboard)
-      // để lấy cuoiky của tháng trước month => đó là tonDauKy
       const yearRows = sorted.filter(r => String(r['Ngày'] ?? '').startsWith(CY_PX))
       const ton = new Map<string, number>(dauKyAcc)
       let curMm = ''
-      const monthCuoiKy = new Map<string, number>() // mm → cuoiky
+      const monthCuoiKy = new Map<string, number>()
+      // Per-account snapshot tại cuối tháng trước (để hiển thị đầu kỳ từng TK)
+      let dauKyAccSnapshot = new Map<string, number>(dauKyAcc) // mặc định = đầu năm
 
       for (const r of yearRows) {
         const mm  = String(r['Ngày'] ?? '').slice(5, 7)
@@ -135,6 +132,10 @@ export default function NganSachPage() {
           if (curMm) {
             let c = 0; ton.forEach(v => { c += v })
             monthCuoiKy.set(curMm, c)
+            // Nếu vừa đóng tháng trước → snapshot per-account
+            if (prevMm && curMm === prevMm) {
+              dauKyAccSnapshot = new Map(ton)
+            }
           }
           curMm = mm
         }
@@ -143,25 +144,36 @@ export default function NganSachPage() {
       if (curMm) {
         let c = 0; ton.forEach(v => { c += v })
         monthCuoiKy.set(curMm, c)
-      }
-
-      // tonDauKy = cuoiky của tháng trước; nếu là T1 thì = tổng dauKyAcc
-      const [selY, selM] = month.split('-')
-      const prevM = parseInt(selM) - 1
-      if (prevM === 0) {
-        // Tháng 1: đầu kỳ = tổng dauKyAcc (số dư đầu năm)
-        let dk = 0; dauKyAcc.forEach(v => { dk += v })
-        setTonDauKy(dk)
-      } else {
-        const prevMm = String(prevM).padStart(2, '0')
-        if (monthCuoiKy.has(prevMm)) {
-          setTonDauKy(monthCuoiKy.get(prevMm)!)
-        } else {
-          // Chưa có data tháng trước → fallback về đầu năm
-          let dk = 0; dauKyAcc.forEach(v => { dk += v })
-          setTonDauKy(dk)
+        if (prevMm && curMm === prevMm) {
+          dauKyAccSnapshot = new Map(ton)
         }
       }
+
+      // tonDauKy tổng
+      if (prevM === 0) {
+        let dk = 0; dauKyAcc.forEach(v => { dk += v })
+        setTonDauKy(dk)
+      } else if (monthCuoiKy.has(prevMm!)) {
+        setTonDauKy(monthCuoiKy.get(prevMm!)!)
+      } else {
+        let dk = 0; dauKyAcc.forEach(v => { dk += v })
+        setTonDauKy(dk)
+      }
+
+      // Chi tiết từng tài khoản: dauKy (đầu tháng) + ton (hiện tại)
+      const allStks = new Set([...latestTon.keys(), ...dauKyAccSnapshot.keys()])
+      const detail: { stk: string; bank: string; unit: string; dauKy: number; ton: number }[] = []
+      allStks.forEach(stk => {
+        detail.push({
+          stk,
+          bank: accBank.get(stk) ?? '',
+          unit: accUnit.get(stk) ?? '',
+          dauKy: dauKyAccSnapshot.get(stk) ?? 0,
+          ton:   latestTon.get(stk) ?? 0,
+        })
+      })
+      detail.sort((a, b) => b.dauKy - a.dauKy)
+      setTonQuyDetail(detail)
 
       // Monthly aggregates (chỉ tính dòng Thực tế)
       const loaiKey = findKey(rows, 'loai')
