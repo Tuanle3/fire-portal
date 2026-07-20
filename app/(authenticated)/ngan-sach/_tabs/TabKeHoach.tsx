@@ -151,6 +151,67 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
     onChange(updateItem(data, id, { [field]: val }))
   }
 
+  // Di chuyển dòng lên/xuống trong cùng nhóm (section hoặc parent_id)
+  const moveItem = (id: string, dir: -1 | 1) => {
+    const items = [...data.items]
+    const idx = items.findIndex(x => x.id === id)
+    if (idx < 0) return
+    const item = items[idx]
+    // Tìm các dòng cùng cấp (cùng parent_id và nhom, không phải section)
+    const siblings = items
+      .map((x, i) => ({ x, i }))
+      .filter(({ x }) =>
+        !x.is_section &&
+        x.nhom === item.nhom &&
+        x.parent_id === item.parent_id &&
+        x.is_group === item.is_group
+      )
+    const posInSiblings = siblings.findIndex(s => s.i === idx)
+    const targetSibling = siblings[posInSiblings + dir]
+    if (!targetSibling) return
+    // Swap trong mảng
+    items.splice(idx, 1)
+    const newIdx = items.findIndex(x => x.id === targetSibling.x.id)
+    items.splice(dir === -1 ? newIdx : newIdx + 1, 0, item)
+    onChange({ ...data, items })
+  }
+
+  // Đánh lại STT tự động theo thứ tự hiện tại
+  const renumberSTT = () => {
+    const items = [...data.items]
+    const counters: Record<string, number> = {}  // nhom → counter
+    const groupCounters = new Map<string, number>() // group_id → counter
+    const groupSttMap = new Map<string, string>()   // group_id → stt string
+    let groupOrdinal: Record<string, number> = {}   // nhom → group ordinal
+
+    const newItems = items.map(it => {
+      if (it.is_section) return { ...it, stt: it.nhom }
+
+      if (it.is_group) {
+        if (!groupOrdinal[it.nhom]) groupOrdinal[it.nhom] = 0
+        groupOrdinal[it.nhom]++
+        const stt = String(groupOrdinal[it.nhom])
+        groupSttMap.set(it.id, stt)
+        return { ...it, stt }
+      }
+
+      if (it.parent_id) {
+        // child của group
+        const parentStt = groupSttMap.get(it.parent_id) ?? '?'
+        const cnt = (groupCounters.get(it.parent_id) ?? 0) + 1
+        groupCounters.set(it.parent_id, cnt)
+        return { ...it, stt: `${parentStt}.${cnt}` }
+      }
+
+      // top-level item trong section
+      if (!counters[it.nhom]) counters[it.nhom] = 0
+      counters[it.nhom]++
+      return { ...it, stt: String(counters[it.nhom]) }
+    })
+
+    onChange({ ...data, items: newItems })
+  }
+
   const numInput = (id: string, field: 'ke_hoach' | 'thuc_hien', val: number, readOnly = false) => (
     <input
       type="text"
@@ -213,6 +274,19 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
             }}
           >
             {importing ? '⏳ Đang đọc…' : '📂 Import Excel'}
+          </button>
+
+          {/* Renumber */}
+          <button
+            onClick={renumberSTT}
+            title="Đánh lại STT theo thứ tự hiện tại"
+            style={{
+              padding: '8px 14px', background: '#FEF9C3', color: '#854D0E',
+              border: '1px solid #FDE68A', borderRadius: 7, fontWeight: 600, fontSize: 12.5, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
+          >
+            🔢 Đánh lại STT
           </button>
 
           {/* Save */}
@@ -376,6 +450,10 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                     </td>
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+                        <button title="Di chuyển lên" onClick={() => moveItem(it.id, -1)}
+                          style={BtnSmall('#F3F4F6', '#374151')}>↑</button>
+                        <button title="Di chuyển xuống" onClick={() => moveItem(it.id, 1)}
+                          style={BtnSmall('#F3F4F6', '#374151')}>↓</button>
                         <button title="Thêm dòng con" onClick={() => onChange(addChildItem(data, it.id))}
                           style={{ ...BtnSmall('#DCFCE7', '#166534'), fontSize: 14 }}>＋</button>
                         <button title="Xóa nhóm và tất cả dòng con" onClick={() => { if (confirm('Xóa nhóm và tất cả dòng con?')) onChange(removeGroup(data, it.id)) }}
@@ -427,8 +505,14 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                       style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit' }} />
                   </td>
                   <td style={{ padding: '5px 6px', textAlign: 'center' }}>
-                    <button title="Xóa dòng" onClick={() => onChange(removeItem(data, it.id))}
-                      style={BtnSmall('#FEE2E2', '#991B1B')}>✕</button>
+                    <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+                      <button title="Di chuyển lên" onClick={() => moveItem(it.id, -1)}
+                        style={BtnSmall('#F3F4F6', '#374151')}>↑</button>
+                      <button title="Di chuyển xuống" onClick={() => moveItem(it.id, 1)}
+                        style={BtnSmall('#F3F4F6', '#374151')}>↓</button>
+                      <button title="Xóa dòng" onClick={() => onChange(removeItem(data, it.id))}
+                        style={BtnSmall('#FEE2E2', '#991B1B')}>✕</button>
+                    </div>
                   </td>
                 </tr>
               )
