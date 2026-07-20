@@ -290,17 +290,6 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
             🔢 Đánh lại STT
           </button>
 
-          {/* Save */}
-          <button
-            onClick={onSave}
-            disabled={saving}
-            style={{
-              padding: '8px 20px', background: saving ? '#9CA3AF' : '#1C3557', color: '#fff',
-              border: 'none', borderRadius: 7, fontWeight: 600, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {saving ? 'Đang lưu…' : '💾 Lưu'}
-          </button>
         </div>
       </div>
 
