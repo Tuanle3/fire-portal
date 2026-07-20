@@ -43,6 +43,8 @@ export default function NganSachPage() {
   const [kmcpActual,  setKmcpActual]  = useState<Record<string, number>>({})
   const [tonDauKy,    setTonDauKy]    = useState(0)
   const [quyLoaded,   setQuyLoaded]   = useState(false)
+  const [tonQuyDetail, setTonQuyDetail] = useState<{ stk: string; bank: string; unit: string; ton: number }[]>([])
+  const [showDetail,   setShowDetail]   = useState(false)
 
   // Topbar
   useEffect(() => {
@@ -94,17 +96,30 @@ export default function NganSachPage() {
         if (stk) dauKyAcc.set(stk, Number(r['Tồn'] ?? 0))
       }
 
-      // latestTon = most recent Tồn per account (same as CEO dashboard)
-      const latestTon = new Map<string, number>()
+      // latestTon + metadata per account (same as CEO dashboard)
+      const latestTon  = new Map<string, number>()
+      const accBank    = new Map<string, string>()
+      const accUnit    = new Map<string, string>()
       for (const r of sorted) {
         const stk = String(r['Số_tài_khoản'] ?? '')
-        if (stk) latestTon.set(stk, Number(r['Tồn'] ?? 0))
+        if (!stk) continue
+        latestTon.set(stk, Number(r['Tồn'] ?? 0))
+        accBank.set(stk, String(r['Ngân_hàng'] ?? r['Ngân hàng'] ?? ''))
+        accUnit.set(stk, String(r['Đơn_vị'] ?? r['Đơn vị'] ?? ''))
       }
 
       // tonQuy (realtime) = sum of latestTon = số dư cuối kỳ thực tế hiện tại
       let realtime = 0
       latestTon.forEach(v => { realtime += v })
       setTonQuy(realtime)
+
+      // Chi tiết từng tài khoản để kiểm tra
+      const detail: { stk: string; bank: string; unit: string; ton: number }[] = []
+      latestTon.forEach((ton, stk) => {
+        detail.push({ stk, bank: accBank.get(stk) ?? '', unit: accUnit.get(stk) ?? '', ton })
+      })
+      detail.sort((a, b) => b.ton - a.ton)
+      setTonQuyDetail(detail)
 
       // Tính cuoiky của từng tháng (giống monthRows trong dashboard)
       // để lấy cuoiky của tháng trước month => đó là tonDauKy
@@ -203,24 +218,67 @@ export default function NganSachPage() {
       `}</style>
 
       {/* Reconciliation bar */}
-      <div style={{
-        display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap',
-        background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, padding: '10px 16px',
-        alignItems: 'center',
-      }}>
-        <RCard label="Tồn quỹ thực tế" val={tonQuy} loading={tonQuyLoading} color="#166534" />
-        <div style={{ width: 1, height: 32, background: '#E5E7EB' }} />
-        <RCard label={`Thu ${thangLabel} (Quỹ)`} val={thuThang} color="#1C3557" />
-        <RCard label={`Chi ${thangLabel} (Quỹ)`} val={chiThang} color="#9A3412" />
-        <div style={{ width: 1, height: 32, background: '#E5E7EB' }} />
-        <div style={{ fontSize: 11.5, color: quyLoaded ? '#166534' : '#9CA3AF' }}>
-          {quyLoaded
-            ? `✓ Đã map ${autoCount} mục KMCP từ Quỹ`
-            : tonQuyLoading ? '⏳ Đang tải data_quy…' : '—'}
+      <div style={{ marginBottom: 16, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '10px 16px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <RCard label="Tồn quỹ thực tế" val={tonQuy} loading={tonQuyLoading} color="#166534" />
+            <button
+              onClick={() => setShowDetail(v => !v)}
+              title="Xem chi tiết từng tài khoản"
+              style={{
+                marginTop: 10, width: 20, height: 20, borderRadius: 4, border: '1px solid #D1FAE5',
+                background: showDetail ? '#D1FAE5' : '#fff', color: '#166534', fontSize: 13, fontWeight: 700,
+                cursor: 'pointer', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >{showDetail ? '−' : '+'}</button>
+          </div>
+          <div style={{ width: 1, height: 32, background: '#E5E7EB' }} />
+          <RCard label={`Thu ${thangLabel} (Quỹ)`} val={thuThang} color="#1C3557" />
+          <RCard label={`Chi ${thangLabel} (Quỹ)`} val={chiThang} color="#9A3412" />
+          <div style={{ width: 1, height: 32, background: '#E5E7EB' }} />
+          <div style={{ fontSize: 11.5, color: quyLoaded ? '#166534' : '#9CA3AF' }}>
+            {quyLoaded
+              ? `✓ Đã map ${autoCount} mục KMCP từ Quỹ`
+              : tonQuyLoading ? '⏳ Đang tải data_quy…' : '—'}
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+            {saveMsg && <span style={{ fontSize: 12.5, color: saveMsg.startsWith('Lỗi') ? '#991B1B' : '#166534', fontWeight: 600 }}>{saveMsg}</span>}
+          </div>
         </div>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-          {saveMsg && <span style={{ fontSize: 12.5, color: saveMsg.startsWith('Lỗi') ? '#991B1B' : '#166534', fontWeight: 600 }}>{saveMsg}</span>}
-        </div>
+
+        {/* Chi tiết tồn quỹ từng tài khoản */}
+        {showDetail && (
+          <div style={{ borderTop: '1px solid #E5E7EB', padding: '8px 16px 12px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ color: '#6B7280', borderBottom: '1px solid #E5E7EB' }}>
+                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Đơn vị</th>
+                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Ngân hàng</th>
+                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Số tài khoản</th>
+                  <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 600 }}>Tồn quỹ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tonQuyDetail.map(d => (
+                  <tr key={d.stk} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                    <td style={{ padding: '4px 8px', color: '#374151' }}>{d.unit || '—'}</td>
+                    <td style={{ padding: '4px 8px', color: '#374151' }}>{d.bank || '—'}</td>
+                    <td style={{ padding: '4px 8px', color: '#6B7280', fontFamily: 'monospace' }}>{d.stk}</td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: d.ton < 0 ? '#991B1B' : '#166534' }}>
+                      {d.ton.toLocaleString('vi-VN')} ₫
+                    </td>
+                  </tr>
+                ))}
+                <tr style={{ borderTop: '2px solid #D1FAE5', background: '#F0FDF4' }}>
+                  <td colSpan={3} style={{ padding: '5px 8px', fontWeight: 700, color: '#166534', fontSize: 13 }}>Tổng cộng</td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 13 }}>
+                    {tonQuy.toLocaleString('vi-VN')} ₫
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Tab bar */}
