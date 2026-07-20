@@ -230,14 +230,14 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
       </div>
 
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr style={{ background: '#1C3557', color: '#fff' }}>
-              <th style={TH(44)}>STT</th>
+              <th style={TH(36)}>STT</th>
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Diễn giải</th>
-              <th style={TH(80)}>KMCP</th>
-              <th style={TH(175)}>Kế hoạch (₫)</th>
-              <th style={TH(175)}>Thực hiện (₫)</th>
+              <th style={TH(150)}>KMCP</th>
+              <th style={TH(150)}>Kế hoạch (₫)</th>
+              <th style={TH(150)}>Thực hiện (₫)</th>
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Ghi chú</th>
               <th style={TH(72)}>Thao tác</th>
             </tr>
@@ -288,17 +288,17 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                         >{showTonQuyDetail ? '−' : '+'}</button>
                       ) : it.stt}
                     </td>
-                    <td style={{ padding: '7px 10px', fontWeight: 700, color: '#1C3557', letterSpacing: '.02em' }} colSpan={2}>
+                    <td style={{ padding: '5px 10px', fontWeight: 700, color: '#1C3557', letterSpacing: '.02em' }} colSpan={2}>
                       {it.dien_giai}
                     </td>
-                    <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 13 }}>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}>
                       {fmt(secKh)}
                     </td>
-                    <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 13 }}>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 12.5 }}>
                       {fmt(secTh)}{isA && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
                     </td>
                     <td />
-                    <td style={{ padding: '7px 6px', textAlign: 'center' }}>
+                    <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       {(it.nhom === 'B' || it.nhom === 'C') && (
                         <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
                           <button title="Thêm nhóm con" onClick={() => onChange(addGroup(data, it.id, it.nhom))}
@@ -354,7 +354,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                     <td style={{ padding: '5px 6px' }}>
                       <input value={it.kmcp} onChange={e => upd(it.id, 'kmcp', e.target.value)}
                         placeholder="DT-..."
-                        style={{ width: '100%', textAlign: 'center', border: '1px solid #BFDBFE', borderRadius: 5, padding: '4px 4px', fontSize: 11.5, fontFamily: 'monospace', background: 'transparent' }} />
+                        style={{ width: '100%', textAlign: 'center', border: '1px solid #BFDBFE', borderRadius: 5, padding: '3px 4px', fontSize: 11, fontFamily: 'monospace', background: 'transparent' }} />
                     </td>
                     {(() => {
                       const { kh, th } = groupSum(it.id)
@@ -408,7 +408,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                   </td>
                   <td style={{ padding: '5px 6px' }}>
                     <input value={it.kmcp} onChange={e => upd(it.id, 'kmcp', e.target.value)}
-                      style={{ width: '100%', textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 5, padding: '4px 4px', fontSize: 11.5, fontFamily: 'monospace' }} />
+                      style={{ width: '100%', textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 5, padding: '3px 4px', fontSize: 11, fontFamily: 'monospace' }} />
                   </td>
                   <td style={{ padding: '5px 6px' }}>{numInput(it.id, 'ke_hoach', it.ke_hoach)}</td>
                   <td style={{ padding: '5px 6px' }}>
@@ -442,7 +442,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
 
 function TH(w?: number): React.CSSProperties {
   return {
-    padding: '8px 6px', textAlign: 'center', fontSize: 11.5,
+    padding: '6px 6px', textAlign: 'center', fontSize: 11,
     fontWeight: 600, whiteSpace: 'nowrap',
     ...(w ? { width: w, minWidth: w } : {}),
   }
