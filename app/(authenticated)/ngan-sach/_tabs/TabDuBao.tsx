@@ -408,6 +408,128 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
         ))}
       </div>
 
+      {/* ── Tổng quan năm: biểu đồ 12 tháng + cảnh báo tháng thiếu tiền ── */}
+      {(view === 'month' || view === 'quarter') && monthRows.length === 12 && (() => {
+        const vals = monthRows.map(r => r.closingBal)
+        const maxV = Math.max(...vals, 0)
+        const minV = Math.min(...vals, 0)
+        const span = (maxV - minV) || 1
+        const CHART_H = 150
+        const zeroY = (maxV / span) * CHART_H  // px from top down to the zero line
+        const safety = Math.round((tonDauKy || tonQuyRealtime) * 0.15)
+
+        // Tháng có vấn đề: âm (nguy cấp) hoặc tồn quỹ mỏng dưới ngưỡng an toàn
+        const problems = monthRows
+          .filter(r => r.closingBal < Math.max(safety, 0))
+          .map(r => ({
+            ...r,
+            level: r.closingBal < 0 ? 'critical' as const : 'warning' as const,
+            shortfall: r.closingBal < 0 ? -r.closingBal : Math.max(safety, 0) - r.closingBal,
+          }))
+
+        return (
+          <div style={{ marginBottom: 18 }}>
+            {/* Biểu đồ cột tồn quỹ cuối kỳ 12 tháng */}
+            <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: '16px 18px 10px', marginBottom: 14, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.05)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, fontSize: 13.5, color: '#1C3557' }}>Tồn quỹ cuối kỳ theo tháng · {selectedYear}</span>
+                <span style={{ fontSize: 11, color: '#9CA3AF' }}>Ngưỡng an toàn ≈ {VND(safety)} ₫ (15% tồn đầu)</span>
+              </div>
+              <div style={{ position: 'relative', height: CHART_H, display: 'flex', alignItems: 'stretch', gap: 4 }}>
+                {/* Đường 0 */}
+                <div style={{ position: 'absolute', left: 0, right: 0, top: zeroY, borderTop: '1px dashed #9CA3AF', zIndex: 1 }} />
+                {monthRows.map((r, i) => {
+                  const isNeg = r.closingBal < 0
+                  const h = (Math.abs(r.closingBal) / span) * CHART_H
+                  const color = isNeg ? '#EF4444' : r.closingBal < safety ? '#F59E0B' : '#22C55E'
+                  return (
+                    <div key={r.key} title={`T${i + 1}: ${r.closingBal.toLocaleString('vi-VN')} ₫`}
+                      style={{ flex: 1, position: 'relative', cursor: 'default' }}>
+                      <div style={{
+                        position: 'absolute', left: '15%', right: '15%',
+                        top: isNeg ? zeroY : zeroY - h,
+                        height: Math.max(h, 1),
+                        background: color, borderRadius: 3,
+                        border: r.isCurrent ? '2px solid #1C3557' : 'none',
+                        transition: 'all .3s',
+                      }} />
+                      {/* Nhãn giá trị */}
+                      <div style={{
+                        position: 'absolute', left: 0, right: 0, textAlign: 'center',
+                        top: isNeg ? zeroY + h + 2 : zeroY - h - 15,
+                        fontSize: 9, fontWeight: 700, color, whiteSpace: 'nowrap',
+                      }}>{VND(r.closingBal)}</div>
+                    </div>
+                  )
+                })}
+              </div>
+              {/* Nhãn tháng */}
+              <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                {monthRows.map((r, i) => (
+                  <div key={r.key} style={{ flex: 1, textAlign: 'center', fontSize: 10.5, fontWeight: r.isCurrent ? 700 : 500, color: r.isCurrent ? '#1C3557' : '#9CA3AF' }}>
+                    T{i + 1}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Bảng cảnh báo tháng thiếu tiền + đề xuất */}
+            <div style={{ border: '1px solid', borderColor: problems.some(p => p.level === 'critical') ? '#FCA5A5' : problems.length ? '#FDE68A' : '#BBF7D0', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{
+                padding: '9px 16px', fontWeight: 700, fontSize: 13,
+                background: problems.some(p => p.level === 'critical') ? '#FEF2F2' : problems.length ? '#FFFBEB' : '#F0FDF4',
+                color: problems.some(p => p.level === 'critical') ? '#991B1B' : problems.length ? '#92400E' : '#166534',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                {problems.length === 0
+                  ? <>✅ Dòng tiền {selectedYear} an toàn — không có tháng nào âm quỹ.</>
+                  : <>⚠ Cảnh báo dòng tiền — {problems.length} tháng cần xử lý</>}
+              </div>
+              {problems.length > 0 && (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, background: '#fff' }}>
+                  <thead>
+                    <tr style={{ background: '#F9FAFB', color: '#6B7280', fontSize: 11 }}>
+                      <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 700 }}>Tháng</th>
+                      <th style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 700 }}>Mức độ</th>
+                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 700 }}>Tồn cuối kỳ</th>
+                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 700 }}>Cần bổ sung</th>
+                      <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 700 }}>Đề xuất xử lý</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {problems.map(p => (
+                      <tr key={p.key} style={{ borderTop: '1px solid #F3F4F6' }}>
+                        <td style={{ padding: '7px 12px', fontWeight: 700, color: '#1C3557' }}>{p.label}</td>
+                        <td style={{ padding: '7px 12px', textAlign: 'center' }}>
+                          <span style={{
+                            fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                            background: p.level === 'critical' ? '#FEE2E2' : '#FEF3C7',
+                            color: p.level === 'critical' ? '#991B1B' : '#92400E',
+                          }}>
+                            {p.level === 'critical' ? '🔴 Âm quỹ' : '🟡 Quỹ mỏng'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: p.closingBal < 0 ? '#B91C1C' : '#D97706' }}>
+                          {p.closingBal.toLocaleString('vi-VN')}
+                        </td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: '#B91C1C' }}>
+                          {p.shortfall > 0 ? '+' + Math.round(p.shortfall).toLocaleString('vi-VN') : '—'}
+                        </td>
+                        <td style={{ padding: '7px 12px', color: '#4B5563', fontSize: 11.5 }}>
+                          {p.level === 'critical'
+                            ? 'Đẩy nhanh thu hồi công nợ · giãn/hoãn khoản chi lớn · chuẩn bị vay ngắn hạn (đáo hạn) · điều tiết từ tháng dư.'
+                            : 'Theo dõi sát · ưu tiên thu đúng hạn · hạn chế chi phát sinh ngoài kế hoạch.'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── Forecast table ── */}
       {rows.length === 0 && !loading && (
         <div style={{ textAlign: 'center', padding: 40, color: '#9CA3AF' }}>
