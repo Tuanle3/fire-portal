@@ -47,6 +47,17 @@ export default function NganSachPage() {
   const [tonQuyDetail, setTonQuyDetail] = useState<{ stk: string; bank: string; unit: string; dauKy: number; ton: number }[]>([])
   const [showDetail,   setShowDetail]   = useState(false)
 
+  const handleSave = useCallback(async () => {
+    setSaving(true); setSaveMsg('')
+    try {
+      await saveNganSach(localData)
+      setSaveMsg('Đã lưu ✓')
+      setTimeout(() => setSaveMsg(''), 3000)
+    } catch (e: unknown) {
+      setSaveMsg('Lỗi: ' + (e instanceof Error ? e.message : 'Lỗi'))
+    } finally { setSaving(false) }
+  }, [localData])
+
   // Keep latest handleSave in a ref so topbar button always calls current version
   const handleSaveRef = useRef(handleSave)
   useEffect(() => { handleSaveRef.current = handleSave }, [handleSave])
@@ -218,17 +229,6 @@ export default function NganSachPage() {
     }).catch(() => {})
       .finally(() => setTonQuyLoading(false))
   }, [month])
-
-  const handleSave = useCallback(async () => {
-    setSaving(true); setSaveMsg('')
-    try {
-      await saveNganSach(localData)
-      setSaveMsg('Đã lưu ✓')
-      setTimeout(() => setSaveMsg(''), 3000)
-    } catch (e: unknown) {
-      setSaveMsg('Lỗi: ' + (e instanceof Error ? e.message : 'Lỗi'))
-    } finally { setSaving(false) }
-  }, [localData])
 
   if (sessLoading) return <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF' }}>Đang tải...</div>
   if (!can('m:ngan-sach')) return (
