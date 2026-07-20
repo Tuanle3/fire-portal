@@ -15,6 +15,7 @@ export interface NganSachItem {
   thuc_hien: number    // auto from data_quy or manual
   thuc_hien_manual: boolean
   ghi_chu: string
+  ngay_du_kien?: string  // ISO date "2026-07-15" — expected payment/receipt date
 }
 
 export interface GiaiPhap {

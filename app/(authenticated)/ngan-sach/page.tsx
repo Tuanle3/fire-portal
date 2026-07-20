@@ -10,8 +10,9 @@ import { buildKmcpActual, findKey, sumChiThang, sumThuThang } from '@/lib/ngan-s
 import { TabTongHop } from './_tabs/TabTongHop'
 import { TabKeHoach } from './_tabs/TabKeHoach'
 import { TabGiaiPhap } from './_tabs/TabGiaiPhap'
+import { TabDuBao } from './_tabs/TabDuBao'
 
-type TabId = 'tong-hop' | 'ke-hoach' | 'giai-phap'
+type TabId = 'tong-hop' | 'ke-hoach' | 'giai-phap' | 'du-bao'
 
 function curMonth() { return new Date().toISOString().slice(0, 7) }
 
@@ -227,6 +228,7 @@ export default function NganSachPage() {
   const TABS: { id: TabId; label: string }[] = [
     { id: 'tong-hop',  label: '📊 Tổng hợp' },
     { id: 'ke-hoach',  label: '✏️ Kế hoạch & Thực hiện' },
+    { id: 'du-bao',    label: '📅 Dự báo dòng tiền' },
     { id: 'giai-phap', label: '💡 Giải pháp cân đối' },
   ]
 
@@ -343,6 +345,15 @@ export default function NganSachPage() {
           tonQuySoDu={tonDauKy}
           tonQuyRealtime={tonQuy}
           tonQuyDetail={tonQuyDetail}
+        />
+      )}
+      {tab === 'du-bao' && (
+        <TabDuBao
+          month={month}
+          localData={localData}
+          tonDauKy={tonDauKy}
+          tonQuyRealtime={tonQuy}
+          kmcpActual={kmcpActual}
         />
       )}
       {tab === 'giai-phap' && (

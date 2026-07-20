@@ -325,6 +325,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
               <th style={TH(150)}>Kế hoạch (₫)</th>
               <th style={TH(150)}>Thực hiện (₫)</th>
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Ghi chú</th>
+              <th style={TH(110)}>Ngày DK</th>
               <th style={TH(72)}>Thao tác</th>
             </tr>
           </thead>
@@ -388,7 +389,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
                       {isD ? (secTh < 0 ? `(${Math.abs(secTh).toLocaleString('vi-VN')})` : fmt(secTh)) : fmt(secTh)}{isA && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
                       {isD && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#FEF9C3', color: '#854D0E', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
                     </td>
-                    <td />
+                    <td />{/* Ngày DK — section rows don't have a date */}
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       {(it.nhom === 'B' || it.nhom === 'C') && (
                         <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
@@ -415,7 +416,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
                       <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: d.ton < 0 ? '#991B1B' : '#166534', fontSize: 12 }}>
                         {d.ton !== 0 ? d.ton.toLocaleString('vi-VN') + ' ₫' : '—'}
                       </td>
-                      <td /><td />
+                      <td /><td /><td />
                     </tr>
                   ))}
                   </>
@@ -467,6 +468,10 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
                     <td style={{ padding: '5px 6px' }}>
                       <input value={it.ghi_chu} onChange={e => upd(it.id, 'ghi_chu', e.target.value)}
                         style={{ width: '100%', border: '1px solid #BFDBFE', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent' }} />
+                    </td>
+                    <td style={{ padding: '4px 6px' }}>
+                      <input type="date" value={it.ngay_du_kien ?? ''} onChange={e => upd(it.id, 'ngay_du_kien', e.target.value)}
+                        style={{ width: '100%', border: '1px solid #BFDBFE', borderRadius: 5, padding: '3px 4px', fontSize: 11, fontFamily: 'inherit', background: 'transparent', color: it.ngay_du_kien ? '#1C3557' : '#9CA3AF' }} />
                     </td>
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
@@ -531,6 +536,12 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
                   <td style={{ padding: '5px 6px' }}>
                     <input value={it.ghi_chu} onChange={e => upd(it.id, 'ghi_chu', e.target.value)}
                       style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                  </td>
+                  <td style={{ padding: '4px 6px' }}>
+                    {!it.is_section && (
+                      <input type="date" value={it.ngay_du_kien ?? ''} onChange={e => upd(it.id, 'ngay_du_kien', e.target.value)}
+                        style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 5, padding: '3px 4px', fontSize: 11, fontFamily: 'inherit', color: it.ngay_du_kien ? '#1C3557' : '#9CA3AF' }} />
+                    )}
                   </td>
                   <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
