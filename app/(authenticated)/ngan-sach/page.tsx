@@ -299,6 +299,7 @@ export default function NganSachPage() {
           kmcpActual={kmcpActual}
           thuThang={thuThang}
           chiThang={chiThang}
+          tonQuyDetail={tonQuyDetail}
         />
       )}
       {tab === 'ke-hoach' && (

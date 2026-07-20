@@ -10,14 +10,17 @@ const fmtSigned = (n: number) => {
 }
 const numColor = (n: number) => n < 0 ? '#B91C1C' : n > 0 ? '#166534' : '#6B7280'
 
+interface TonQuyAcc { stk: string; bank: string; unit: string; ton: number }
+
 interface Props {
   data: NganSachThang
-  tonQuySoDu: number       // opening balance (đầu kỳ) → KH column
-  tonQuyRealtime: number   // current real-time balance → TH column
+  tonQuySoDu: number       // opening balance (đầu tháng) → KH column
+  tonQuyRealtime: number   // current real-time balance → Còn phải TH column
   tonQuySoDuLoading: boolean
   kmcpActual: Record<string, number>
   thuThang: number
   chiThang: number
+  tonQuyDetail?: TonQuyAcc[]
 }
 
 function resolveThucHien(it: NganSachItem, kmcpActual: Record<string, number>, tonQuyRealtime: number) {
@@ -26,7 +29,7 @@ function resolveThucHien(it: NganSachItem, kmcpActual: Record<string, number>, t
   return { val: it.thuc_hien, isAuto: false }
 }
 
-export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading, kmcpActual, chiThang }: Props) {
+export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading, kmcpActual, chiThang, tonQuyDetail = [] }: Props) {
   const { thang, ngay_cap_nhat, items, giai_phap } = data
   const [year, mon] = thang.split('-')
   const thangLabel = `T${parseInt(mon)}.${year}`
@@ -35,6 +38,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(items.filter(it => it.is_group).map(it => it.id))
   )
+  const [showTonQuyDetail, setShowTonQuyDetail] = useState(false)
   const toggle = (id: string) =>
     setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
@@ -156,8 +160,23 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
               const bg = it.nhom === 'A' ? '#ECFDF5' : it.nhom === 'B' ? '#EFF6FF'
                        : it.nhom === 'C' ? '#FFF7ED' : '#FEF3C7'
               return (
+                <>
                 <tr key={it.id} style={{ background: bg, fontWeight: 700, borderTop: '2px solid #E5E7EB' }}>
-                  <td style={TD({ center: true })}>{it.stt}</td>
+                  <td style={TD({ center: true })}>
+                    {it.nhom === 'A' ? (
+                      <button
+                        onClick={() => setShowTonQuyDetail(v => !v)}
+                        title={showTonQuyDetail ? 'Thu gọn' : 'Xem chi tiết từng tài khoản'}
+                        style={{
+                          width: 22, height: 22, borderRadius: 4, border: '1px solid #6EE7B7',
+                          background: showTonQuyDetail ? '#059669' : '#fff',
+                          color: showTonQuyDetail ? '#fff' : '#059669',
+                          cursor: 'pointer', fontWeight: 700, fontSize: 14, lineHeight: 1,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', margin: 'auto',
+                        }}
+                      >{showTonQuyDetail ? '−' : '+'}</button>
+                    ) : it.stt}
+                  </td>
                   <td style={TD({})}>{it.dien_giai}</td>
                   <td />
                   {it.nhom === 'A' ? (
@@ -167,12 +186,12 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
                           ? <span style={{ color: '#9CA3AF' }}>…</span>
                           : <span>{fmt(tonQuySoDu)}</span>}
                       </td>
+                      <td style={TD({ right: true, color: '#9CA3AF' })}>—</td>
                       <td style={TD({ right: true })}>
                         {tonQuySoDuLoading
                           ? <span style={{ color: '#9CA3AF' }}>…</span>
                           : <span style={{ color: '#166534' }}>{fmt(tonQuyRealtime)} <AutoBadge /></span>}
                       </td>
-                      <td style={TD({ right: true, color: numColor(tonQuySoDu - tonQuyRealtime) })}>{fmtSigned(tonQuySoDu - tonQuyRealtime)}</td>
                     </>
                   ) : it.nhom === 'B' || it.nhom === 'C' ? (
                     <>
@@ -189,6 +208,25 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
                   ) : <><td /><td /><td /></>}
                   <td style={TD({})}>{it.ghi_chu}</td>
                 </tr>
+                {it.nhom === 'A' && showTonQuyDetail && tonQuyDetail.map(d => (
+                  <tr key={d.stk} style={{ background: '#F0FDF4', borderBottom: '1px solid #D1FAE5' }}>
+                    <td />
+                    <td style={{ ...TD({}), paddingLeft: 24, color: '#374151', fontSize: 12 }}>
+                      <span style={{ color: '#6B7280', marginRight: 6 }}>└</span>
+                      {d.unit || '—'}
+                      {d.bank && <span style={{ marginLeft: 8, color: '#9CA3AF', fontSize: 11 }}>{d.bank}</span>}
+                      {d.stk && <span style={{ marginLeft: 6, color: '#9CA3AF', fontSize: 11, fontFamily: 'monospace' }}>({d.stk})</span>}
+                    </td>
+                    <td />
+                    <td />
+                    <td />
+                    <td style={{ ...TD({ right: true }), fontWeight: 600, color: d.ton < 0 ? '#991B1B' : '#166534', fontSize: 12 }}>
+                      {d.ton.toLocaleString('vi-VN')} ₫
+                    </td>
+                    <td />
+                  </tr>
+                ))}
+                </>
               )
             }
 
