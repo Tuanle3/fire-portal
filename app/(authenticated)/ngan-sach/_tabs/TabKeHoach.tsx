@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { NganSachThang, NganSachItem, GiaiPhap } from '@/lib/ngan-sach-types'
 import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup, makeDefault } from '@/lib/ngan-sach-store'
@@ -148,6 +148,27 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
     }
     return { kh, th }
   }
+
+  // B/C totals for computing D = A+B-C
+  const sectionTotals = useMemo(() => {
+    let B_kh = 0, B_th = 0, C_kh = 0, C_th = 0
+    for (const it of data.items) {
+      if (it.is_section || it.is_group || it.parent_id) continue
+      const auto = it.kmcp ? kmcpActual[it.kmcp] : undefined
+      const th = auto !== undefined ? auto : it.thuc_hien
+      if (it.nhom === 'B') { B_kh += it.ke_hoach; B_th += th }
+      if (it.nhom === 'C') { C_kh += it.ke_hoach; C_th += th }
+    }
+    for (const it of data.items) {
+      if (!it.is_group) continue
+      const gs = groupSum(it.id)
+      if (it.nhom === 'B') { B_kh += gs.kh; B_th += gs.th }
+      if (it.nhom === 'C') { C_kh += gs.kh; C_th += gs.th }
+    }
+    const D_kh = tonQuySoDu + B_kh - C_kh
+    const D_th = tonQuyRealtime  // actual ending balance = A_th + B_th - C_th from Firebase
+    return { B_kh, B_th, C_kh, C_th, D_kh, D_th }
+  }, [data.items, kmcpActual, tonQuySoDu, tonQuyRealtime])
 
   const upd = (id: string, field: keyof NganSachItem, val: string | number | boolean) => {
     onChange(updateItem(data, id, { [field]: val }))
@@ -359,8 +380,9 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
                 const groupsTh = data.items
                   .filter(x => x.nhom === it.nhom && x.is_group)
                   .reduce((s, g) => s + groupSum(g.id).th, 0)
-                const secKh = isA ? tonQuySoDu : standaloneKh + groupsKh
-                const secTh = isA ? tonQuyRealtime : standaloneTh + groupsTh
+                const isD = it.nhom === 'D'
+                const secKh = isA ? tonQuySoDu : isD ? sectionTotals.D_kh : standaloneKh + groupsKh
+                const secTh = isA ? tonQuyRealtime : isD ? sectionTotals.D_th : standaloneTh + groupsTh
                 const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
                 return (
                   <>
@@ -386,11 +408,12 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
                     <td style={{ padding: '5px 10px', fontWeight: 700, color: '#1C3557', letterSpacing: '.02em' }} colSpan={2}>
                       {it.dien_giai}
                     </td>
-                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}>
-                      {fmt(secKh)}
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: isD ? (secKh < 0 ? '#B91C1C' : '#1C3557') : '#1C3557', fontSize: 12.5 }}>
+                      {isD ? (secKh < 0 ? `(${Math.abs(secKh).toLocaleString('vi-VN')})` : fmt(secKh)) : fmt(secKh)}
                     </td>
-                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 12.5 }}>
-                      {fmt(secTh)}{isA && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: isD ? (secTh < 0 ? '#B91C1C' : '#166534') : '#166534', fontSize: 12.5 }}>
+                      {isD ? (secTh < 0 ? `(${Math.abs(secTh).toLocaleString('vi-VN')})` : fmt(secTh)) : fmt(secTh)}{isA && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
+                      {isD && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#FEF9C3', color: '#854D0E', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
                     </td>
                     <td />
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>

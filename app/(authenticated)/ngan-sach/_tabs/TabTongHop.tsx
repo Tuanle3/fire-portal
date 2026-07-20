@@ -157,7 +157,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
 
             // ── MAJOR SECTION (A/B/C/D) ──────────────────────────────────────
             if (it.is_section) {
-              const { B_kh, B_th, C_kh, C_th, D_kh, D_th } = sectionTotals
+              const { B_kh, B_th, C_kh, C_th, D_kh, D_th, D_conlai } = sectionTotals
               let kh = 0, th = 0
               if (it.nhom === 'B') { kh = B_kh; th = B_th }
               if (it.nhom === 'C') { kh = C_kh; th = C_th }
