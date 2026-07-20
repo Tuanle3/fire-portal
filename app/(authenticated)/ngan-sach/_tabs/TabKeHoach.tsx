@@ -106,6 +106,7 @@ interface Props {
 
 export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuySoDu, tonQuyRealtime, tonQuyDetail = [] }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [showTonQuyDetail, setShowTonQuyDetail] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(data.items.filter(it => it.is_group).map(it => it.id))
@@ -412,7 +413,10 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
               if (it.is_group) {
                 const bg = it.nhom === 'B' ? '#DBEAFE' : it.nhom === 'C' ? '#FFEDD5' : '#F3F4F6'
                 return (
-                  <tr key={it.id} style={{ background: bg, fontWeight: 600 }}>
+                  <tr key={it.id}
+                    onFocus={() => setActiveId(it.id)}
+                    onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setActiveId(null) }}
+                    style={{ background: activeId === it.id ? '#FFF9C4' : bg, fontWeight: 600, outline: activeId === it.id ? '2px solid #EAB308' : undefined, outlineOffset: '-1px', transition: 'background .1s' }}>
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'center' }}>
                         <button title={collapsed.has(it.id) ? 'Mở rộng' : 'Thu gọn'} onClick={() => toggleCollapse(it.id)}
@@ -473,10 +477,18 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
               const hasAuto = isAutoTonQuy || autoVal !== undefined
               const isChild = !!it.parent_id
 
+              const isActive = activeId === it.id
               return (
-                <tr key={it.id} style={{ borderBottom: '1px solid #F3F4F6', background: hasAuto ? '#FAFFF8' : undefined }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
-                  onMouseLeave={e => (e.currentTarget.style.background = hasAuto ? '#FAFFF8' : '')}
+                <tr key={it.id}
+                  onFocus={() => setActiveId(it.id)}
+                  onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setActiveId(null) }}
+                  style={{
+                    borderBottom: '1px solid #F3F4F6',
+                    background: isActive ? '#FFF9C4' : hasAuto ? '#FAFFF8' : undefined,
+                    outline: isActive ? '2px solid #EAB308' : undefined,
+                    outlineOffset: '-1px',
+                    transition: 'background .1s',
+                  }}
                 >
                   <td style={{ padding: '5px 6px', textAlign: 'center', paddingLeft: isChild ? 16 : 6 }}>
                     {isChild && <span style={{ color: '#D1D5DB', marginRight: 2 }}>└</span>}
