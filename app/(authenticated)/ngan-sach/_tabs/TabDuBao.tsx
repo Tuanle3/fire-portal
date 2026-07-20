@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, CSSProperties } from 'react'
 import { getNganSach } from '@/lib/ngan-sach-store'
 import { NganSachThang } from '@/lib/ngan-sach-types'
 
@@ -326,12 +326,12 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
     setExpanded(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s })
 
   // ── styles ────────────────────────────────────────────────────────────────
-  const TH_STYLE: React.CSSProperties = {
+  const TH_STYLE: CSSProperties = {
     padding: '8px 10px', fontWeight: 700, fontSize: 11.5,
     color: '#fff', background: '#1C3557', textAlign: 'center', whiteSpace: 'nowrap',
     borderRight: '1px solid #2D4A6E',
   }
-  const TD = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+  const TD = (extra: CSSProperties = {}): CSSProperties => ({
     padding: '7px 10px', fontSize: 12.5, borderBottom: '1px solid #F3F4F6',
     verticalAlign: 'middle', ...extra,
   })
