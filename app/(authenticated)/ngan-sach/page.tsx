@@ -7,7 +7,6 @@ import { ref, get } from 'firebase/database'
 import { NganSachThang } from '@/lib/ngan-sach-types'
 import { subscribeNganSach, saveNganSach, makeDefault } from '@/lib/ngan-sach-store'
 import { buildKmcpActual, findKey, sumChiThang, sumThuThang } from '@/lib/ngan-sach-mapping'
-import { fetchTonQuyFromCeo01 } from '@/lib/supabase-sag'
 import { TabTongHop } from './_tabs/TabTongHop'
 import { TabKeHoach } from './_tabs/TabKeHoach'
 import { TabGiaiPhap } from './_tabs/TabGiaiPhap'
@@ -73,21 +72,81 @@ export default function NganSachPage() {
     return unsub
   }, [month])
 
-  // Fetch ton quy from Supabase ceo01 (same source as CEO dashboard)
-  useEffect(() => {
-    setTonQuyLoading(true)
-    fetchTonQuyFromCeo01(month).then(({ dauKy, cuoiKy }) => {
-      setTonDauKy(dauKy)
-      setTonQuy(cuoiKy)
-    }).catch(() => {})
-      .finally(() => setTonQuyLoading(false))
-  }, [month])
-
-  // Fetch ALL data_quy once, then derive everything from it (KMCP map + chi/thu)
+  // Fetch ALL data_quy once, then derive everything from it (KMCP map + chi/thu + ton quy)
   useEffect(() => {
     setQuyLoaded(false)
+    setTonQuyLoading(true)
     get(ref(getDb(), 'data_quy')).then(snap => {
       const rows = toArr(snap)
+
+      // Sort ascending by date (same as CEO dashboard)
+      const sorted = [...rows].sort((a, b) =>
+        String(a['Ngày'] ?? '').localeCompare(String(b['Ngày'] ?? ''))
+      )
+
+      const CY_PX = `${month.slice(0, 4)}-`
+
+      // dauKyAcc = last Tồn per account before current year (same as CEO dashboard)
+      const dauKyAcc = new Map<string, number>()
+      for (const r of sorted) {
+        if (String(r['Ngày'] ?? '') >= CY_PX) break
+        const stk = String(r['Số_tài_khoản'] ?? '')
+        if (stk) dauKyAcc.set(stk, Number(r['Tồn'] ?? 0))
+      }
+
+      // latestTon = most recent Tồn per account (same as CEO dashboard)
+      const latestTon = new Map<string, number>()
+      for (const r of sorted) {
+        const stk = String(r['Số_tài_khoản'] ?? '')
+        if (stk) latestTon.set(stk, Number(r['Tồn'] ?? 0))
+      }
+
+      // tonQuy (realtime) = sum of latestTon = số dư cuối kỳ thực tế hiện tại
+      let realtime = 0
+      latestTon.forEach(v => { realtime += v })
+      setTonQuy(realtime)
+
+      // Tính cuoiky của từng tháng (giống monthRows trong dashboard)
+      // để lấy cuoiky của tháng trước month => đó là tonDauKy
+      const yearRows = sorted.filter(r => String(r['Ngày'] ?? '').startsWith(CY_PX))
+      const ton = new Map<string, number>(dauKyAcc)
+      let curMm = ''
+      const monthCuoiKy = new Map<string, number>() // mm → cuoiky
+
+      for (const r of yearRows) {
+        const mm  = String(r['Ngày'] ?? '').slice(5, 7)
+        const stk = String(r['Số_tài_khoản'] ?? '')
+        if (mm !== curMm) {
+          if (curMm) {
+            let c = 0; ton.forEach(v => { c += v })
+            monthCuoiKy.set(curMm, c)
+          }
+          curMm = mm
+        }
+        if (stk) ton.set(stk, Number(r['Tồn'] ?? 0))
+      }
+      if (curMm) {
+        let c = 0; ton.forEach(v => { c += v })
+        monthCuoiKy.set(curMm, c)
+      }
+
+      // tonDauKy = cuoiky của tháng trước; nếu là T1 thì = tổng dauKyAcc
+      const [selY, selM] = month.split('-')
+      const prevM = parseInt(selM) - 1
+      if (prevM === 0) {
+        // Tháng 1: đầu kỳ = tổng dauKyAcc (số dư đầu năm)
+        let dk = 0; dauKyAcc.forEach(v => { dk += v })
+        setTonDauKy(dk)
+      } else {
+        const prevMm = String(prevM).padStart(2, '0')
+        if (monthCuoiKy.has(prevMm)) {
+          setTonDauKy(monthCuoiKy.get(prevMm)!)
+        } else {
+          // Chưa có data tháng trước → fallback về đầu năm
+          let dk = 0; dauKyAcc.forEach(v => { dk += v })
+          setTonDauKy(dk)
+        }
+      }
 
       // Monthly aggregates (chỉ tính dòng Thực tế)
       const loaiKey = findKey(rows, 'loai')
@@ -98,6 +157,7 @@ export default function NganSachPage() {
       setKmcpActual(buildKmcpActual(rows, month))
       setQuyLoaded(true)
     }).catch(() => {})
+      .finally(() => setTonQuyLoading(false))
   }, [month])
 
   const handleSave = useCallback(async () => {
