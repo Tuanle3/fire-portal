@@ -91,6 +91,8 @@ const SECTION_COLORS: Record<string, string> = {
   A: '#ECFDF5', B: '#EFF6FF', C: '#FFF7ED', D: '#FEF3C7', E: '#F0FDF4',
 }
 
+interface TonQuyAcc { stk: string; bank: string; unit: string; dauKy: number; ton: number }
+
 interface Props {
   data: NganSachThang
   onChange: (d: NganSachThang) => void
@@ -99,10 +101,12 @@ interface Props {
   kmcpActual: Record<string, number>
   tonQuySoDu: number      // opening balance (đầu kỳ) → KH column
   tonQuyRealtime: number  // current real-time balance → TH column
+  tonQuyDetail?: TonQuyAcc[]
 }
 
-export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuySoDu, tonQuyRealtime }: Props) {
+export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuySoDu, tonQuyRealtime, tonQuyDetail = [] }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
+  const [showTonQuyDetail, setShowTonQuyDetail] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(data.items.filter(it => it.is_group).map(it => it.id))
   )
@@ -267,8 +271,23 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                 const secTh = isA ? tonQuyRealtime : standaloneTh + groupsTh
                 const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
                 return (
+                  <>
                   <tr key={it.id} style={{ background: bg }}>
-                    <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 700, color: '#1C3557' }}>{it.stt}</td>
+                    <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: 700, color: '#1C3557' }}>
+                      {isA ? (
+                        <button
+                          onClick={() => setShowTonQuyDetail(v => !v)}
+                          title={showTonQuyDetail ? 'Thu gọn' : 'Xem chi tiết từng tài khoản'}
+                          style={{
+                            width: 22, height: 22, borderRadius: 4, border: '1px solid #6EE7B7',
+                            background: showTonQuyDetail ? '#059669' : '#fff',
+                            color: showTonQuyDetail ? '#fff' : '#059669',
+                            cursor: 'pointer', fontWeight: 700, fontSize: 14, lineHeight: 1,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: 'auto',
+                          }}
+                        >{showTonQuyDetail ? '−' : '+'}</button>
+                      ) : it.stt}
+                    </td>
                     <td style={{ padding: '7px 10px', fontWeight: 700, color: '#1C3557', letterSpacing: '.02em' }} colSpan={2}>
                       {it.dien_giai}
                     </td>
@@ -290,6 +309,25 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                       )}
                     </td>
                   </tr>
+                  {isA && showTonQuyDetail && tonQuyDetail.map(d => (
+                    <tr key={d.stk} style={{ background: '#F0FDF4', borderBottom: '1px solid #D1FAE5' }}>
+                      <td />
+                      <td style={{ padding: '4px 10px 4px 24px', color: '#374151', fontSize: 12 }} colSpan={2}>
+                        <span style={{ color: '#6B7280', marginRight: 6 }}>└</span>
+                        {d.unit || '—'}
+                        {d.bank && <span style={{ marginLeft: 8, color: '#9CA3AF', fontSize: 11 }}>{d.bank}</span>}
+                        {d.stk && <span style={{ marginLeft: 6, color: '#9CA3AF', fontSize: 11, fontFamily: 'monospace' }}>({d.stk})</span>}
+                      </td>
+                      <td style={{ padding: '4px 8px', textAlign: 'right', color: d.dauKy < 0 ? '#991B1B' : '#374151', fontSize: 12 }}>
+                        {d.dauKy !== 0 ? d.dauKy.toLocaleString('vi-VN') + ' ₫' : '—'}
+                      </td>
+                      <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: d.ton < 0 ? '#991B1B' : '#166534', fontSize: 12 }}>
+                        {d.ton !== 0 ? d.ton.toLocaleString('vi-VN') + ' ₫' : '—'}
+                      </td>
+                      <td /><td />
+                    </tr>
+                  ))}
+                  </>
                 )
               }
 

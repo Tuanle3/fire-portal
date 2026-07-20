@@ -323,6 +323,7 @@ export default function NganSachPage() {
           kmcpActual={kmcpActual}
           tonQuySoDu={tonDauKy}
           tonQuyRealtime={tonQuy}
+          tonQuyDetail={tonQuyDetail}
         />
       )}
       {tab === 'giai-phap' && (
