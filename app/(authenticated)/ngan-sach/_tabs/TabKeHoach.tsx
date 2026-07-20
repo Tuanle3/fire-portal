@@ -255,33 +255,6 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
 
   return (
     <div>
-      {/* Sticky save bar */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 10,
-        background: saving ? '#F3F4F6' : '#1C3557',
-        borderRadius: 8, padding: '8px 16px', marginBottom: 12,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-      }}>
-        <span style={{ color: '#fff', fontSize: 12.5, fontWeight: 600, opacity: 0.85 }}>
-          {saveMsg
-            ? <span style={{ color: saveMsg.startsWith('Lỗi') ? '#FCA5A5' : '#86EFAC' }}>{saveMsg}</span>
-            : '📝 Nhớ nhấn Lưu sau khi chỉnh sửa xong'}
-        </span>
-        <button
-          onClick={onSave}
-          disabled={saving}
-          style={{
-            padding: '7px 24px', background: saving ? '#9CA3AF' : '#fff',
-            color: saving ? '#fff' : '#1C3557',
-            border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13.5,
-            cursor: saving ? 'not-allowed' : 'pointer', letterSpacing: '.02em',
-          }}
-        >
-          {saving ? 'Đang lưu…' : '💾 Lưu'}
-        </button>
-      </div>
-
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 14, color: '#1C3557' }}>Nhập kế hoạch & thực hiện</div>

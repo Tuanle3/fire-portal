@@ -55,7 +55,25 @@ export default function NganSachPage() {
       </div>
     )
     setRight(
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {tab === 'ke-hoach' && (
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              padding: '6px 18px', fontSize: 13, fontWeight: 700,
+              background: saving ? '#9CA3AF' : '#1C3557',
+              color: '#fff', border: 'none', borderRadius: 7,
+              cursor: saving ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            {saving ? '⏳ Đang lưu…' : '💾 Lưu'}
+          </button>
+        )}
+        {tab === 'ke-hoach' && saveMsg && (
+          <span style={{ fontSize: 12, color: saveMsg.startsWith('Lỗi') ? '#B91C1C' : '#166534', fontWeight: 600 }}>{saveMsg}</span>
+        )}
         <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', letterSpacing: '.03em', textTransform: 'uppercase' }}>Tháng:</span>
         <input
           type="month" value={month}
@@ -64,7 +82,7 @@ export default function NganSachPage() {
         />
       </span>
     )
-  }, [month, setLeft, setRight])
+  }, [month, tab, saving, saveMsg, handleSave, setLeft, setRight])
   useEffect(() => () => { setLeft(null); setRight(null) }, [setLeft, setRight])
 
   // Subscribe to Firestore budget doc for selected month
