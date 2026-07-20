@@ -349,17 +349,20 @@ export function TabKeHoach({ data, onChange, onSave, saving, kmcpActual, tonQuyS
                   <tr key={it.id} style={{ background: bg }}>
                     <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: 700, color: '#1C3557' }}>
                       {isA ? (
-                        <button
-                          onClick={() => setShowTonQuyDetail(v => !v)}
-                          title={showTonQuyDetail ? 'Thu gọn' : 'Xem chi tiết từng tài khoản'}
-                          style={{
-                            width: 22, height: 22, borderRadius: 4, border: '1px solid #6EE7B7',
-                            background: showTonQuyDetail ? '#059669' : '#fff',
-                            color: showTonQuyDetail ? '#fff' : '#059669',
-                            cursor: 'pointer', fontWeight: 700, fontSize: 14, lineHeight: 1,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: 'auto',
-                          }}
-                        >{showTonQuyDetail ? '−' : '+'}</button>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                          <span style={{ fontWeight: 700, fontSize: 13 }}>A</span>
+                          <button
+                            onClick={() => setShowTonQuyDetail(v => !v)}
+                            title={showTonQuyDetail ? 'Thu gọn' : 'Xem chi tiết từng tài khoản'}
+                            style={{
+                              width: 20, height: 20, borderRadius: 4, border: '1px solid #6EE7B7',
+                              background: showTonQuyDetail ? '#059669' : '#fff',
+                              color: showTonQuyDetail ? '#fff' : '#059669',
+                              cursor: 'pointer', fontWeight: 700, fontSize: 13, lineHeight: 1,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >{showTonQuyDetail ? '−' : '+'}</button>
+                        </div>
                       ) : it.stt}
                     </td>
                     <td style={{ padding: '5px 10px', fontWeight: 700, color: '#1C3557', letterSpacing: '.02em' }} colSpan={2}>
