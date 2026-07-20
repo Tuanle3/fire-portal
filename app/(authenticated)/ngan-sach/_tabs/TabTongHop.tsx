@@ -84,10 +84,13 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
       if (it.nhom === 'B') { B_kh += gt.kh; B_th += gt.th }
       if (it.nhom === 'C') { C_kh += gt.kh; C_th += gt.th }
     }
-    // Section A uses props directly: KH = opening balance, TH = real-time balance
-    const D_kh = tonQuySoDu + B_kh - C_kh
-    const D_th = tonQuyRealtime + B_th - C_th
-    return { B_kh, B_th, C_kh, C_th, D_kh, D_th }
+    // D KH  = Tồn đầu tháng + B_kh − C_kh   (dự kiến cuối kỳ theo kế hoạch)
+    // D TH  = B_th − C_th                    (dòng tiền thuần đã thực hiện, không cộng tồn đầu)
+    // D còn = Tồn hiện tại + (B_kh−B_th) − (C_kh−C_th)  (dự kiến nếu thực hiện đủ phần còn lại)
+    const D_kh     = tonQuySoDu + B_kh - C_kh
+    const D_th     = B_th - C_th
+    const D_conlai = tonQuyRealtime + (B_kh - B_th) - (C_kh - C_th)
+    return { B_kh, B_th, C_kh, C_th, D_kh, D_th, D_conlai }
   }, [resolved, groupTotals, tonQuySoDu, tonQuyRealtime])
 
   const gpTotal = useMemo(() => {
@@ -96,8 +99,9 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
     return { kh, th }
   }, [giai_phap])
 
-  const F_kh = sectionTotals.D_kh + gpTotal.kh
-  const F_th = sectionTotals.D_th + gpTotal.th
+  const F_kh     = sectionTotals.D_kh + gpTotal.kh
+  const F_th     = sectionTotals.D_th + gpTotal.th
+  const F_conlai = sectionTotals.D_conlai + gpTotal.kh - gpTotal.th
 
   const matchedChi = Object.entries(kmcpActual).filter(([k]) => k.startsWith('CP-')).reduce((s, [, v]) => s + v, 0)
   const unallocatedChi = Math.max(0, chiThang - matchedChi)
@@ -206,7 +210,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
                     <>
                       <td style={TD({ right: true, color: numColor(D_kh) })}>{fmtSigned(D_kh)}</td>
                       <td style={TD({ right: true, color: numColor(D_th) })}>{fmtSigned(D_th)}</td>
-                      <td style={TD({ right: true, color: numColor(D_kh - D_th) })}>{fmtSigned(D_kh - D_th)}</td>
+                      <td style={TD({ right: true, color: numColor(D_conlai) })}>{fmtSigned(D_conlai)}</td>
                     </>
                   ) : <><td /><td /><td /></>}
                   <td style={TD({})}>{it.ghi_chu}</td>
@@ -342,7 +346,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
             <td style={TD({})}>DÒNG TIỀN SAU CÂN ĐỐI</td>
             <td /><td style={TD({ right: true, color: numColor(F_kh) })}>{fmtSigned(F_kh)}</td>
             <td style={TD({ right: true, color: numColor(F_th) })}>{fmtSigned(F_th)}</td>
-            <td style={TD({ right: true, color: numColor(F_kh - F_th) })}>{fmtSigned(F_kh - F_th)}</td>
+            <td style={TD({ right: true, color: numColor(F_conlai) })}>{fmtSigned(F_conlai)}</td>
             <td />
           </tr>
         </tbody>
