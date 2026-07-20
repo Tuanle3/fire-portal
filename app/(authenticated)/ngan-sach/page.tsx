@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useUserSession } from '@/contexts/user-session'
 import { useTopbarInfo } from '@/contexts/topbar-info'
 import { getDb } from '@/lib/firebase'
@@ -47,7 +47,11 @@ export default function NganSachPage() {
   const [tonQuyDetail, setTonQuyDetail] = useState<{ stk: string; bank: string; unit: string; dauKy: number; ton: number }[]>([])
   const [showDetail,   setShowDetail]   = useState(false)
 
-  // Topbar
+  // Keep latest handleSave in a ref so topbar button always calls current version
+  const handleSaveRef = useRef(handleSave)
+  useEffect(() => { handleSaveRef.current = handleSave }, [handleSave])
+
+  // Topbar left: title (stable — never changes)
   useEffect(() => {
     setLeft(
       <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', lineHeight: 1.15 }}>
@@ -55,25 +59,33 @@ export default function NganSachPage() {
         <div style={{ fontSize: 16, fontWeight: 700, color: '#1C3557' }}>💰 Ngân sách dòng tiền</div>
       </div>
     )
+  }, [setLeft])
+
+  // Topbar right: Lưu button (when ke-hoach) + month picker
+  // Use handleSaveRef so we don't re-run on every localData change
+  useEffect(() => {
     setRight(
       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {tab === 'ke-hoach' && (
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            style={{
-              padding: '6px 18px', fontSize: 13, fontWeight: 700,
-              background: saving ? '#9CA3AF' : '#1C3557',
-              color: '#fff', border: 'none', borderRadius: 7,
-              cursor: saving ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            {saving ? '⏳ Đang lưu…' : '💾 Lưu'}
-          </button>
-        )}
-        {tab === 'ke-hoach' && saveMsg && (
-          <span style={{ fontSize: 12, color: saveMsg.startsWith('Lỗi') ? '#B91C1C' : '#166534', fontWeight: 600 }}>{saveMsg}</span>
+          <>
+            <button
+              onClick={() => handleSaveRef.current()}
+              disabled={saving}
+              style={{
+                padding: '6px 20px', fontSize: 13, fontWeight: 700,
+                background: saving ? '#9CA3AF' : '#1C3557',
+                color: '#fff', border: 'none', borderRadius: 7,
+                cursor: saving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {saving ? '⏳ Đang lưu…' : '💾 Lưu'}
+            </button>
+            {saveMsg && (
+              <span style={{ fontSize: 12, color: saveMsg.startsWith('Lỗi') ? '#B91C1C' : '#166534', fontWeight: 600 }}>
+                {saveMsg}
+              </span>
+            )}
+          </>
         )}
         <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', letterSpacing: '.03em', textTransform: 'uppercase' }}>Tháng:</span>
         <input
@@ -83,7 +95,8 @@ export default function NganSachPage() {
         />
       </span>
     )
-  }, [month, tab, saving, saveMsg, handleSave, setLeft, setRight])
+  }, [month, tab, saving, saveMsg, setRight])
+
   useEffect(() => () => { setLeft(null); setRight(null) }, [setLeft, setRight])
 
   // Subscribe to Firestore budget doc for selected month
