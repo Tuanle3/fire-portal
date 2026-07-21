@@ -16,6 +16,8 @@ export interface NganSachItem {
   thuc_hien_manual: boolean
   ghi_chu: string
   ngay_du_kien?: string  // ISO date "2026-07-15" — expected payment/receipt date
+  done_override?: boolean // chỉnh tay: true = đã thu/chi xong (đè lên auto theo KMCP)
+  roll_count?: number     // số lần khoản này đã bị dời sang kỳ sau vì quá hạn
 }
 
 export interface GiaiPhap {

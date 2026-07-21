@@ -1,9 +1,9 @@
 'use client'
 import { useState, useEffect, useMemo, CSSProperties } from 'react'
-import { getNganSach } from '@/lib/ngan-sach-store'
+import { getNganSach, saveNganSach } from '@/lib/ngan-sach-store'
 import { NganSachThang } from '@/lib/ngan-sach-types'
 
-type PeriodView = 'day' | 'week' | 'month' | 'quarter'
+type PeriodView = 'day' | 'week' | 'month' | 'quarter' | 'year'
 
 interface Props {
   month: string            // "2026-07" — currently selected month
@@ -12,6 +12,8 @@ interface Props {
   tonQuyRealtime: number   // current real-time balance
   kmcpActual: Record<string, number>
 }
+
+interface RowItem { id: string; nhom: 'B' | 'C'; dien_giai: string; so: number; ngay?: string }
 
 interface PeriodRow {
   key: string
@@ -24,33 +26,56 @@ interface PeriodRow {
   closingBal: number
   isPast: boolean
   isCurrent: boolean
-  items: { id: string; nhom: 'B' | 'C'; dien_giai: string; so: number; ngay?: string }[]
-  expanded?: boolean
+  items: RowItem[]
+}
+
+// Mỗi khoản thu/chi (B/C) gom từ tất cả doc tháng đã tải — nguồn duy nhất cho mọi view.
+interface PoolItem {
+  id: string
+  docMonth: string          // tháng của doc chứa khoản này ("2026-07")
+  nhom: 'B' | 'C'
+  dien_giai: string
+  kmcp: string
+  ke_hoach: number
+  thuc_hien: number
+  ngay?: string             // ngay_du_kien
+  done_override?: boolean
+  roll_count?: number
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function sumBC(d: NganSachThang, kma?: Record<string, number>) {
-  let B = 0, C = 0
-  // standalone items
-  for (const it of d.items) {
-    if (it.is_section || it.is_group || it.parent_id) continue
-    const auto = kma && it.kmcp ? kma[it.kmcp] : undefined
-    const val = (auto !== undefined ? auto : it.ke_hoach)
-    if (it.nhom === 'B') B += val
-    if (it.nhom === 'C') C += val
-  }
-  // group children
-  for (const it of d.items) {
-    if (!it.is_group) continue
-    for (const child of d.items.filter(x => x.parent_id === it.id)) {
-      const auto = kma && child.kmcp ? kma[child.kmcp] : undefined
-      const val = (auto !== undefined ? auto : child.ke_hoach)
-      if (it.nhom === 'B') B += val
-      if (it.nhom === 'C') C += val
+function buildPool(monthDocs: Map<string, NganSachThang>): PoolItem[] {
+  const pool: PoolItem[] = []
+  monthDocs.forEach((doc, docMonth) => {
+    for (const it of doc.items) {
+      if (it.is_section || it.is_group) continue          // bỏ header + nhóm (con của nhóm vẫn được tính)
+      if (it.nhom !== 'B' && it.nhom !== 'C') continue
+      pool.push({
+        id: it.id, docMonth, nhom: it.nhom as 'B' | 'C',
+        dien_giai: it.dien_giai, kmcp: it.kmcp,
+        ke_hoach: it.ke_hoach, thuc_hien: it.thuc_hien,
+        ngay: it.ngay_du_kien, done_override: it.done_override, roll_count: it.roll_count,
+      })
     }
-  }
-  return { B, C }
+  })
+  return pool
+}
+
+// "kỳ tiếp theo" theo view đang xem
+function advanceDate(iso: string, view: PeriodView): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  if (view === 'day') dt.setDate(dt.getDate() + 1)
+  else if (view === 'week') dt.setDate(dt.getDate() + 7)
+  else if (view === 'month') dt.setMonth(dt.getMonth() + 1)
+  else if (view === 'quarter') dt.setMonth(dt.getMonth() + 3)
+  else dt.setFullYear(dt.getFullYear() + 1)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+
+const DEFER_LABEL: Record<PeriodView, string> = {
+  day: 'ngày sau', week: 'tuần sau', month: 'tháng sau', quarter: 'quý sau', year: 'năm sau',
 }
 
 function isoWeek(d: Date): number {
@@ -86,57 +111,95 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
   const [monthDocs, setMonthDocs] = useState<Map<string, NganSachThang>>(new Map())
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [busyId, setBusyId] = useState<string | null>(null)
 
   const curYear = parseInt(month.split('-')[0])
   const curMon  = parseInt(month.split('-')[1])
 
-  // ── Load 12 months for the selected year ─────────────────────────────────
+  const todayISO = useMemo(() => {
+    const t = new Date()
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+  }, [])
+
+  // ── Load các tháng cần cho view hiện tại (cache dồn vào monthDocs) ──────────
   useEffect(() => {
-    if (view !== 'month' && view !== 'quarter') return
+    const years = new Set<number>([parseInt(month.split('-')[0])])
+    if (view === 'month' || view === 'quarter' || view === 'year') years.add(selectedYear)
+    if (view === 'year') { years.add(selectedYear - 1); years.add(selectedYear + 1) }
+
+    const need: string[] = []
+    years.forEach(y => { for (let i = 1; i <= 12; i++) need.push(`${y}-${String(i).padStart(2, '0')}`) })
+
     setLoading(true)
-    const months = Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`)
-    Promise.all(months.map(m => {
-      // Reuse already-loaded data for the currently selected month
-      if (m === month) return Promise.resolve([m, localData] as [string, NganSachThang])
-      return getNganSach(m).then(d => [m, d] as [string, NganSachThang])
-    })).then(pairs => {
-      const map = new Map<string, NganSachThang>()
-      pairs.forEach(([m, d]) => map.set(m, d))
-      setMonthDocs(map)
+    Promise.all(need.map(m =>
+      m === month
+        ? Promise.resolve([m, localData] as [string, NganSachThang])
+        : getNganSach(m).then(d => [m, d] as [string, NganSachThang])
+    )).then(pairs => {
+      setMonthDocs(prev => {
+        const map = new Map(prev)
+        pairs.forEach(([m, d]) => map.set(m, d))
+        return map
+      })
     }).finally(() => setLoading(false))
   }, [view, selectedYear, month, localData])
 
-  // ── Month / Quarter rows ──────────────────────────────────────────────────
-  const monthRows = useMemo((): PeriodRow[] => {
-    if (monthDocs.size === 0) return []
-    const months = Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`)
-    const bc = months.map(m => {
-      const d = monthDocs.get(m)
-      if (!d) return { B: 0, C: 0 }
-      const isCurrentMonth = m === month
-      return sumBC(d, isCurrentMonth ? kmcpActual : undefined)
-    })
+  // ── Pool + hàm phân bổ theo ngày ────────────────────────────────────────────
+  const pool = useMemo(() => buildPool(monthDocs), [monthDocs])
 
-    // Anchor: month index of the currently selected month within selectedYear
-    // If selected year ≠ displayed year, anchor to tonDauKy-derived value
+  const effMonth = (p: PoolItem) => (p.ngay ? p.ngay.slice(0, 7) : p.docMonth)
+  // Số tiền dùng cho dự báo: tháng đang chọn ưu tiên số Thực hiện auto theo KMCP, còn lại dùng Kế hoạch
+  const amountOf = (p: PoolItem) => {
+    if (effMonth(p) === month && p.kmcp && kmcpActual[p.kmcp] !== undefined) return kmcpActual[p.kmcp]
+    return p.ke_hoach
+  }
+  const isDone = (p: PoolItem) => {
+    if (p.done_override === true) return true
+    if (p.ke_hoach > 0 && p.thuc_hien >= p.ke_hoach * 0.9) return true
+    if (effMonth(p) === month && p.kmcp && p.ke_hoach > 0 &&
+        kmcpActual[p.kmcp] !== undefined && kmcpActual[p.kmcp] >= p.ke_hoach * 0.9) return true
+    return false
+  }
+
+  // ── Khoản quá hạn (mọi doc đã tải): có ngày < hôm nay & chưa xong ───────────
+  const overdue = useMemo(() => {
+    return pool
+      .filter(p => p.ngay && p.ngay < todayISO && !isDone(p))
+      .map(p => ({
+        ...p,
+        daysLate: Math.max(0, Math.round((new Date(todayISO).getTime() - new Date(p.ngay!).getTime()) / 86400000)),
+      }))
+      .sort((a, b) => (a.ngay! < b.ngay! ? -1 : 1))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool, todayISO, month, kmcpActual])
+
+  // ── Month rows ──────────────────────────────────────────────────────────────
+  const monthRows = useMemo((): PeriodRow[] => {
+    const yStr = String(selectedYear)
+    const months = Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`)
+    const bc = Array.from({ length: 12 }, () => ({ B: 0, C: 0 }))
+    const detail: RowItem[][] = Array.from({ length: 12 }, () => [])
+
+    for (const p of pool) {
+      const em = effMonth(p)
+      if (em.slice(0, 4) !== yStr) continue
+      const mi = parseInt(em.slice(5, 7)) - 1
+      if (mi < 0 || mi > 11) continue
+      const val = amountOf(p)
+      if (val === 0) continue
+      if (p.nhom === 'B') bc[mi].B += val; else bc[mi].C += val
+      detail[mi].push({ id: p.id, nhom: p.nhom, dien_giai: p.dien_giai, so: val, ngay: p.ngay })
+    }
+
+    // Anchor tồn đầu kỳ tại tháng đang chọn (nếu cùng năm), chain 2 chiều
     const anchorIdx = selectedYear === curYear ? curMon - 1 : -1
     const openings = new Array(12).fill(0)
-
     if (anchorIdx >= 0) {
       openings[anchorIdx] = tonDauKy
-      // Walk backward
-      for (let i = anchorIdx - 1; i >= 0; i--) {
-        openings[i] = openings[i + 1] - bc[i].B + bc[i].C
-      }
-      // Walk forward
-      for (let i = anchorIdx + 1; i < 12; i++) {
-        openings[i] = openings[i - 1] + bc[i - 1].B - bc[i - 1].C
-      }
+      for (let i = anchorIdx - 1; i >= 0; i--) openings[i] = openings[i + 1] - bc[i].B + bc[i].C
+      for (let i = anchorIdx + 1; i < 12; i++) openings[i] = openings[i - 1] + bc[i - 1].B - bc[i - 1].C
     } else {
-      // Year without anchor — just chain forward from 0
-      for (let i = 1; i < 12; i++) {
-        openings[i] = openings[i - 1] + bc[i - 1].B - bc[i - 1].C
-      }
+      for (let i = 1; i < 12; i++) openings[i] = openings[i - 1] + bc[i - 1].B - bc[i - 1].C
     }
 
     const today = new Date()
@@ -146,24 +209,8 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
       const [y, mon] = m.split('-')
       const isPast    = m < todayStr
       const isCurrent = m === todayStr
-      const thu = bc[i].B
-      const chi = bc[i].C
+      const thu = bc[i].B, chi = bc[i].C
       const opening = openings[i]
-      const closing = opening + thu - chi
-
-      // Item detail for drill-down
-      const doc = monthDocs.get(m)
-      const items: PeriodRow['items'] = []
-      if (doc) {
-        for (const it of doc.items) {
-          if (it.is_section || it.is_group || it.parent_id) continue
-          if (it.nhom !== 'B' && it.nhom !== 'C') continue
-          const auto = m === month && it.kmcp ? kmcpActual[it.kmcp] : undefined
-          const val = auto !== undefined ? auto : it.ke_hoach
-          if (val !== 0) items.push({ id: it.id, nhom: it.nhom as 'B' | 'C', dien_giai: it.dien_giai, so: val, ngay: it.ngay_du_kien })
-        }
-      }
-
       return {
         key: m,
         label: `T${parseInt(mon)}/${y}`,
@@ -171,12 +218,13 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
         openingBal: opening,
         thu, chi,
         netFlow: thu - chi,
-        closingBal: closing,
+        closingBal: opening + thu - chi,
         isPast, isCurrent,
-        items,
+        items: detail[i],
       }
     })
-  }, [monthDocs, selectedYear, tonDauKy, month, curYear, curMon, kmcpActual])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool, selectedYear, tonDauKy, month, curYear, curMon, kmcpActual])
 
   const quarterRows = useMemo((): PeriodRow[] => {
     if (monthRows.length === 0) return []
@@ -184,50 +232,86 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
       const slice = monthRows.slice(q * 3, q * 3 + 3)
       const thu = slice.reduce((s, r) => s + r.thu, 0)
       const chi = slice.reduce((s, r) => s + r.chi, 0)
-      const opening = slice[0].openingBal
-      const closing = slice[2].closingBal
-      const isPast = slice.every(r => r.isPast)
-      const isCurrent = slice.some(r => r.isCurrent)
       return {
         key: `Q${q + 1}`,
         label: `Q${q + 1}/${selectedYear}`,
-        sublabel: isCurrent ? 'Hiện tại' : isPast ? 'Đã qua' : 'Dự kiến',
-        openingBal: opening,
+        sublabel: slice.some(r => r.isCurrent) ? 'Hiện tại' : slice.every(r => r.isPast) ? 'Đã qua' : 'Dự kiến',
+        openingBal: slice[0].openingBal,
         thu, chi,
         netFlow: thu - chi,
-        closingBal: closing,
-        isPast, isCurrent,
+        closingBal: slice[2].closingBal,
+        isPast: slice.every(r => r.isPast),
+        isCurrent: slice.some(r => r.isCurrent),
         items: slice.flatMap(r => r.items),
       }
     })
   }, [monthRows, selectedYear])
 
-  // ── Day / Week rows ───────────────────────────────────────────────────────
+  // ── Year rows (3 năm liền kề, chain quanh năm đang chọn) ────────────────────
+  const yearRows = useMemo((): PeriodRow[] => {
+    if (view !== 'year') return []
+    const years = [selectedYear - 1, selectedYear, selectedYear + 1]
+    const netOf = (yr: number) => {
+      let B = 0, C = 0
+      const items: RowItem[] = []
+      for (const p of pool) {
+        if (effMonth(p).slice(0, 4) !== String(yr)) continue
+        const v = amountOf(p)
+        if (v === 0) continue
+        if (p.nhom === 'B') B += v; else C += v
+        items.push({ id: p.id, nhom: p.nhom, dien_giai: p.dien_giai, so: v, ngay: p.ngay })
+      }
+      return { B, C, items }
+    }
+    const janOpeningSel = monthRows[0]?.openingBal ?? tonDauKy
+    const netSel = netOf(selectedYear)
+    const netPrev = netOf(selectedYear - 1)
+    const open: Record<number, number> = {
+      [selectedYear]: janOpeningSel,
+      [selectedYear - 1]: janOpeningSel - (netPrev.B - netPrev.C),
+      [selectedYear + 1]: janOpeningSel + (netSel.B - netSel.C),
+    }
+    return years.map(yr => {
+      const { B, C, items } = netOf(yr)
+      const opening = open[yr]
+      return {
+        key: `Y${yr}`,
+        label: `Năm ${yr}`,
+        sublabel: yr === curYear ? 'Hiện tại' : yr < curYear ? 'Đã qua' : 'Dự kiến',
+        openingBal: opening,
+        thu: B, chi: C,
+        netFlow: B - C,
+        closingBal: opening + B - C,
+        isPast: yr < curYear,
+        isCurrent: yr === curYear,
+        items,
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, pool, selectedYear, monthRows, tonDauKy, curYear, month, kmcpActual])
+
+  // ── Day / Week rows (khoản có ngày rơi vào tháng đang chọn) ─────────────────
   const dayRows = useMemo((): PeriodRow[] => {
     if (view !== 'day' && view !== 'week') return []
     const [y, m] = month.split('-').map(Number)
     const daysInMonth = new Date(y, m, 0).getDate()
 
-    // Collect items with dates (B/C only)
-    const itemsByDate = new Map<string, { id: string; nhom: 'B' | 'C'; dien_giai: string; so: number }[]>()
-    const unscheduled: { id: string; nhom: 'B' | 'C'; dien_giai: string; so: number }[] = []
+    const itemsByDate = new Map<string, RowItem[]>()
+    const unscheduled: RowItem[] = []
 
-    for (const it of localData.items) {
-      if (it.is_section || it.is_group || it.nhom === 'A' || it.nhom === 'D') continue
-      const auto = it.kmcp ? kmcpActual[it.kmcp] : undefined
-      const val = auto !== undefined ? auto : it.ke_hoach
+    for (const p of pool) {
+      const val = amountOf(p)
       if (val === 0) continue
-      const entry = { id: it.id, nhom: it.nhom as 'B' | 'C', dien_giai: it.dien_giai, so: val }
-      if (it.ngay_du_kien) {
-        const bucket = itemsByDate.get(it.ngay_du_kien) ?? []
+      const entry: RowItem = { id: p.id, nhom: p.nhom, dien_giai: p.dien_giai, so: val }
+      if (p.ngay && p.ngay.slice(0, 7) === month) {
+        const bucket = itemsByDate.get(p.ngay) ?? []
         bucket.push(entry)
-        itemsByDate.set(it.ngay_du_kien, bucket)
-      } else {
+        itemsByDate.set(p.ngay, bucket)
+      } else if (!p.ngay && p.docMonth === month) {
         unscheduled.push(entry)
       }
     }
 
-    // Build day rows
     const today = new Date()
     let running = tonDauKy
     const rows: PeriodRow[] = []
@@ -235,7 +319,7 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${month}-${String(day).padStart(2, '0')}`
       const date = new Date(y, m - 1, day)
-      const items = (itemsByDate.get(dateStr) ?? [])
+      const items = itemsByDate.get(dateStr) ?? []
       const thu = items.filter(x => x.nhom === 'B').reduce((s, x) => s + x.so, 0)
       const chi = items.filter(x => x.nhom === 'C').reduce((s, x) => s + x.so, 0)
       const opening = running
@@ -258,7 +342,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
       }
     }
 
-    // Unscheduled items — append at end
     if (unscheduled.length > 0) {
       const thu = unscheduled.filter(x => x.nhom === 'B').reduce((s, x) => s + x.so, 0)
       const chi = unscheduled.filter(x => x.nhom === 'C').reduce((s, x) => s + x.so, 0)
@@ -276,7 +359,8 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
     }
 
     return rows
-  }, [view, localData, month, tonDauKy, kmcpActual])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, pool, month, tonDauKy, kmcpActual])
 
   const weekRows = useMemo((): PeriodRow[] => {
     if (view !== 'week') return []
@@ -287,17 +371,7 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
       const wk = isoWeek(date)
       const existing = weekMap.get(wk)
       if (!existing) {
-        weekMap.set(wk, {
-          key: `W${wk}`,
-          label: `Tuần ${wk}`,
-          sublabel: dr.sublabel,
-          openingBal: dr.openingBal,
-          thu: dr.thu, chi: dr.chi,
-          netFlow: dr.netFlow,
-          closingBal: dr.closingBal,
-          isPast: dr.isPast, isCurrent: dr.isCurrent,
-          items: [...dr.items],
-        })
+        weekMap.set(wk, { ...dr, key: `W${wk}`, label: `Tuần ${wk}`, items: [...dr.items] })
       } else {
         existing.thu += dr.thu
         existing.chi += dr.chi
@@ -308,7 +382,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
         if (!dr.isPast) existing.isPast = false
       }
     }
-    // Add unscheduled
     const unsched = dayRows.find(r => r.key === 'unscheduled')
     const result = Array.from(weekMap.values())
     if (unsched) result.push(unsched)
@@ -317,6 +390,7 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
 
   const rows = view === 'month' ? monthRows
     : view === 'quarter' ? quarterRows
+    : view === 'year' ? yearRows
     : view === 'week' ? weekRows
     : dayRows
 
@@ -324,6 +398,20 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
 
   const toggleExpand = (key: string) =>
     setExpanded(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s })
+
+  // ── Ghi 1 doc: cập nhật 1 khoản trong doc gốc của nó rồi lưu ────────────────
+  const patchItem = async (docMonth: string, id: string, patch: Record<string, unknown>) => {
+    const doc = monthDocs.get(docMonth)
+    if (!doc) return
+    setBusyId(id)
+    const updated: NganSachThang = { ...doc, items: doc.items.map(it => it.id === id ? { ...it, ...patch } : it) }
+    setMonthDocs(prev => new Map(prev).set(docMonth, updated))
+    try { await saveNganSach(updated) } catch { /* giữ nguyên state local nếu lỗi mạng */ }
+    finally { setBusyId(null) }
+  }
+  const deferItem = (o: PoolItem) =>
+    patchItem(o.docMonth, o.id, { ngay_du_kien: advanceDate(o.ngay!, view), roll_count: (o.roll_count ?? 0) + 1 })
+  const markDone = (o: PoolItem) => patchItem(o.docMonth, o.id, { done_override: true })
 
   // ── styles ────────────────────────────────────────────────────────────────
   const TH_STYLE: CSSProperties = {
@@ -347,8 +435,8 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
 
         {/* Period toggle */}
         <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 8, padding: 3, gap: 2 }}>
-          {(['day', 'week', 'month', 'quarter'] as PeriodView[]).map(v => {
-            const labels: Record<PeriodView, string> = { day: 'Ngày', week: 'Tuần', month: 'Tháng', quarter: 'Quý' }
+          {(['day', 'week', 'month', 'quarter', 'year'] as PeriodView[]).map(v => {
+            const labels: Record<PeriodView, string> = { day: 'Ngày', week: 'Tuần', month: 'Tháng', quarter: 'Quý', year: 'Năm' }
             return (
               <button key={v} onClick={() => setView(v)} style={{
                 padding: '5px 14px', fontSize: 12.5, fontWeight: 600, borderRadius: 6,
@@ -361,18 +449,17 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
           })}
         </div>
 
-        {/* Year selector (month/quarter only) */}
-        {(view === 'month' || view === 'quarter') && (
+        {/* Year selector (month/quarter/year) */}
+        {(view === 'month' || view === 'quarter' || view === 'year') && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <button onClick={() => setSelectedYear(y => y - 1)}
+            <button onClick={() => setSelectedYear(yr => yr - 1)}
               style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>‹</button>
             <span style={{ fontWeight: 700, fontSize: 14, color: '#1C3557', minWidth: 40, textAlign: 'center' }}>{selectedYear}</span>
-            <button onClick={() => setSelectedYear(y => y + 1)}
+            <button onClick={() => setSelectedYear(yr => yr + 1)}
               style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>›</button>
           </div>
         )}
 
-        {/* Day/Week: show current month label */}
         {(view === 'day' || view === 'week') && (
           <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 600 }}>{monthLabel}</span>
         )}
@@ -408,17 +495,94 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
         ))}
       </div>
 
+      {/* ── ⚠ Khoản quá hạn (đến hạn chưa thu/chi) ── */}
+      <div style={{ marginBottom: 18, border: '1px solid', borderColor: overdue.length ? '#FCA5A5' : '#BBF7D0', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{
+          padding: '9px 16px', fontWeight: 700, fontSize: 13,
+          background: overdue.length ? '#FEF2F2' : '#F0FDF4',
+          color: overdue.length ? '#991B1B' : '#166534',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          {overdue.length === 0
+            ? <>✅ Không có khoản nào quá hạn — mọi khoản dự kiến đều đã thực hiện hoặc chưa tới hạn.</>
+            : <>⚠ {overdue.length} khoản quá hạn chưa thu/chi — dời sang kỳ sau hoặc đánh dấu đã xong.</>}
+        </div>
+        {overdue.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, background: '#fff' }}>
+              <thead>
+                <tr style={{ background: '#F9FAFB', color: '#6B7280', fontSize: 11 }}>
+                  <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 700 }}>Ngày dự kiến</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 700 }}>Diễn giải</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 700 }}>Loại</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 700 }}>Số tiền</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 700 }}>Trễ</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 700 }}>Đã dời</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 700 }}>Xử lý</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overdue.map(o => (
+                  <tr key={`${o.docMonth}-${o.id}`} style={{ borderTop: '1px solid #F3F4F6' }}>
+                    <td style={{ padding: '7px 12px', fontWeight: 600, color: '#B91C1C', whiteSpace: 'nowrap' }}>{o.ngay}</td>
+                    <td style={{ padding: '7px 12px', color: '#1F2937' }}>
+                      {o.dien_giai || <span style={{ color: '#9CA3AF' }}>—</span>}
+                      {o.kmcp && <span style={{ marginLeft: 6, fontSize: 10.5, color: '#9CA3AF', fontFamily: 'monospace' }}>{o.kmcp}</span>}
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'center' }}>
+                      <span style={{
+                        fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                        background: o.nhom === 'B' ? '#DBEAFE' : '#FFEDD5',
+                        color: o.nhom === 'B' ? '#1D4ED8' : '#9A3412',
+                      }}>{o.nhom === 'B' ? 'Thu' : 'Chi'}</span>
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: o.nhom === 'B' ? '#1D4ED8' : '#9A3412' }}>
+                      {(o.nhom === 'B' ? '+' : '−') + VND_FULL(amountOf(o))}
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'center', color: '#B91C1C', fontWeight: 600 }}>
+                      {o.daysLate} ngày
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'center', color: o.roll_count ? '#D97706' : '#9CA3AF', fontWeight: 600 }}>
+                      {o.roll_count ? `${o.roll_count} lần` : '—'}
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button
+                        onClick={() => deferItem(o)}
+                        disabled={busyId === o.id}
+                        style={{
+                          padding: '4px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 6, marginRight: 6,
+                          background: '#FFF7ED', color: '#9A3412', border: '1px solid #FED7AA',
+                          cursor: busyId === o.id ? 'wait' : 'pointer',
+                        }}
+                      >↪ Dời {DEFER_LABEL[view]}</button>
+                      <button
+                        onClick={() => markDone(o)}
+                        disabled={busyId === o.id}
+                        style={{
+                          padding: '4px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
+                          background: '#F0FDF4', color: '#166534', border: '1px solid #86EFAC',
+                          cursor: busyId === o.id ? 'wait' : 'pointer',
+                        }}
+                      >✓ Đã xong</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* ── Tổng quan năm: biểu đồ 12 tháng + cảnh báo tháng thiếu tiền ── */}
-      {(view === 'month' || view === 'quarter') && monthRows.length === 12 && (() => {
+      {(view === 'month' || view === 'quarter' || view === 'year') && monthRows.length === 12 && (() => {
         const vals = monthRows.map(r => r.closingBal)
         const maxV = Math.max(...vals, 0)
         const minV = Math.min(...vals, 0)
         const span = (maxV - minV) || 1
         const CHART_H = 150
-        const zeroY = (maxV / span) * CHART_H  // px from top down to the zero line
+        const zeroY = (maxV / span) * CHART_H
         const safety = Math.round((tonDauKy || tonQuyRealtime) * 0.15)
 
-        // Tháng có vấn đề: âm (nguy cấp) hoặc tồn quỹ mỏng dưới ngưỡng an toàn
         const problems = monthRows
           .filter(r => r.closingBal < Math.max(safety, 0))
           .map(r => ({
@@ -429,14 +593,12 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
 
         return (
           <div style={{ marginBottom: 18 }}>
-            {/* Biểu đồ cột tồn quỹ cuối kỳ 12 tháng */}
             <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: '16px 18px 10px', marginBottom: 14, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <span style={{ fontWeight: 700, fontSize: 13.5, color: '#1C3557' }}>Tồn quỹ cuối kỳ theo tháng · {selectedYear}</span>
                 <span style={{ fontSize: 11, color: '#9CA3AF' }}>Ngưỡng an toàn ≈ {VND(safety)} ₫ (15% tồn đầu)</span>
               </div>
               <div style={{ position: 'relative', height: CHART_H, display: 'flex', alignItems: 'stretch', gap: 4 }}>
-                {/* Đường 0 */}
                 <div style={{ position: 'absolute', left: 0, right: 0, top: zeroY, borderTop: '1px dashed #9CA3AF', zIndex: 1 }} />
                 {monthRows.map((r, i) => {
                   const isNeg = r.closingBal < 0
@@ -453,7 +615,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
                         border: r.isCurrent ? '2px solid #1C3557' : 'none',
                         transition: 'all .3s',
                       }} />
-                      {/* Nhãn giá trị */}
                       <div style={{
                         position: 'absolute', left: 0, right: 0, textAlign: 'center',
                         top: isNeg ? zeroY + h + 2 : zeroY - h - 15,
@@ -463,7 +624,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
                   )
                 })}
               </div>
-              {/* Nhãn tháng */}
               <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
                 {monthRows.map((r, i) => (
                   <div key={r.key} style={{ flex: 1, textAlign: 'center', fontSize: 10.5, fontWeight: r.isCurrent ? 700 : 500, color: r.isCurrent ? '#1C3557' : '#9CA3AF' }}>
@@ -473,7 +633,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
               </div>
             </div>
 
-            {/* Bảng cảnh báo tháng thiếu tiền + đề xuất */}
             <div style={{ border: '1px solid', borderColor: problems.some(p => p.level === 'critical') ? '#FCA5A5' : problems.length ? '#FDE68A' : '#BBF7D0', borderRadius: 10, overflow: 'hidden' }}>
               <div style={{
                 padding: '9px 16px', fontWeight: 700, fontSize: 13,
@@ -556,8 +715,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
             <tbody>
               {rows.map((row, idx) => {
                 const isEven = idx % 2 === 0
-                const isQ2 = view === 'quarter' && idx === 1
-                const isQ4 = view === 'quarter' && idx === 3
                 const rowBg = row.isCurrent ? '#FEF9C3'
                   : row.isPast ? (isEven ? '#FAFAFA' : '#F5F5F5')
                   : (isEven ? '#EFF6FF' : '#F0F4FF')
@@ -575,7 +732,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
                       transition: 'background .1s',
                     }}
                   >
-                    {/* Kỳ */}
                     <td style={TD({ fontWeight: 700, color: '#1C3557' })}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {row.items.length > 0 && (
@@ -589,7 +745,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
                         </div>
                       </div>
                     </td>
-                    {/* Trạng thái */}
                     <td style={TD({ textAlign: 'center' })}>
                       <span style={{
                         fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
@@ -599,29 +754,23 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
                         {row.isCurrent ? '● Hiện tại' : row.isPast ? '✓ Đã qua' : '◌ Dự kiến'}
                       </span>
                     </td>
-                    {/* Tồn đầu kỳ */}
                     <td style={TD({ textAlign: 'right', color: numColor(row.openingBal), fontWeight: 600 })}>
                       {VND_FULL(row.openingBal)}
                     </td>
-                    {/* Thu */}
                     <td style={TD({ textAlign: 'right', color: '#1D4ED8', fontWeight: 600 })}>
                       {row.thu ? VND_FULL(row.thu) : <span style={{ color: '#D1D5DB' }}>—</span>}
                     </td>
-                    {/* Chi */}
                     <td style={TD({ textAlign: 'right', color: '#9A3412', fontWeight: 600 })}>
                       {row.chi ? VND_FULL(row.chi) : <span style={{ color: '#D1D5DB' }}>—</span>}
                     </td>
-                    {/* Dòng tiền thuần */}
                     <td style={TD({ textAlign: 'right', fontWeight: 700, color: numColor(row.netFlow) })}>
                       {row.netFlow === 0 ? '—' : (row.netFlow > 0 ? '+' : '') + VND_FULL(row.netFlow)}
                     </td>
-                    {/* Tồn cuối kỳ + mini bar */}
                     <td style={TD({ minWidth: 220 })}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontWeight: 700, color: balColor(row.closingBal, tonDauKy || tonQuyRealtime), minWidth: 100, textAlign: 'right', flexShrink: 0 }}>
                           {VND_FULL(row.closingBal)}
                         </span>
-                        {/* Mini bar */}
                         <div style={{ flex: 1, height: 10, background: '#F3F4F6', borderRadius: 5, overflow: 'hidden', minWidth: 60 }}>
                           <div style={{
                             height: '100%', borderRadius: 5,
@@ -636,7 +785,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
                     </td>
                   </tr>
 
-                  {/* ── Expanded item detail ── */}
                   {expanded.has(row.key) && row.items.map(item => (
                     <tr key={item.id} style={{ background: row.isCurrent ? '#FFFDE7' : row.isPast ? '#FAFAFA' : '#EEF3FF' }}>
                       <td style={{ padding: '4px 10px 4px 28px', fontSize: 11.5, color: '#374151' }} colSpan={2}>
@@ -655,7 +803,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
                     </tr>
                   ))}
 
-                  {/* Quarter boundary: show Q subtotal line */}
                   {view === 'month' && (idx + 1) % 3 === 0 && (
                     <tr key={`q-${idx}`} style={{ background: '#F0F4FF', fontWeight: 700 }}>
                       <td style={{ ...TD({ color: '#1D4ED8', fontWeight: 700 }), paddingLeft: 20 }}>
@@ -683,10 +830,9 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
                 )
               })}
 
-              {/* ── Totals row ── */}
               <tr style={{ background: '#1C3557', color: '#fff', fontWeight: 700 }}>
                 <td style={{ ...TD({ color: '#fff', fontWeight: 700 }), borderBottom: 'none' }} colSpan={2}>
-                  TỔNG CỘNG {view === 'month' || view === 'quarter' ? selectedYear : monthLabel}
+                  TỔNG CỘNG {view === 'day' || view === 'week' ? monthLabel : selectedYear}
                 </td>
                 <td style={{ ...TD({ textAlign: 'right', color: '#93C5FD' }), borderBottom: 'none' }}>
                   {VND_FULL(rows[0]?.openingBal ?? 0)}
@@ -709,7 +855,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
         </div>
       )}
 
-      {/* ── Day/Week: note about unscheduled items ── */}
       {(view === 'day' || view === 'week') && rows.some(r => r.key === 'unscheduled') && (
         <div style={{ marginTop: 10, fontSize: 11.5, color: '#9CA3AF', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '6px 12px' }}>
           ⚠ Một số khoản chưa được gán ngày dự kiến — hiển thị trong dòng "Chưa có ngày". Vào Tab Kế hoạch & Thực hiện để thêm ngày.
