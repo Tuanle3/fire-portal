@@ -94,7 +94,7 @@ function viDay(d: Date) {
 const VND = (n: number) => Math.abs(n) >= 1e9
   ? `${(n / 1e9).toFixed(1).replace(/\.0$/, '')} tỷ`
   : Math.abs(n) >= 1e6
-  ? `${(n / 1e6).toFixed(0)} tr`
+  ? `${(n / 1e6).toFixed(1).replace(/\.0$/, '')} tr`
   : n.toLocaleString('vi-VN')
 
 const VND_FULL = (n: number) => n === 0 ? '—' : n.toLocaleString('vi-VN')
@@ -421,17 +421,21 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
   // ── derived cho hiển thị ────────────────────────────────────────────────────
   const [yy, mm] = month.split('-')
   const monthLabel = `T${parseInt(mm)}/${yy}`
-  const scopeLabel = view === 'day' || view === 'week' ? monthLabel : String(selectedYear)
+  const yearScope = view === 'month' || view === 'quarter' || view === 'year'
+  const isMatrix = view === 'year' || view === 'quarter'   // Năm/Quý → bảng ma trận
+  const scopeLabel = yearScope ? String(selectedYear) : monthLabel
 
   const safety = Math.max(0, Math.round((tonDauKy || tonQuyRealtime) * 0.15))
   const periodRows = rows.filter(r => r.key !== 'unscheduled')
-  const riskRows = periodRows.filter(r => r.closingBal < safety)
+  // Ở scope năm (Tháng/Quý/Năm) tính rủi ro & KPI theo 12 tháng; Ngày/Tuần tính theo kỳ hiển thị
+  const baseRows = yearScope ? monthRows : periodRows
+  const riskRows = baseRows.filter(r => r.key !== 'unscheduled' && r.closingBal < safety)
   const hasCritical = riskRows.some(r => r.closingBal < 0)
   const hasRisk = overdue.length > 0 || riskRows.length > 0
   const overdueTotal = overdue.reduce((s, o) => s + amountOf(o), 0)
-  const endingBal = periodRows.length ? periodRows[periodRows.length - 1].closingBal : (tonDauKy || tonQuyRealtime)
-  const totalThu = periodRows.reduce((s, r) => s + r.thu, 0)
-  const totalChi = periodRows.reduce((s, r) => s + r.chi, 0)
+  const endingBal = baseRows.length ? baseRows[baseRows.length - 1].closingBal : (tonDauKy || tonQuyRealtime)
+  const totalThu = baseRows.reduce((s, r) => s + r.thu, 0)
+  const totalChi = baseRows.reduce((s, r) => s + r.chi, 0)
   const netFlow  = totalThu - totalChi
 
   const TH: CSSProperties = {
@@ -441,6 +445,31 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
   const TD = (extra: CSSProperties = {}): CSSProperties => ({
     padding: '9px 12px', fontSize: 12.5, textAlign: 'right', borderBottom: '1px solid #F1F5F9', ...extra,
   })
+
+  // ── Cột cho bảng ma trận (Năm = 12 tháng + tổng quý + tổng năm; Quý = 4 quý + tổng năm) ──
+  interface MCol { key: string; label: string; thu: number; chi: number; net: number; opening: number; closing: number; kind: 'month' | 'qtotal' | 'total'; isCurrent: boolean }
+  const matrixCols: MCol[] = []
+  if (view === 'year' && monthRows.length === 12) {
+    for (let q = 0; q < 4; q++) {
+      const slice = monthRows.slice(q * 3, q * 3 + 3)
+      slice.forEach((r, i) => matrixCols.push({ key: r.key, label: `T${q * 3 + i + 1}`, thu: r.thu, chi: r.chi, net: r.netFlow, opening: r.openingBal, closing: r.closingBal, kind: 'month', isCurrent: r.isCurrent }))
+      matrixCols.push({ key: `Q${q + 1}`, label: `Q${q + 1}`, thu: slice.reduce((s, r) => s + r.thu, 0), chi: slice.reduce((s, r) => s + r.chi, 0), net: slice.reduce((s, r) => s + r.netFlow, 0), opening: slice[0].openingBal, closing: slice[2].closingBal, kind: 'qtotal', isCurrent: slice.some(r => r.isCurrent) })
+    }
+    matrixCols.push({ key: 'total', label: 'Cả năm', thu: totalThu, chi: totalChi, net: netFlow, opening: monthRows[0].openingBal, closing: monthRows[11].closingBal, kind: 'total', isCurrent: false })
+  } else if (view === 'quarter' && quarterRows.length === 4) {
+    quarterRows.forEach((qr, i) => matrixCols.push({ key: qr.key, label: `Quý ${i + 1}`, thu: qr.thu, chi: qr.chi, net: qr.netFlow, opening: qr.openingBal, closing: qr.closingBal, kind: 'qtotal', isCurrent: qr.isCurrent }))
+    matrixCols.push({ key: 'total', label: 'Cả năm', thu: totalThu, chi: totalChi, net: netFlow, opening: monthRows[0]?.openingBal ?? 0, closing: monthRows[11]?.closingBal ?? 0, kind: 'total', isCurrent: false })
+  }
+  const matrixRows: { label: string; val: (c: MCol) => number; kind: 'thu' | 'chi' | 'net' | 'open' | 'close' }[] = [
+    { label: 'TỔNG THU', val: c => c.thu, kind: 'thu' },
+    { label: 'TỔNG CHI', val: c => c.chi, kind: 'chi' },
+    { label: 'LƯU CHUYỂN RÒNG', val: c => c.net, kind: 'net' },
+    { label: 'Số dư đầu kỳ', val: c => c.opening, kind: 'open' },
+    { label: 'Số dư cuối kỳ', val: c => c.closing, kind: 'close' },
+  ]
+  const colBg = (k: MCol['kind']) => k === 'total' ? '#DCE6F5' : k === 'qtotal' ? '#EFF4FB' : '#fff'
+  const mTh: CSSProperties = { padding: '8px 8px', color: '#fff', fontWeight: 700, fontSize: 11, textAlign: 'right', whiteSpace: 'nowrap' }
+  const mTd: CSSProperties = { padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap', borderBottom: '1px solid #F1F5F9' }
 
   return (
     <div>
@@ -556,8 +585,61 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
         )}
       </div>
 
-      {/* ── Bảng dòng tiền (gọn) ── */}
-      {periodRows.length === 0 && !loading && (
+      {/* ── Bảng ma trận (Năm / Quý) ── */}
+      {isMatrix && (
+        matrixCols.length === 0
+          ? <div style={{ textAlign: 'center', padding: 36, color: '#94A3B8', fontSize: 13 }}>Đang tải dữ liệu…</div>
+          : (
+            <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #E5E7EB' }}>
+              <table style={{ borderCollapse: 'collapse', fontSize: 12, background: '#fff', minWidth: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...mTh, textAlign: 'left', position: 'sticky', left: 0, zIndex: 2, background: '#1C3557', minWidth: 150 }}>
+                      Chỉ tiêu · {selectedYear}
+                    </th>
+                    {matrixCols.map(c => (
+                      <th key={c.key} style={{
+                        ...mTh,
+                        background: c.kind === 'total' ? '#12233D' : c.kind === 'qtotal' ? '#2D4A6E' : '#1C3557',
+                        minWidth: c.kind === 'month' ? 56 : 72,
+                        boxShadow: c.isCurrent ? 'inset 0 -3px 0 #FDE68A' : undefined,
+                      }}>{c.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrixRows.map(mr => (
+                    <tr key={mr.label} style={{ borderTop: (mr.kind === 'net' || mr.kind === 'open') ? '2px solid #E5E7EB' : undefined }}>
+                      <td style={{
+                        padding: '7px 10px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #F1F5F9',
+                        position: 'sticky', left: 0, zIndex: 1, background: '#F8FAFC',
+                        fontWeight: (mr.kind === 'net' || mr.kind === 'close') ? 700 : 600,
+                        color: '#1C3557', fontSize: 12,
+                      }}>{mr.label}</td>
+                      {matrixCols.map(c => {
+                        const v = mr.val(c)
+                        let color = '#334155'
+                        if (mr.kind === 'thu') color = '#166534'
+                        else if (mr.kind === 'open') color = '#64748B'
+                        else if (mr.kind === 'net') color = v >= 0 ? '#166534' : '#B91C1C'
+                        else if (mr.kind === 'close') color = v < 0 ? '#B91C1C' : v < safety ? '#D97706' : '#1C3557'
+                        return (
+                          <td key={c.key} title={v.toLocaleString('vi-VN') + ' ₫'} style={{
+                            ...mTd, background: colBg(c.kind), color,
+                            fontWeight: (mr.kind === 'net' || mr.kind === 'close' || c.kind !== 'month') ? 700 : 500,
+                          }}>{v === 0 ? '—' : VND(v)}</td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+      )}
+
+      {/* ── Bảng dòng tiền theo thời gian (Ngày / Tuần / Tháng) ── */}
+      {!isMatrix && periodRows.length === 0 && !loading && (
         <div style={{ textAlign: 'center', padding: 36, color: '#94A3B8', fontSize: 13 }}>
           {view === 'day' || view === 'week'
             ? 'Chưa có khoản thu/chi nào đặt ngày dự kiến trong tháng này. Thêm ngày ở tab Kế hoạch & Thực hiện.'
@@ -565,7 +647,7 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
         </div>
       )}
 
-      {rows.length > 0 && (
+      {!isMatrix && rows.length > 0 && (
         <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #E5E7EB' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, background: '#fff' }}>
             <thead>
