@@ -3,53 +3,50 @@ import { useState, useEffect, useMemo, CSSProperties } from 'react'
 import { getNganSach, saveNganSach } from '@/lib/ngan-sach-store'
 import { NganSachThang } from '@/lib/ngan-sach-types'
 
-type PeriodView = 'day' | 'week' | 'month' | 'quarter' | 'year'
-
 interface Props {
-  month: string            // "2026-07" — currently selected month
+  month: string            // "2026-07" — tháng đang chọn ở topbar
   localData: NganSachThang
-  tonDauKy: number         // opening balance of selected month (from Firebase)
-  tonQuyRealtime: number   // current real-time balance
+  tonDauKy: number         // tồn đầu kỳ của tháng đang chọn
+  tonQuyRealtime: number   // tồn quỹ thực tế hiện tại
   kmcpActual: Record<string, number>
 }
 
-interface RowItem { id: string; nhom: 'B' | 'C'; dien_giai: string; so: number; ngay?: string }
-
-interface PeriodRow {
-  key: string
-  label: string
-  sublabel: string
-  openingBal: number
-  thu: number
-  chi: number
-  netFlow: number
-  closingBal: number
-  isPast: boolean
-  isCurrent: boolean
-  items: RowItem[]
-}
-
-// Mỗi khoản thu/chi (B/C) gom từ tất cả doc tháng đã tải — nguồn duy nhất cho mọi view.
+// Mỗi khoản thu/chi (B/C) gom từ tất cả doc tháng đã tải — nguồn duy nhất.
 interface PoolItem {
   id: string
-  docMonth: string          // tháng của doc chứa khoản này ("2026-07")
+  docMonth: string
   nhom: 'B' | 'C'
   dien_giai: string
   kmcp: string
   ke_hoach: number
   thuc_hien: number
-  ngay?: string             // ngay_du_kien
+  ngay?: string
   done_override?: boolean
   roll_count?: number
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+interface MonthAgg {
+  idx: number               // 0..11
+  thu: number
+  chi: number
+  net: number
+  opening: number
+  closing: number
+  isCurrent: boolean
+}
 
+const MONTH_FULL = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12']
+const MONTH_SHORT = ['Th.1', 'Th.2', 'Th.3', 'Th.4', 'Th.5', 'Th.6', 'Th.7', 'Th.8', 'Th.9', 'Th.10', 'Th.11', 'Th.12']
+const MONO = 'ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace'
+
+const DEFER_LABEL: Record<'week' | 'month', string> = { week: 'tuần sau', month: 'tháng sau' }
+
+// ── helpers ──────────────────────────────────────────────────────────────────
 function buildPool(monthDocs: Map<string, NganSachThang>): PoolItem[] {
   const pool: PoolItem[] = []
   monthDocs.forEach((doc, docMonth) => {
     for (const it of doc.items) {
-      if (it.is_section || it.is_group) continue          // bỏ header + nhóm (con của nhóm vẫn được tính)
+      if (it.is_section || it.is_group) continue
       if (it.nhom !== 'B' && it.nhom !== 'C') continue
       pool.push({
         id: it.id, docMonth, nhom: it.nhom as 'B' | 'C',
@@ -61,82 +58,46 @@ function buildPool(monthDocs: Map<string, NganSachThang>): PoolItem[] {
   })
   return pool
 }
-
-// "kỳ tiếp theo" theo view đang xem
-function advanceDate(iso: string, view: PeriodView): string {
+function advanceDate(iso: string, mode: 'week' | 'month'): string {
   const [y, m, d] = iso.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
-  if (view === 'day') dt.setDate(dt.getDate() + 1)
-  else if (view === 'week') dt.setDate(dt.getDate() + 7)
-  else if (view === 'month') dt.setMonth(dt.getMonth() + 1)
-  else if (view === 'quarter') dt.setMonth(dt.getMonth() + 3)
-  else dt.setFullYear(dt.getFullYear() + 1)
+  if (mode === 'week') dt.setDate(dt.getDate() + 7)
+  else dt.setMonth(dt.getMonth() + 1)
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
-
-const DEFER_LABEL: Record<PeriodView, string> = {
-  day: 'ngày sau', week: 'tuần sau', month: 'tháng sau', quarter: 'quý sau', year: 'năm sau',
-}
-
-function isoWeek(d: Date): number {
-  const tmp = new Date(d)
-  tmp.setHours(0, 0, 0, 0)
-  tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
-  const w = new Date(tmp.getFullYear(), 0, 4)
-  return 1 + Math.round(((tmp.getTime() - w.getTime()) / 86400000 - 3 + (w.getDay() + 6) % 7) / 7)
-}
-
-function viDay(d: Date) {
-  const days = ['CN', 'Th2', 'Th3', 'Th4', 'Th5', 'Th6', 'Th7']
-  return days[d.getDay()]
-}
-
-const VND = (n: number) => Math.abs(n) >= 1e9
-  ? `${(n / 1e9).toFixed(1).replace(/\.0$/, '')} tỷ`
-  : Math.abs(n) >= 1e6
-  ? `${(n / 1e6).toFixed(1).replace(/\.0$/, '')} tr`
-  : n.toLocaleString('vi-VN')
-
-const VND_FULL = (n: number) => n === 0 ? '—' : n.toLocaleString('vi-VN')
-
-const yearBtnStyle: CSSProperties = {
-  width: 26, height: 26, borderRadius: 5, border: '1px solid #E5E7EB',
-  background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 14,
-}
-function pillBtn(bg: string, color: string, border: string, busy: boolean): CSSProperties {
-  return {
-    padding: '3px 10px', fontSize: 11, fontWeight: 700, borderRadius: 6,
-    background: bg, color, border: `1px solid ${border}`, cursor: busy ? 'wait' : 'pointer',
-  }
+const fmt = (n: number) => (n < 0 ? '-' : '') + Math.abs(Math.round(n)).toLocaleString('vi-VN') + ' ₫'
+const fmtShort = (n: number) => {
+  const a = Math.abs(n)
+  const s = n < 0 ? '-' : ''
+  if (a >= 1e9) return s + (a / 1e9).toFixed(1).replace(/\.0$/, '') + ' tỷ'
+  if (a >= 1e6) return s + (a / 1e6).toFixed(1).replace(/\.0$/, '') + ' tr'
+  return s + a.toLocaleString('vi-VN')
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
-
 export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActual }: Props) {
-  const [view, setView] = useState<PeriodView>('month')
-  const [selectedYear, setSelectedYear] = useState(() => parseInt(month.split('-')[0]))
-  const [monthDocs, setMonthDocs] = useState<Map<string, NganSachThang>>(new Map())
-  const [loading, setLoading] = useState(false)
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [busyId, setBusyId] = useState<string | null>(null)
-
   const curYear = parseInt(month.split('-')[0])
   const curMon  = parseInt(month.split('-')[1])
+
+  const [selectedYear, setSelectedYear] = useState(curYear)
+  const [quarter, setQuarter]   = useState<'all' | number>('all')  // 0..3
+  const [monthSel, setMonthSel] = useState<'all' | number>('all')  // 0..11
+  const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
+  const [monthDocs, setMonthDocs] = useState<Map<string, NganSachThang>>(new Map())
+  const [loading, setLoading] = useState(false)
+  const [openRows, setOpenRows] = useState<Set<number>>(new Set())
+  const [busyId, setBusyId] = useState<string | null>(null)
 
   const todayISO = useMemo(() => {
     const t = new Date()
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
   }, [])
 
-  // ── Load các tháng cần cho view hiện tại (cache dồn vào monthDocs) ──────────
+  // ── Load 12 tháng của năm đang chọn (+ năm của tháng topbar) ────────────────
   useEffect(() => {
-    const years = new Set<number>([parseInt(month.split('-')[0])])
-    if (view === 'month' || view === 'quarter' || view === 'year') years.add(selectedYear)
-    if (view === 'year') { years.add(selectedYear - 1); years.add(selectedYear + 1) }
-
+    const years = new Set<number>([selectedYear, parseInt(month.split('-')[0])])
     const need: string[] = []
     years.forEach(y => { for (let i = 1; i <= 12; i++) need.push(`${y}-${String(i).padStart(2, '0')}`) })
-
     setLoading(true)
     Promise.all(need.map(m =>
       m === month
@@ -149,13 +110,11 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
         return map
       })
     }).finally(() => setLoading(false))
-  }, [view, selectedYear, month, localData])
+  }, [selectedYear, month, localData])
 
-  // ── Pool + hàm phân bổ theo ngày ────────────────────────────────────────────
   const pool = useMemo(() => buildPool(monthDocs), [monthDocs])
 
   const effMonth = (p: PoolItem) => (p.ngay ? p.ngay.slice(0, 7) : p.docMonth)
-  // Số tiền dùng cho dự báo: tháng đang chọn ưu tiên số Thực hiện auto theo KMCP, còn lại dùng Kế hoạch
   const amountOf = (p: PoolItem) => {
     if (effMonth(p) === month && p.kmcp && kmcpActual[p.kmcp] !== undefined) return kmcpActual[p.kmcp]
     return p.ke_hoach
@@ -168,37 +127,19 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
     return false
   }
 
-  // ── Khoản quá hạn (mọi doc đã tải): có ngày < hôm nay & chưa xong ───────────
-  const overdue = useMemo(() => {
-    return pool
-      .filter(p => p.ngay && p.ngay < todayISO && !isDone(p))
-      .map(p => ({
-        ...p,
-        daysLate: Math.max(0, Math.round((new Date(todayISO).getTime() - new Date(p.ngay!).getTime()) / 86400000)),
-      }))
-      .sort((a, b) => (a.ngay! < b.ngay! ? -1 : 1))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, todayISO, month, kmcpActual])
-
-  // ── Month rows ──────────────────────────────────────────────────────────────
-  const monthRows = useMemo((): PeriodRow[] => {
+  // Tổng hợp 12 tháng của selectedYear (thu/chi + tồn đầu/cuối kỳ nối tiếp)
+  const monthsAgg = useMemo((): MonthAgg[] => {
     const yStr = String(selectedYear)
-    const months = Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`)
     const bc = Array.from({ length: 12 }, () => ({ B: 0, C: 0 }))
-    const detail: RowItem[][] = Array.from({ length: 12 }, () => [])
-
     for (const p of pool) {
       const em = effMonth(p)
       if (em.slice(0, 4) !== yStr) continue
       const mi = parseInt(em.slice(5, 7)) - 1
       if (mi < 0 || mi > 11) continue
-      const val = amountOf(p)
-      if (val === 0) continue
-      if (p.nhom === 'B') bc[mi].B += val; else bc[mi].C += val
-      detail[mi].push({ id: p.id, nhom: p.nhom, dien_giai: p.dien_giai, so: val, ngay: p.ngay })
+      const v = amountOf(p)
+      if (v === 0) continue
+      if (p.nhom === 'B') bc[mi].B += v; else bc[mi].C += v
     }
-
-    // Anchor tồn đầu kỳ tại tháng đang chọn (nếu cùng năm), chain 2 chiều
     const anchorIdx = selectedYear === curYear ? curMon - 1 : -1
     const openings = new Array(12).fill(0)
     if (anchorIdx >= 0) {
@@ -208,504 +149,350 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
     } else {
       for (let i = 1; i < 12; i++) openings[i] = openings[i - 1] + bc[i - 1].B - bc[i - 1].C
     }
-
-    const today = new Date()
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-
-    return months.map((m, i) => {
-      const [y, mon] = m.split('-')
-      const isPast    = m < todayStr
-      const isCurrent = m === todayStr
-      const thu = bc[i].B, chi = bc[i].C
-      const opening = openings[i]
-      return {
-        key: m,
-        label: `Tháng ${parseInt(mon)}/${y}`,
-        sublabel: isCurrent ? 'Hiện tại' : isPast ? 'Đã qua' : 'Dự kiến',
-        openingBal: opening,
-        thu, chi,
-        netFlow: thu - chi,
-        closingBal: opening + thu - chi,
-        isPast, isCurrent,
-        items: detail[i],
-      }
-    })
+    const todayM = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+    return bc.map((c, i) => ({
+      idx: i, thu: c.B, chi: c.C, net: c.B - c.C,
+      opening: openings[i], closing: openings[i] + c.B - c.C,
+      isCurrent: `${selectedYear}-${String(i + 1).padStart(2, '0')}` === todayM,
+    }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pool, selectedYear, tonDauKy, month, curYear, curMon, kmcpActual])
 
-  const quarterRows = useMemo((): PeriodRow[] => {
-    if (monthRows.length === 0) return []
-    return [0, 1, 2, 3].map(q => {
-      const slice = monthRows.slice(q * 3, q * 3 + 3)
-      const thu = slice.reduce((s, r) => s + r.thu, 0)
-      const chi = slice.reduce((s, r) => s + r.chi, 0)
-      return {
-        key: `Q${q + 1}`,
-        label: `Quý ${q + 1}/${selectedYear}`,
-        sublabel: slice.some(r => r.isCurrent) ? 'Hiện tại' : slice.every(r => r.isPast) ? 'Đã qua' : 'Dự kiến',
-        openingBal: slice[0].openingBal,
-        thu, chi,
-        netFlow: thu - chi,
-        closingBal: slice[2].closingBal,
-        isPast: slice.every(r => r.isPast),
-        isCurrent: slice.some(r => r.isCurrent),
-        items: slice.flatMap(r => r.items),
-      }
-    })
-  }, [monthRows, selectedYear])
-
-  // ── Year rows (3 năm liền kề, chain quanh năm đang chọn) ────────────────────
-  const yearRows = useMemo((): PeriodRow[] => {
-    if (view !== 'year') return []
-    const years = [selectedYear - 1, selectedYear, selectedYear + 1]
-    const netOf = (yr: number) => {
-      let B = 0, C = 0
-      const items: RowItem[] = []
-      for (const p of pool) {
-        if (effMonth(p).slice(0, 4) !== String(yr)) continue
-        const v = amountOf(p)
-        if (v === 0) continue
-        if (p.nhom === 'B') B += v; else C += v
-        items.push({ id: p.id, nhom: p.nhom, dien_giai: p.dien_giai, so: v, ngay: p.ngay })
-      }
-      return { B, C, items }
-    }
-    const janOpeningSel = monthRows[0]?.openingBal ?? tonDauKy
-    const netSel = netOf(selectedYear)
-    const netPrev = netOf(selectedYear - 1)
-    const open: Record<number, number> = {
-      [selectedYear]: janOpeningSel,
-      [selectedYear - 1]: janOpeningSel - (netPrev.B - netPrev.C),
-      [selectedYear + 1]: janOpeningSel + (netSel.B - netSel.C),
-    }
-    return years.map(yr => {
-      const { B, C, items } = netOf(yr)
-      const opening = open[yr]
-      return {
-        key: `Y${yr}`,
-        label: `Năm ${yr}`,
-        sublabel: yr === curYear ? 'Hiện tại' : yr < curYear ? 'Đã qua' : 'Dự kiến',
-        openingBal: opening,
-        thu: B, chi: C,
-        netFlow: B - C,
-        closingBal: opening + B - C,
-        isPast: yr < curYear,
-        isCurrent: yr === curYear,
-        items,
-      }
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, pool, selectedYear, monthRows, tonDauKy, curYear, month, kmcpActual])
-
-  // ── Day / Week rows (khoản có ngày rơi vào tháng đang chọn) ─────────────────
-  const dayRows = useMemo((): PeriodRow[] => {
-    if (view !== 'day' && view !== 'week') return []
-    const [y, m] = month.split('-').map(Number)
-    const daysInMonth = new Date(y, m, 0).getDate()
-
-    const itemsByDate = new Map<string, RowItem[]>()
-    const unscheduled: RowItem[] = []
-
+  // Chi tiết hạng mục 1 tháng (gộp theo diễn giải)
+  const detailFor = (i: number) => {
+    const mk = `${selectedYear}-${String(i + 1).padStart(2, '0')}`
+    const inc = new Map<string, number>(), exp = new Map<string, number>()
     for (const p of pool) {
-      const val = amountOf(p)
-      if (val === 0) continue
-      const entry: RowItem = { id: p.id, nhom: p.nhom, dien_giai: p.dien_giai, so: val }
-      if (p.ngay && p.ngay.slice(0, 7) === month) {
-        const bucket = itemsByDate.get(p.ngay) ?? []
-        bucket.push(entry)
-        itemsByDate.set(p.ngay, bucket)
-      } else if (!p.ngay && p.docMonth === month) {
-        unscheduled.push(entry)
+      if (effMonth(p) !== mk) continue
+      const v = amountOf(p)
+      if (v === 0) continue
+      const map = p.nhom === 'B' ? inc : exp
+      const key = p.dien_giai || '(không tên)'
+      map.set(key, (map.get(key) ?? 0) + v)
+    }
+    const toArr = (m: Map<string, number>) => [...m].map(([name, amt]) => ({ name, amt })).sort((a, b) => b.amt - a.amt)
+    return { income: toArr(inc), expense: toArr(exp) }
+  }
+
+  // Chia tuần trong 1 tháng (theo ngày dự kiến; khoản chưa có ngày gộp riêng)
+  const weeksFor = (i: number) => {
+    const mk = `${selectedYear}-${String(i + 1).padStart(2, '0')}`
+    const wk = new Map<number, { income: number; expense: number }>()
+    let uns = { income: 0, expense: 0 }; let hasUns = false
+    for (const p of pool) {
+      const v = amountOf(p)
+      if (v === 0) continue
+      if (p.ngay && p.ngay.slice(0, 7) === mk) {
+        const w = Math.ceil(parseInt(p.ngay.slice(8, 10)) / 7)
+        const cur = wk.get(w) ?? { income: 0, expense: 0 }
+        if (p.nhom === 'B') cur.income += v; else cur.expense += v
+        wk.set(w, cur)
+      } else if (!p.ngay && p.docMonth === mk) {
+        if (p.nhom === 'B') uns.income += v; else uns.expense += v
+        hasUns = true
       }
     }
+    const arr = [...wk.entries()].sort((a, b) => a[0] - b[0]).map(([w, v]) => ({ label: `Tuần ${w}`, ...v }))
+    if (hasUns) arr.push({ label: 'Chưa có ngày', ...uns })
+    return arr
+  }
 
-    const today = new Date()
-    let running = tonDauKy
-    const rows: PeriodRow[] = []
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${month}-${String(day).padStart(2, '0')}`
-      const date = new Date(y, m - 1, day)
-      const items = itemsByDate.get(dateStr) ?? []
-      const thu = items.filter(x => x.nhom === 'B').reduce((s, x) => s + x.so, 0)
-      const chi = items.filter(x => x.nhom === 'C').reduce((s, x) => s + x.so, 0)
-      const opening = running
-      running = running + thu - chi
-      const isPast = date < today && date.toDateString() !== today.toDateString()
-      const isCurrent = date.toDateString() === today.toDateString()
-
-      if (items.length > 0 || isCurrent) {
-        rows.push({
-          key: dateStr,
-          label: `${String(day).padStart(2, '0')}/${m}`,
-          sublabel: viDay(date),
-          openingBal: opening,
-          thu, chi,
-          netFlow: thu - chi,
-          closingBal: running,
-          isPast, isCurrent,
-          items: items.map(x => ({ ...x, ngay: dateStr })),
-        })
-      }
-    }
-
-    if (unscheduled.length > 0) {
-      const thu = unscheduled.filter(x => x.nhom === 'B').reduce((s, x) => s + x.so, 0)
-      const chi = unscheduled.filter(x => x.nhom === 'C').reduce((s, x) => s + x.so, 0)
-      rows.push({
-        key: 'unscheduled',
-        label: 'Chưa có ngày',
-        sublabel: 'Chưa có ngày',
-        openingBal: running,
-        thu, chi,
-        netFlow: thu - chi,
-        closingBal: running + thu - chi,
-        isPast: false, isCurrent: false,
-        items: unscheduled,
-      })
-    }
-
-    return rows
+  // Khoản quá hạn (mọi doc): có ngày < hôm nay & chưa xong
+  const overdue = useMemo(() => pool
+    .filter(p => p.ngay && p.ngay < todayISO && !isDone(p))
+    .map(p => ({ ...p, daysLate: Math.max(0, Math.round((new Date(todayISO).getTime() - new Date(p.ngay!).getTime()) / 86400000)) }))
+    .sort((a, b) => (a.ngay! < b.ngay! ? -1 : 1))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, pool, month, tonDauKy, kmcpActual])
+  , [pool, todayISO, month, kmcpActual])
 
-  const weekRows = useMemo((): PeriodRow[] => {
-    if (view !== 'week') return []
-    const weekMap = new Map<number, PeriodRow>()
-    const dayRowsFull = dayRows.filter(r => r.key !== 'unscheduled')
-    for (const dr of dayRowsFull) {
-      const date = new Date(dr.key)
-      const wk = isoWeek(date)
-      const existing = weekMap.get(wk)
-      if (!existing) {
-        weekMap.set(wk, { ...dr, key: `W${wk}`, label: `Tuần ${wk}`, items: [...dr.items] })
-      } else {
-        existing.thu += dr.thu
-        existing.chi += dr.chi
-        existing.netFlow += dr.netFlow
-        existing.closingBal = dr.closingBal
-        existing.items.push(...dr.items)
-        if (dr.isCurrent) existing.isCurrent = true
-        if (!dr.isPast) existing.isPast = false
-      }
-    }
-    const unsched = dayRows.find(r => r.key === 'unscheduled')
-    const result = Array.from(weekMap.values())
-    if (unsched) result.push(unsched)
-    return result
-  }, [view, dayRows])
-
-  const rows = view === 'month' ? monthRows
-    : view === 'quarter' ? quarterRows
-    : view === 'year' ? yearRows
-    : view === 'week' ? weekRows
-    : dayRows
-
-  const toggleExpand = (key: string) =>
-    setExpanded(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s })
-
-  // ── Ghi 1 doc: cập nhật 1 khoản trong doc gốc của nó rồi lưu ────────────────
+  // ── Ghi 1 doc ────────────────────────────────────────────────────────────────
   const patchItem = async (docMonth: string, id: string, patch: Record<string, unknown>) => {
     const doc = monthDocs.get(docMonth)
     if (!doc) return
     setBusyId(id)
     const updated: NganSachThang = { ...doc, items: doc.items.map(it => it.id === id ? { ...it, ...patch } : it) }
     setMonthDocs(prev => new Map(prev).set(docMonth, updated))
-    try { await saveNganSach(updated) } catch { /* giữ nguyên state local nếu lỗi mạng */ }
+    try { await saveNganSach(updated) } catch { /* giữ state local nếu lỗi mạng */ }
     finally { setBusyId(null) }
   }
   const deferItem = (o: PoolItem) =>
-    patchItem(o.docMonth, o.id, { ngay_du_kien: advanceDate(o.ngay!, view), roll_count: (o.roll_count ?? 0) + 1 })
+    patchItem(o.docMonth, o.id, { ngay_du_kien: advanceDate(o.ngay!, viewMode), roll_count: (o.roll_count ?? 0) + 1 })
   const markDone = (o: PoolItem) => patchItem(o.docMonth, o.id, { done_override: true })
 
-  // ── derived cho hiển thị ────────────────────────────────────────────────────
-  const [yy, mm] = month.split('-')
-  const monthLabel = `T${parseInt(mm)}/${yy}`
-  const yearScope = view === 'month' || view === 'quarter' || view === 'year'
-  const isMatrix = view === 'year' || view === 'quarter'   // Năm/Quý → bảng ma trận
-  const scopeLabel = yearScope ? String(selectedYear) : monthLabel
+  // ── Phạm vi kỳ đang chọn ────────────────────────────────────────────────────
+  const monthIdxs = useMemo(() => {
+    if (monthSel !== 'all') return [monthSel]
+    if (quarter === 'all') return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    return [quarter * 3, quarter * 3 + 1, quarter * 3 + 2]
+  }, [monthSel, quarter])
 
   const safety = Math.max(0, Math.round((tonDauKy || tonQuyRealtime) * 0.15))
-  const periodRows = rows.filter(r => r.key !== 'unscheduled')
-  // Ở scope năm (Tháng/Quý/Năm) tính rủi ro & KPI theo 12 tháng; Ngày/Tuần tính theo kỳ hiển thị
-  const baseRows = yearScope ? monthRows : periodRows
-  const riskRows = baseRows.filter(r => r.key !== 'unscheduled' && r.closingBal < safety)
-  const hasCritical = riskRows.some(r => r.closingBal < 0)
-  const hasRisk = overdue.length > 0 || riskRows.length > 0
-  const overdueTotal = overdue.reduce((s, o) => s + amountOf(o), 0)
-  const endingBal = baseRows.length ? baseRows[baseRows.length - 1].closingBal : (tonDauKy || tonQuyRealtime)
-  const totalThu = baseRows.reduce((s, r) => s + r.thu, 0)
-  const totalChi = baseRows.reduce((s, r) => s + r.chi, 0)
-  const netFlow  = totalThu - totalChi
+  const sel = monthIdxs.map(i => monthsAgg[i]).filter(Boolean)
+  const totalThu = sel.reduce((s, m) => s + m.thu, 0)
+  const totalChi = sel.reduce((s, m) => s + m.chi, 0)
+  const net = totalThu - totalChi
+  const endingBal = sel.length ? sel[sel.length - 1].closing : (tonDauKy || tonQuyRealtime)
+  const riskMonths = sel.filter(m => m.closing < safety)
+  const periodLabel = monthSel !== 'all' ? `${MONTH_FULL[monthSel as number]} · ${selectedYear}`
+    : quarter === 'all' ? `Năm ${selectedYear}` : `Quý ${(quarter as number) + 1} · ${selectedYear}`
 
-  const TH: CSSProperties = {
-    padding: '9px 12px', fontWeight: 700, fontSize: 11, color: '#64748B',
-    textAlign: 'right', whiteSpace: 'nowrap', borderBottom: '1px solid #E5E7EB',
-  }
-  const TD = (extra: CSSProperties = {}): CSSProperties => ({
-    padding: '9px 12px', fontSize: 12.5, textAlign: 'right', borderBottom: '1px solid #F1F5F9', ...extra,
+  const toggleRow = (i: number) =>
+    setOpenRows(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s })
+
+  // ── styles (nền sáng, đồng bộ app) ──────────────────────────────────────────
+  const INK = '#1C3557', DIM = '#64748B', FAINT = '#94A3B8'
+  const GREEN = '#15803D', CORAL = '#B91C1C', AMBER = '#D97706', EXP = '#9A3412'
+  const panel: CSSProperties = { background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14 }
+  const chip = (active: boolean): CSSProperties => ({
+    border: `1px solid ${active ? INK : '#E5E7EB'}`, background: active ? INK : '#fff',
+    color: active ? '#fff' : DIM, padding: '6px 13px', borderRadius: 20, fontSize: 12.5, fontWeight: 600,
+    cursor: 'pointer', fontFamily: 'inherit',
   })
+  const num: CSSProperties = { fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }
+  const balColor = (v: number) => v < 0 ? CORAL : v < safety ? AMBER : INK
 
-  // ── Cột cho bảng ma trận (Năm = 12 tháng + tổng quý + tổng năm; Quý = 4 quý + tổng năm) ──
-  interface MCol { key: string; label: string; thu: number; chi: number; net: number; opening: number; closing: number; kind: 'month' | 'qtotal' | 'total'; isCurrent: boolean }
-  const matrixCols: MCol[] = []
-  if (view === 'year' && monthRows.length === 12) {
-    for (let q = 0; q < 4; q++) {
-      const slice = monthRows.slice(q * 3, q * 3 + 3)
-      slice.forEach((r, i) => matrixCols.push({ key: r.key, label: `T${q * 3 + i + 1}`, thu: r.thu, chi: r.chi, net: r.netFlow, opening: r.openingBal, closing: r.closingBal, kind: 'month', isCurrent: r.isCurrent }))
-      matrixCols.push({ key: `Q${q + 1}`, label: `Q${q + 1}`, thu: slice.reduce((s, r) => s + r.thu, 0), chi: slice.reduce((s, r) => s + r.chi, 0), net: slice.reduce((s, r) => s + r.netFlow, 0), opening: slice[0].openingBal, closing: slice[2].closingBal, kind: 'qtotal', isCurrent: slice.some(r => r.isCurrent) })
-    }
-    matrixCols.push({ key: 'total', label: 'Cả năm', thu: totalThu, chi: totalChi, net: netFlow, opening: monthRows[0].openingBal, closing: monthRows[11].closingBal, kind: 'total', isCurrent: false })
-  } else if (view === 'quarter' && quarterRows.length === 4) {
-    quarterRows.forEach((qr, i) => matrixCols.push({ key: qr.key, label: `Quý ${i + 1}`, thu: qr.thu, chi: qr.chi, net: qr.netFlow, opening: qr.openingBal, closing: qr.closingBal, kind: 'qtotal', isCurrent: qr.isCurrent }))
-    matrixCols.push({ key: 'total', label: 'Cả năm', thu: totalThu, chi: totalChi, net: netFlow, opening: monthRows[0]?.openingBal ?? 0, closing: monthRows[11]?.closingBal ?? 0, kind: 'total', isCurrent: false })
-  }
-  const matrixRows: { label: string; val: (c: MCol) => number; kind: 'thu' | 'chi' | 'net' | 'open' | 'close' }[] = [
-    { label: 'TỔNG THU', val: c => c.thu, kind: 'thu' },
-    { label: 'TỔNG CHI', val: c => c.chi, kind: 'chi' },
-    { label: 'LƯU CHUYỂN RÒNG', val: c => c.net, kind: 'net' },
-    { label: 'Số dư đầu kỳ', val: c => c.opening, kind: 'open' },
-    { label: 'Số dư cuối kỳ', val: c => c.closing, kind: 'close' },
-  ]
-  const colBg = (k: MCol['kind']) => k === 'total' ? '#DCE6F5' : k === 'qtotal' ? '#EFF4FB' : '#fff'
-  const mTh: CSSProperties = { padding: '8px 8px', color: '#fff', fontWeight: 700, fontSize: 11, textAlign: 'right', whiteSpace: 'nowrap' }
-  const mTd: CSSProperties = { padding: '7px 8px', textAlign: 'right', whiteSpace: 'nowrap', borderBottom: '1px solid #F1F5F9' }
+  const YEARS = [curYear - 2, curYear - 1, curYear, curYear + 1, curYear + 2]
 
   return (
     <div>
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 700, fontSize: 15, color: '#1C3557' }}>📅 Dự báo dòng tiền</span>
-        <div style={{ display: 'flex', background: '#F1F5F9', borderRadius: 8, padding: 3, gap: 2 }}>
-          {(['day', 'week', 'month', 'quarter', 'year'] as PeriodView[]).map(v => {
-            const labels: Record<PeriodView, string> = { day: 'Ngày', week: 'Tuần', month: 'Tháng', quarter: 'Quý', year: 'Năm' }
-            return (
-              <button key={v} onClick={() => setView(v)} style={{
-                padding: '5px 14px', fontSize: 12.5, fontWeight: 600, borderRadius: 6, border: 'none',
-                cursor: 'pointer', background: view === v ? '#1C3557' : 'transparent', color: view === v ? '#fff' : '#64748B',
-              }}>{labels[v]}</button>
-            )
-          })}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
+        <div>
+          <div style={{ fontSize: 10.5, letterSpacing: '.16em', textTransform: 'uppercase', color: FAINT, fontWeight: 700 }}>Sổ cái dòng tiền</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: INK, marginTop: 3 }}>📅 Dự báo dòng tiền</div>
+          <div style={{ fontSize: 12.5, color: DIM, marginTop: 3 }}>Theo dõi thu – chi, phát hiện kỳ thiếu hụt và gợi ý cân đối.</div>
         </div>
-        {(view === 'month' || view === 'quarter' || view === 'year') && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <button onClick={() => setSelectedYear(yr => yr - 1)} style={yearBtnStyle}>‹</button>
-            <span style={{ fontWeight: 700, fontSize: 14, color: '#1C3557', minWidth: 40, textAlign: 'center' }}>{selectedYear}</span>
-            <button onClick={() => setSelectedYear(yr => yr + 1)} style={yearBtnStyle}>›</button>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>{periodLabel}</div>
+          <div style={{ fontSize: 11.5, color: FAINT, marginTop: 2 }}>
+            {sel.length} tháng · {riskMonths.length ? `${riskMonths.length} kỳ rủi ro` : 'Đủ dòng tiền'}
           </div>
-        )}
-        {(view === 'day' || view === 'week') && <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>{monthLabel}</span>}
-        {loading && <span style={{ fontSize: 12, color: '#94A3B8' }}>⏳ Đang tải…</span>}
+        </div>
       </div>
 
-      {/* ── KPI: 3 số cốt lõi ── */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+      {/* ── Filter bar ── */}
+      <div style={{ ...panel, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700 }}>Năm</span>
+          <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
+            style={{ background: '#fff', color: INK, border: '1px solid #E5E7EB', borderRadius: 8, padding: '7px 10px', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>
+            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700 }}>Kỳ</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {([['all', 'Cả năm'], [0, 'Quý 1'], [1, 'Quý 2'], [2, 'Quý 3'], [3, 'Quý 4']] as [('all' | number), string][]).map(([v, l]) => (
+              <button key={String(v)} style={chip(monthSel === 'all' && quarter === v)}
+                onClick={() => { setQuarter(v); setMonthSel('all') }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700 }}>Tháng</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button style={chip(monthSel === 'all')} onClick={() => setMonthSel('all')}>Tất cả</button>
+            {MONTH_SHORT.map((l, i) => (
+              <button key={i} style={chip(monthSel === i)} onClick={() => setMonthSel(i)}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700 }}>Hiển thị</span>
+          <div style={{ display: 'flex', border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden' }}>
+            {(['month', 'week'] as const).map(v => (
+              <button key={v} onClick={() => setViewMode(v)} style={{
+                background: viewMode === v ? INK : '#fff', color: viewMode === v ? '#fff' : DIM,
+                border: 'none', padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+              }}>{v === 'month' ? 'Theo tháng' : 'Theo tuần'}</button>
+            ))}
+          </div>
+        </div>
+        {loading && <span style={{ fontSize: 12, color: FAINT }}>⏳ Đang tải…</span>}
+      </div>
+
+      {/* ── Overview cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
         {[
-          { label: 'Tồn quỹ hiện tại', val: tonQuyRealtime, color: '#166534' },
-          { label: `Dòng tiền thuần ${scopeLabel}`, val: netFlow, color: netFlow >= 0 ? '#166534' : '#B91C1C' },
-          { label: `Tồn cuối kỳ dự kiến ${scopeLabel}`, val: endingBal, color: endingBal < 0 ? '#B91C1C' : endingBal < safety ? '#D97706' : '#1C3557' },
-        ].map(({ label, val, color }) => (
-          <div key={label} style={{ background: '#F8FAFC', border: '1px solid #E5E7EB', borderRadius: 10, padding: '12px 18px', minWidth: 190, flex: '1 1 190px' }}>
-            <div style={{ fontSize: 11, color: '#64748B', fontWeight: 600, marginBottom: 3 }}>{label}</div>
-            <div style={{ fontSize: 19, fontWeight: 700, color }}>{val.toLocaleString('vi-VN')} ₫</div>
+          { label: 'Tổng thu', value: fmt(totalThu), color: GREEN, tag: null as [string, boolean] | null },
+          { label: 'Tổng chi', value: fmt(totalChi), color: EXP, tag: null },
+          { label: 'Chênh lệch dòng tiền', value: (net >= 0 ? '+' : '') + fmt(net), color: net >= 0 ? GREEN : CORAL, tag: (net >= 0 ? ['Dư dòng tiền', true] : ['Thiếu hụt', false]) as [string, boolean] },
+          { label: 'Số dư cuối kỳ dự kiến', value: fmt(endingBal), color: balColor(endingBal), tag: (riskMonths.length ? [`${riskMonths.length} kỳ rủi ro`, false] : ['Ổn định', true]) as [string, boolean] },
+        ].map(c => (
+          <div key={c.label} style={{ ...panel, padding: '16px 18px', position: 'relative' }}>
+            {c.tag && (
+              <span style={{
+                position: 'absolute', top: 14, right: 14, fontSize: 9.5, padding: '3px 8px', borderRadius: 6,
+                textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700,
+                background: c.tag[1] ? '#ECFDF5' : '#FEF2F2', color: c.tag[1] ? GREEN : CORAL,
+              }}>{c.tag[0]}</span>
+            )}
+            <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700, marginBottom: 10 }}>{c.label}</div>
+            <div style={{ ...num, fontSize: 22, fontWeight: 700, color: c.color }}>{c.value}</div>
           </div>
         ))}
       </div>
 
-      {/* ── TRỌNG TÂM: Cảnh báo rủi ro tiền mặt ── */}
-      <div style={{ marginBottom: 18, border: '1px solid', borderColor: hasCritical ? '#FCA5A5' : hasRisk ? '#FDE68A' : '#BBF7D0', borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{
-          padding: '11px 16px', fontWeight: 700, fontSize: 13.5,
-          background: hasCritical ? '#FEF2F2' : hasRisk ? '#FFFBEB' : '#F0FDF4',
-          color: hasCritical ? '#991B1B' : hasRisk ? '#92400E' : '#166534',
-        }}>
-          {!hasRisk
-            ? '✅ Dòng tiền an toàn — không có kỳ nào âm/mỏng quỹ và không có khoản quá hạn.'
-            : `⚠ Cảnh báo dòng tiền${hasCritical ? ' — có kỳ ÂM quỹ' : ''}`}
+      {/* ── Ledger ── */}
+      <div style={{ ...panel, overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #E5E7EB' }}>
+          <span style={{ fontWeight: 700, fontSize: 15, color: INK }}>Chi tiết dòng tiền</span>
+          <span style={{ fontSize: 12, color: FAINT }}>Bấm vào từng dòng để mở/đóng chi tiết hạng mục</span>
         </div>
-
-        {hasRisk && (
-          <div style={{ background: '#fff' }}>
-            {/* Kỳ rủi ro */}
-            {riskRows.length > 0 && (
-              <div style={{ padding: '10px 16px', borderBottom: overdue.length ? '1px solid #F1F5F9' : 'none' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', marginBottom: 7, letterSpacing: '.03em' }}>
-                  KỲ RỦI RO · ngưỡng an toàn ≈ {VND(safety)} ₫
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {riskRows.map(r => {
-                    const neg = r.closingBal < 0
-                    const need = neg ? -r.closingBal : safety - r.closingBal
-                    return (
-                      <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, flexWrap: 'wrap' }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: neg ? '#EF4444' : '#F59E0B', flexShrink: 0 }} />
-                        <span style={{ fontWeight: 700, color: '#1C3557', minWidth: 96 }}>{r.label}</span>
-                        <span style={{ color: neg ? '#B91C1C' : '#D97706', fontWeight: 600 }}>
-                          {neg ? 'Âm quỹ' : 'Quỹ mỏng'} · tồn cuối kỳ {r.closingBal.toLocaleString('vi-VN')} ₫
-                        </span>
-                        <span style={{ marginLeft: 'auto', color: '#B91C1C', fontWeight: 700 }}>cần +{Math.round(need).toLocaleString('vi-VN')} ₫</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Khoản quá hạn — có hành động */}
-            {overdue.length > 0 && (
-              <div style={{ padding: '10px 16px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', marginBottom: 7, letterSpacing: '.03em' }}>
-                  QUÁ HẠN CHƯA THU/CHI · {overdue.length} khoản · {overdueTotal.toLocaleString('vi-VN')} ₫
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                    <tbody>
-                      {overdue.map(o => (
-                        <tr key={`${o.docMonth}-${o.id}`} style={{ borderTop: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '6px 8px 6px 0', color: '#B91C1C', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            {o.ngay}
-                            <span style={{ color: '#94A3B8', fontWeight: 500 }}> · trễ {o.daysLate}d{o.roll_count ? ` · dời ${o.roll_count}×` : ''}</span>
-                          </td>
-                          <td style={{ padding: '6px 8px', color: '#1F2937' }}>{o.dien_giai || '—'}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: o.nhom === 'B' ? '#166534' : '#334155', whiteSpace: 'nowrap' }}>
-                            {(o.nhom === 'B' ? '+' : '−') + VND_FULL(amountOf(o))}
-                          </td>
-                          <td style={{ padding: '6px 0 6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            <button onClick={() => deferItem(o)} disabled={busyId === o.id} style={pillBtn('#FFF7ED', '#9A3412', '#FED7AA', busyId === o.id)}>↪ Dời {DEFER_LABEL[view]}</button>
-                            <button onClick={() => markDone(o)} disabled={busyId === o.id} style={{ ...pillBtn('#F0FDF4', '#166534', '#86EFAC', busyId === o.id), marginLeft: 6 }}>✓ Đã xong</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
+        {sel.length === 0 && !loading && (
+          <div style={{ padding: 32, textAlign: 'center', color: FAINT, fontSize: 13 }}>Chưa có dữ liệu cho kỳ này.</div>
         )}
-      </div>
+        {sel.map(m => {
+          const open = openRows.has(m.idx)
+          const bad = m.closing < 0
+          const thin = !bad && m.closing < safety
+          const detail = open ? detailFor(m.idx) : null
+          const weeks = open && viewMode === 'week' ? weeksFor(m.idx) : []
+          const topExp = detail?.expense[0]
+          return (
+            <div key={m.idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+              <div onClick={() => toggleRow(m.idx)} style={{
+                display: 'grid', gridTemplateColumns: '24px 1.6fr .9fr .9fr .9fr 1fr', alignItems: 'center',
+                gap: 10, padding: '13px 20px', cursor: 'pointer', background: m.isCurrent ? '#FEFCE8' : 'transparent',
+              }}>
+                <span style={{ color: open ? INK : FAINT, fontSize: 11, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
+                <div style={{ fontWeight: 700, fontSize: 14, color: INK, display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: bad ? CORAL : thin ? AMBER : GREEN, flexShrink: 0 }} />
+                  {MONTH_FULL[m.idx]}
+                  {m.isCurrent && <span style={{ fontSize: 9.5, fontWeight: 700, color: AMBER, background: '#FEF9C3', padding: '1px 6px', borderRadius: 10 }}>hiện tại</span>}
+                </div>
+                <div><div style={colLbl(FAINT)}>Thu</div><div style={{ ...num, fontSize: 13.5, color: GREEN }}>{m.thu ? fmtShort(m.thu) : '—'}</div></div>
+                <div><div style={colLbl(FAINT)}>Chi</div><div style={{ ...num, fontSize: 13.5, color: EXP }}>{m.chi ? fmtShort(m.chi) : '—'}</div></div>
+                <div><div style={colLbl(FAINT)}>Chênh lệch</div><div style={{ ...num, fontSize: 13.5, color: m.net >= 0 ? GREEN : CORAL }}>{m.net >= 0 ? '+' : ''}{fmtShort(m.net)}</div></div>
+                <div><div style={colLbl(FAINT)}>Số dư cuối kỳ</div><div style={{ ...num, fontSize: 13.5, fontWeight: 700, color: balColor(m.closing) }}>{fmtShort(m.closing)}</div></div>
+              </div>
 
-      {/* ── Bảng ma trận (Năm / Quý) ── */}
-      {isMatrix && (
-        matrixCols.length === 0
-          ? <div style={{ textAlign: 'center', padding: 36, color: '#94A3B8', fontSize: 13 }}>Đang tải dữ liệu…</div>
-          : (
-            <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #E5E7EB' }}>
-              <table style={{ borderCollapse: 'collapse', fontSize: 12, background: '#fff', minWidth: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={{ ...mTh, textAlign: 'left', position: 'sticky', left: 0, zIndex: 2, background: '#1C3557', minWidth: 150 }}>
-                      Chỉ tiêu · {selectedYear}
-                    </th>
-                    {matrixCols.map(c => (
-                      <th key={c.key} style={{
-                        ...mTh,
-                        background: c.kind === 'total' ? '#12233D' : c.kind === 'qtotal' ? '#2D4A6E' : '#1C3557',
-                        minWidth: c.kind === 'month' ? 56 : 72,
-                        boxShadow: c.isCurrent ? 'inset 0 -3px 0 #FDE68A' : undefined,
-                      }}>{c.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {matrixRows.map(mr => (
-                    <tr key={mr.label} style={{ borderTop: (mr.kind === 'net' || mr.kind === 'open') ? '2px solid #E5E7EB' : undefined }}>
-                      <td style={{
-                        padding: '7px 10px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #F1F5F9',
-                        position: 'sticky', left: 0, zIndex: 1, background: '#F8FAFC',
-                        fontWeight: (mr.kind === 'net' || mr.kind === 'close') ? 700 : 600,
-                        color: '#1C3557', fontSize: 12,
-                      }}>{mr.label}</td>
-                      {matrixCols.map(c => {
-                        const v = mr.val(c)
-                        let color = '#334155'
-                        if (mr.kind === 'thu') color = '#166534'
-                        else if (mr.kind === 'open') color = '#64748B'
-                        else if (mr.kind === 'net') color = v >= 0 ? '#166534' : '#B91C1C'
-                        else if (mr.kind === 'close') color = v < 0 ? '#B91C1C' : v < safety ? '#D97706' : '#1C3557'
+              {open && detail && (
+                <div style={{ padding: '2px 20px 18px 54px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 12 }}>
+                    <div>
+                      <div style={detailHdr(FAINT)}>Khoản thu</div>
+                      {detail.income.length ? detail.income.map(r => (
+                        <div key={r.name} style={catLine}><span style={{ color: '#334155' }}>{r.name}</span><span style={{ ...num, color: GREEN }}>{fmt(r.amt)}</span></div>
+                      )) : <div style={{ fontSize: 12.5, color: FAINT, padding: '6px 0' }}>—</div>}
+                    </div>
+                    <div>
+                      <div style={detailHdr(FAINT)}>Khoản chi</div>
+                      {detail.expense.length ? detail.expense.map(r => (
+                        <div key={r.name} style={catLine}><span style={{ color: '#334155' }}>{r.name}</span><span style={{ ...num, color: EXP }}>{fmt(r.amt)}</span></div>
+                      )) : <div style={{ fontSize: 12.5, color: FAINT, padding: '6px 0' }}>—</div>}
+                    </div>
+                  </div>
+
+                  {viewMode === 'week' && weeks.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 8, marginBottom: 4 }}>
+                      {weeks.map(w => {
+                        const wnet = w.income - w.expense
                         return (
-                          <td key={c.key} title={v.toLocaleString('vi-VN') + ' ₫'} style={{
-                            ...mTd, background: colBg(c.kind), color,
-                            fontWeight: (mr.kind === 'net' || mr.kind === 'close' || c.kind !== 'month') ? 700 : 500,
-                          }}>{v === 0 ? '—' : VND(v)}</td>
+                          <div key={w.label} style={{ background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: 9, padding: '9px 12px' }}>
+                            <div style={{ fontSize: 10.5, color: FAINT, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 5 }}>{w.label}</div>
+                            <div style={wkRow}><span>Thu</span><span style={{ ...num, color: GREEN }}>{fmtShort(w.income)}</span></div>
+                            <div style={wkRow}><span>Chi</span><span style={{ ...num, color: EXP }}>{fmtShort(w.expense)}</span></div>
+                            <div style={wkRow}><span>Chênh lệch</span><span style={{ ...num, color: wnet >= 0 ? GREEN : CORAL }}>{wnet >= 0 ? '+' : ''}{fmtShort(wnet)}</span></div>
+                          </div>
                         )
                       })}
+                    </div>
+                  )}
+
+                  {(bad || thin) && (
+                    <div style={{ marginTop: 12, background: bad ? '#FEF2F2' : '#FFFBEB', border: `1px solid ${bad ? '#FCA5A5' : '#FDE68A'}`, borderRadius: 10, padding: '11px 14px', fontSize: 12.5, color: bad ? '#7F1D1D' : '#78350F', display: 'flex', gap: 9 }}>
+                      <span>💡</span>
+                      <span>
+                        {bad ? 'Âm quỹ ' : 'Quỹ mỏng '}<b>{fmt(bad ? -m.closing : safety - m.closing)}</b> ở tháng này.
+                        {topExp && <> Hạng mục chi lớn nhất: <b>{topExp.name}</b> ({fmt(topExp.amt)}). Gợi ý: cắt 10–15% mục này (~{fmt(topExp.amt * 0.12)}), đẩy nhanh thu đúng hạn hoặc chuẩn bị nguồn bù.</>}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Cảnh báo: khoản quá hạn + kỳ thiếu hụt ── */}
+      <div style={{ ...panel, borderColor: (overdue.length || riskMonths.length) ? '#FCA5A5' : '#BBF7D0', padding: '18px 20px' }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: (overdue.length || riskMonths.length) ? CORAL : GREEN, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <span>⚠</span> Cảnh báo dòng tiền
+        </div>
+        <div style={{ fontSize: 12.5, color: DIM, marginBottom: 14 }}>Khoản quá hạn cần xử lý và các kỳ chi vượt/âm quỹ, kèm gợi ý.</div>
+
+        {overdue.length > 0 && (
+          <div style={{ marginBottom: riskMonths.length ? 16 : 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: FAINT, letterSpacing: '.04em', marginBottom: 7 }}>
+              QUÁ HẠN CHƯA THU/CHI · {overdue.length} khoản
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <tbody>
+                  {overdue.map(o => (
+                    <tr key={`${o.docMonth}-${o.id}`} style={{ borderTop: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '6px 8px 6px 0', color: CORAL, fontWeight: 600, whiteSpace: 'nowrap', ...num }}>
+                        {o.ngay}<span style={{ color: FAINT, fontWeight: 500 }}> · trễ {o.daysLate}d{o.roll_count ? ` · dời ${o.roll_count}×` : ''}</span>
+                      </td>
+                      <td style={{ padding: '6px 8px', color: '#1F2937' }}>{o.dien_giai || '—'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: o.nhom === 'B' ? GREEN : EXP, ...num }}>
+                        {(o.nhom === 'B' ? '+' : '−') + fmtShort(amountOf(o))}
+                      </td>
+                      <td style={{ padding: '6px 0 6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button onClick={() => deferItem(o)} disabled={busyId === o.id} style={actBtn('#FFF7ED', EXP, '#FED7AA', busyId === o.id)}>↪ Dời {DEFER_LABEL[viewMode]}</button>
+                        <button onClick={() => markDone(o)} disabled={busyId === o.id} style={{ ...actBtn('#ECFDF5', GREEN, '#86EFAC', busyId === o.id), marginLeft: 6 }}>✓ Đã xong</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )
-      )}
+          </div>
+        )}
 
-      {/* ── Bảng dòng tiền theo thời gian (Ngày / Tuần / Tháng) ── */}
-      {!isMatrix && periodRows.length === 0 && !loading && (
-        <div style={{ textAlign: 'center', padding: 36, color: '#94A3B8', fontSize: 13 }}>
-          {view === 'day' || view === 'week'
-            ? 'Chưa có khoản thu/chi nào đặt ngày dự kiến trong tháng này. Thêm ngày ở tab Kế hoạch & Thực hiện.'
-            : 'Đang tải dữ liệu…'}
-        </div>
-      )}
-
-      {!isMatrix && rows.length > 0 && (
-        <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #E5E7EB' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, background: '#fff' }}>
-            <thead>
-              <tr>
-                <th style={{ ...TH, textAlign: 'left' }}>Kỳ</th>
-                <th style={TH}>Thu</th>
-                <th style={TH}>Chi</th>
-                <th style={{ ...TH, minWidth: 160 }}>Tồn cuối kỳ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => {
-                const neg = row.closingBal < 0
-                const thin = !neg && row.key !== 'unscheduled' && row.closingBal < safety
-                return (
-                  <>
-                    <tr key={row.key}
-                      onClick={() => row.items.length > 0 && toggleExpand(row.key)}
-                      style={{ background: row.isCurrent ? '#FEFCE8' : 'transparent', cursor: row.items.length > 0 ? 'pointer' : 'default' }}>
-                      <td style={TD({ textAlign: 'left', fontWeight: 700, color: '#1C3557' })}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          {row.items.length > 0 && <span style={{ fontSize: 9, color: '#CBD5E1' }}>{expanded.has(row.key) ? '▼' : '▶'}</span>}
-                          {row.label}
-                          {row.isCurrent && <span style={{ fontSize: 9.5, fontWeight: 700, color: '#92400E', background: '#FEF9C3', padding: '1px 6px', borderRadius: 10 }}>hiện tại</span>}
-                        </span>
-                      </td>
-                      <td style={TD({ color: '#166534', fontWeight: 600 })}>{row.thu ? VND_FULL(row.thu) : <span style={{ color: '#CBD5E1' }}>—</span>}</td>
-                      <td style={TD({ color: '#334155', fontWeight: 600 })}>{row.chi ? VND_FULL(row.chi) : <span style={{ color: '#CBD5E1' }}>—</span>}</td>
-                      <td style={TD({ fontWeight: 700, color: neg ? '#B91C1C' : thin ? '#D97706' : '#1C3557' })}>
-                        {VND_FULL(row.closingBal)}
-                        {neg && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: '#991B1B', background: '#FEE2E2', padding: '1px 6px', borderRadius: 10 }}>âm</span>}
-                        {thin && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: '#92400E', background: '#FEF3C7', padding: '1px 6px', borderRadius: 10 }}>mỏng</span>}
-                      </td>
-                    </tr>
-                    {expanded.has(row.key) && row.items.map(item => (
-                      <tr key={item.id} style={{ background: '#F8FAFC' }}>
-                        <td style={{ padding: '5px 12px 5px 30px', fontSize: 11.5, color: '#475569' }} colSpan={2}>
-                          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginRight: 6, background: item.nhom === 'B' ? '#22C55E' : '#94A3B8' }} />
-                          {item.dien_giai}{item.ngay && <span style={{ marginLeft: 8, fontSize: 10.5, color: '#94A3B8' }}>{item.ngay}</span>}
-                        </td>
-                        <td colSpan={2} style={{ padding: '5px 12px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: item.nhom === 'B' ? '#166534' : '#334155' }}>
-                          {item.nhom === 'B' ? '+' : '−'}{VND_FULL(item.so)}
-                        </td>
-                      </tr>
-                    ))}
-                  </>
-                )
-              })}
-              <tr style={{ background: '#1C3557', color: '#fff', fontWeight: 700 }}>
-                <td style={{ padding: '9px 12px', textAlign: 'left' }}>Tổng {scopeLabel}</td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: '#86EFAC' }}>+{VND_FULL(totalThu)}</td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: '#CBD5E1' }}>−{VND_FULL(totalChi)}</td>
-                <td style={{ padding: '9px 12px', textAlign: 'right' }}>{VND_FULL(endingBal)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
+        {riskMonths.length > 0 ? (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: FAINT, letterSpacing: '.04em', marginBottom: 7 }}>
+              KỲ THIẾU HỤT / RỦI RO · ngưỡng an toàn ≈ {fmtShort(safety)} ₫
+            </div>
+            {riskMonths.map(m => {
+              const d = detailFor(m.idx)
+              const top = d.expense[0]
+              const bad = m.closing < 0
+              return (
+                <div key={m.idx} style={{ borderTop: '1px solid #F1F5F9', padding: '11px 0', display: 'grid', gridTemplateColumns: '140px 1fr', gap: 16 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13.5, color: INK }}>{MONTH_FULL[m.idx]}</div>
+                    <div style={{ ...num, fontSize: 12.5, color: bad ? CORAL : AMBER, marginTop: 3 }}>{bad ? 'Âm quỹ' : 'Quỹ mỏng'} {fmt(bad ? -m.closing : safety - m.closing)}</div>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: DIM, lineHeight: 1.6 }}>
+                    Tồn cuối kỳ <b style={{ color: balColor(m.closing) }}>{fmt(m.closing)}</b>.
+                    {top && <> Chi lớn nhất: <b style={{ color: INK }}>{top.name}</b> ({fmt(top.amt)}).</>}
+                    {' '}Đề xuất: giảm 10–15% mục lớn, dời khoản không thiết yếu sang kỳ sau, hoặc chuẩn bị nguồn bù ~{fmt(Math.abs(bad ? -m.closing : safety - m.closing) * 1.1)}.
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : overdue.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: GREEN }}>✓ Không có khoản quá hạn và không có kỳ nào thiếu hụt trong phạm vi đang chọn.</div>
+        ) : null}
+      </div>
     </div>
   )
+}
+
+function colLbl(c: string): CSSProperties {
+  return { fontSize: 10, textTransform: 'uppercase', letterSpacing: '.06em', color: c, marginBottom: 3 }
+}
+function detailHdr(c: string): CSSProperties {
+  return { fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.07em', color: c, fontWeight: 700, marginBottom: 8 }
+}
+const catLine: CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 12.5, borderBottom: '1px dashed #F1F5F9' }
+const wkRow: CSSProperties = { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3, color: '#475569' }
+function actBtn(bg: string, color: string, border: string, busy: boolean): CSSProperties {
+  return { padding: '3px 10px', fontSize: 11, fontWeight: 700, borderRadius: 6, background: bg, color, border: `1px solid ${border}`, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit' }
 }
