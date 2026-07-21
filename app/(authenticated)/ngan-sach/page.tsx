@@ -350,6 +350,7 @@ export default function NganSachPage() {
       {tab === 'ke-hoach' && (
         <TabKeHoach
           data={localData}
+          month={month}
           onChange={setLocalData}
           onSave={handleSave}
           saving={saving}

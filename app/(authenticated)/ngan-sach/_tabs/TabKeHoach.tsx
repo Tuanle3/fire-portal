@@ -1,10 +1,110 @@
 'use client'
 import { useState, useRef, useMemo } from 'react'
 import * as XLSX from 'xlsx'
-import { NganSachThang, NganSachItem, GiaiPhap } from '@/lib/ngan-sach-types'
-import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup, makeDefault } from '@/lib/ngan-sach-store'
+import { NganSachThang, NganSachItem, GiaiPhap, DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
+import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup } from '@/lib/ngan-sach-store'
 
-function parseExcel(file: File): Promise<{ items: NganSachItem[]; giai_phap: GiaiPhap[] }> {
+// Sinh file mẫu Excel ở client theo đúng cấu trúc tháng đang chọn.
+// - Nội dung gốc = các dòng đã lưu của tháng (đã gồm phần tích luỹ qua các tháng).
+// - Tự bổ sung các mã KMCP đã khai báo (DEFAULT_ITEMS) nếu tháng đó còn thiếu.
+// - Chỉ nhập cột "Kế hoạch"; cột "Thực hiện" để hệ thống tự lấy từ Quỹ.
+function buildExportItems(items: NganSachItem[]): NganSachItem[] {
+  const present = new Set(items.filter(i => i.kmcp).map(i => i.kmcp))
+  const result = [...items]
+  const missing = DEFAULT_ITEMS.filter(d => !d.is_section && d.kmcp && !present.has(d.kmcp))
+  for (const m of missing) {
+    // Chèn vào cuối section cùng nhóm (trước section kế tiếp)
+    let insertAt = result.length
+    for (let i = result.length - 1; i >= 0; i--) {
+      if (result[i].nhom === m.nhom) { insertAt = i + 1; break }
+    }
+    result.splice(insertAt, 0, { ...m, id: `auto-${m.kmcp}` })
+  }
+  return result
+}
+
+function downloadTemplate(data: NganSachThang, month: string) {
+  const items = buildExportItems(data.items)
+
+  // ── Sheet 1: Kế hoạch ──
+  const aoa: (string | number)[][] = [
+    ['KẾ HOẠCH DÒNG TIỀN - NHẬP DỮ LIỆU', '', '', '', '', ''],
+    ['STT', 'Diễn giải', 'KMCP', 'Kế hoạch (₫)', 'Thực hiện (₫)', 'Ghi chú'],
+  ]
+  for (const it of items) {
+    const isComputed = it.is_section || it.is_group  // section/nhóm: hệ thống tự tính tổng
+    aoa.push([
+      it.stt,
+      it.dien_giai,
+      it.is_section ? '' : it.kmcp,
+      isComputed ? 0 : it.ke_hoach,   // chỉ dòng chi tiết mới có Kế hoạch
+      0,                              // Thực hiện: tự động cập nhật trong app
+      it.ghi_chu ?? '',
+    ])
+  }
+  for (let i = 0; i < 5; i++) aoa.push(['', '', '', 0, 0, ''])  // dòng trống để thêm mục tuỳ ý
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }]
+  ws['!cols'] = [{ wch: 6 }, { wch: 42 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 30 }]
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Kế hoạch')
+
+  // ── Sheet 2: Giải pháp ──
+  const gpAoa: (string | number)[][] = [
+    ['GIẢI PHÁP CÂN ĐỐI DÒNG TIỀN', '', '', '', ''],
+    ['Trạng thái (yes/no/?)', 'Mô tả giải pháp', 'Số tiền kế hoạch (₫)', 'Đã thực hiện (₫)', 'Ghi chú / Tiến độ'],
+  ]
+  if (data.giai_phap.length) {
+    for (const gp of data.giai_phap) {
+      const tt = gp.trang_thai === 'yes' ? 'yes' : gp.trang_thai === 'no' ? 'no' : '?'
+      gpAoa.push([tt, gp.mo_ta, gp.so_tien_ke_hoach, gp.so_tien_thuc_hien, gp.ghi_chu])
+    }
+  } else {
+    for (let i = 0; i < 5; i++) gpAoa.push(['?', '', 0, 0, ''])
+  }
+  const ws2 = XLSX.utils.aoa_to_sheet(gpAoa)
+  ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }]
+  ws2['!cols'] = [{ wch: 18 }, { wch: 45 }, { wch: 22 }, { wch: 22 }, { wch: 40 }]
+  XLSX.utils.book_append_sheet(wb, ws2, 'Giải pháp')
+
+  // ── Sheet 3: Hướng dẫn ──
+  const ws3 = XLSX.utils.aoa_to_sheet([
+    ['HƯỚNG DẪN NHẬP LIỆU'],
+    [''],
+    [`Mẫu sinh theo cấu trúc tháng ${month} (đã gồm các mã KMCP đã khai báo còn thiếu).`],
+    [''],
+    ['Sheet "Kế hoạch"'],
+    ['• Chỉ cần nhập cột "Kế hoạch (₫)" cho từng dòng chi tiết.'],
+    ['• Cột "Thực hiện (₫)" KHÔNG cần nhập — hệ thống tự lấy số thực tế từ Quỹ (data_quy) theo mã KMCP.'],
+    ['• Dòng section (A, B, C, D) và dòng nhóm: hệ thống tự tính tổng, không cần nhập.'],
+    ['• Có thể thêm dòng mới ở cuối; nhớ điền KMCP nếu muốn khớp số thực hiện tự động.'],
+    ['• Nhập số tiền dạng số nguyên (VD: 175466148, không có dấu phẩy).'],
+    ['• Không đổi thứ tự / xoá các dòng section (A, B, C, D) — hệ thống cần để nhận dạng.'],
+    [''],
+    ['Sheet "Giải pháp"'],
+    ['• Cột Trạng thái: yes (xác nhận) / no (bỏ qua) / ? (đang xem xét).'],
+    [''],
+    ['• Sau khi nhập xong, dùng nút "Import Excel" trong ứng dụng để tải lên.'],
+  ])
+  ws3['!cols'] = [{ wch: 92 }]
+  XLSX.utils.book_append_sheet(wb, ws3, 'Hướng dẫn')
+
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `mau-ngan-sach-${month}.xlsx`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+// templateItems = cấu trúc tháng đang chọn → giữ nguyên nhóm / dòng con / section khi import lại
+function parseExcel(file: File, templateItems: NganSachItem[]): Promise<{ items: NganSachItem[]; giai_phap: GiaiPhap[] }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = e => {
@@ -16,8 +116,6 @@ function parseExcel(file: File): Promise<{ items: NganSachItem[]; giai_phap: Gia
         const ws1 = wb.Sheets['Kế hoạch'] ?? wb.Sheets[wb.SheetNames[0]]
         const rows: unknown[][] = XLSX.utils.sheet_to_json(ws1, { header: 1, defval: '' })
         // Row 0 = title, Row 1 = header, Row 2+ = data
-        const template = makeDefault('__parse__')
-        const templateItems = template.items
         const items: NganSachItem[] = []
 
         // Build a lookup: stt → template item, so we preserve is_section / nhom / id
@@ -51,6 +149,9 @@ function parseExcel(file: File): Promise<{ items: NganSachItem[]; giai_phap: Gia
             thuc_hien,
             thuc_hien_manual: tmpl ? !tmpl.is_section && tmpl.nhom !== 'A' : true,
             ghi_chu,
+            ...(tmpl?.is_group ? { is_group: true } : {}),
+            ...(tmpl?.parent_id ? { parent_id: tmpl.parent_id } : {}),
+            ...(tmpl?.ngay_du_kien ? { ngay_du_kien: tmpl.ngay_du_kien } : {}),
           })
         }
 
@@ -77,7 +178,7 @@ function parseExcel(file: File): Promise<{ items: NganSachItem[]; giai_phap: Gia
           }
         }
 
-        resolve({ items: items.length ? items : templateItems, giai_phap })
+        resolve({ items: items.length ? items : [...templateItems], giai_phap })
       } catch (err) {
         reject(err)
       }
@@ -95,6 +196,7 @@ interface TonQuyAcc { stk: string; bank: string; unit: string; dauKy: number; to
 
 interface Props {
   data: NganSachThang
+  month: string
   onChange: (d: NganSachThang) => void
   onSave: () => void
   saving: boolean
@@ -105,7 +207,7 @@ interface Props {
   tonQuyDetail?: TonQuyAcc[]
 }
 
-export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpActual, tonQuySoDu, tonQuyRealtime, tonQuyDetail = [] }: Props) {
+export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = '', kmcpActual, tonQuySoDu, tonQuyRealtime, tonQuyDetail = [] }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showTonQuyDetail, setShowTonQuyDetail] = useState(false)
@@ -124,7 +226,7 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
     setImporting(true)
     setImportMsg('')
     try {
-      const { items, giai_phap } = await parseExcel(file)
+      const { items, giai_phap } = await parseExcel(file, data.items)
       onChange({ ...data, items, giai_phap })
       setImportMsg(`✓ Đã import ${items.length} dòng${giai_phap.length ? ` + ${giai_phap.length} giải pháp` : ''}. Nhớ nhấn Lưu.`)
     } catch (err: unknown) {
@@ -266,18 +368,19 @@ export function TabKeHoach({ data, onChange, onSave, saving, saveMsg = '', kmcpA
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Download template */}
-          <a
-            href="/api/ngan-sach-template"
-            download="mau-ngan-sach.xlsx"
+          {/* Download template — sinh theo cấu trúc tháng đang chọn */}
+          <button
+            onClick={() => downloadTemplate(data, month)}
+            title="Tải mẫu Excel theo cấu trúc tháng đang chọn"
             style={{
               padding: '8px 14px', background: '#F0FDF4', color: '#166534',
               border: '1px solid #86EFAC', borderRadius: 7, fontWeight: 600, fontSize: 12.5,
-              textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5,
+              fontFamily: 'inherit', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
             }}
           >
             ⬇ Tải mẫu Excel
-          </a>
+          </button>
 
           {/* Import button */}
           <input
