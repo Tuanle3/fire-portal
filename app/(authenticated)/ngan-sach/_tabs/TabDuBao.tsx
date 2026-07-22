@@ -191,21 +191,26 @@ export function TabDuBao({ month, localData }: Props) {
   }, [view, scopeMonths, selectedYear, month, localData])
 
   const giaiPhap = useMemo(() => {
-    if (view === 'month') return { items: [] as { mo_ta: string; kh: number; th: number; trang_thai: string; thang: string }[], kh: 0, th: 0 }
     const items: { mo_ta: string; kh: number; th: number; trang_thai: string; thang: string }[] = []
     let kh = 0, th = 0
-    for (const mi of scopeMonths) {
-      const ms = `${selectedYear}-${pad2(mi + 1)}`
-      const doc = ms === month ? localData : scopeDocs.get(ms)
-      if (!doc) continue
+    const scan = (doc: NganSachThang | null | undefined, ms: string) => {
+      if (!doc) return
       for (const gp of doc.giai_phap ?? []) {
         if (!gp.mo_ta?.trim()) continue
         items.push({ mo_ta: gp.mo_ta, kh: gp.so_tien_ke_hoach || 0, th: gp.so_tien_thuc_hien || 0, trang_thai: gp.trang_thai, thang: ms })
         if (gp.trang_thai !== 'no') { kh += gp.so_tien_ke_hoach || 0; th += gp.so_tien_thuc_hien || 0 }
       }
     }
+    if (view === 'month') {
+      scan(planDoc, monthStr)
+    } else {
+      for (const mi of scopeMonths) {
+        const ms = `${selectedYear}-${pad2(mi + 1)}`
+        scan(ms === month ? localData : scopeDocs.get(ms), ms)
+      }
+    }
     return { items, kh, th }
-  }, [view, scopeMonths, selectedYear, month, localData, scopeDocs])
+  }, [view, planDoc, monthStr, scopeMonths, selectedYear, month, localData, scopeDocs])
 
   // ── Nhãn kỳ / tiêu đề ───────────────────────────────────────────────────────────
   const scopeLabel =
@@ -350,51 +355,33 @@ export function TabDuBao({ month, localData }: Props) {
       {renderSection(thu, 'thu', 'I', 'DÒNG TIỀN THU', 'KHOẢN MỤC THU')}
       {renderSection(chi, 'chi', 'II', 'DÒNG TIỀN CHI', 'KHOẢN MỤC CHI')}
 
-      {/* ── III. TÓM TẮT KỲ ── */}
-      <div className="bc-summary">
-        <div className="bc-sum-head">III. TÓM TẮT KỲ {scopeLabel}</div>
+      {/* ── III. TÓM TẮT & CÂN ĐỐI KỲ ── */}
+      <div className="bc-summary" style={{ maxWidth: 640 }}>
+        <div className="bc-sum-head">III. TÓM TẮT & CÂN ĐỐI KỲ · {scopeLabel}</div>
         <div className="bc-sum-body">
-          <SumRow label={`Số dư đầu kỳ`} sub={kyLabel.split(' – ')[0]} value={fmt(summary.opening) + ' đ'} />
+          <SumRow label="Tồn quỹ đầu kỳ" sub={kyLabel.split(' – ')[0]} value={fmt(summary.opening) + ' đ'} />
           <SumRow label="(+) Tổng thu trong kỳ" value={fmt(summary.thu) + ' đ'} color="var(--bc-green)" />
           <SumRow label="(−) Tổng chi trong kỳ" value={fmt(summary.chi) + ' đ'} color="var(--bc-red)" />
-          <SumRow label="(=) Dòng tiền ròng trong kỳ" value={fmtSigned(summary.net) + ' đ'} color={summary.net >= 0 ? 'var(--bc-green)' : 'var(--bc-red)'} strong />
-          <SumRow label="Số dư cuối kỳ" value={fmt(summary.closing) + ' đ'} strong highlight />
+          <SumRow label="(=) Thừa/thiếu tiền" value={fmtSigned(summary.closing) + ' đ'} color={summary.closing < 0 ? 'var(--bc-red)' : 'var(--bc-navy)'} strong highlight />
+
+          {/* Giải pháp cân đối */}
+          {giaiPhap.items.length === 0 ? (
+            <div className="bc-sum-row">
+              <span className="bc-sum-label" style={{ color: '#9ca3af' }}>Giải pháp cân đối: chưa có (nhập ở tab Giải pháp cân đối)</span>
+            </div>
+          ) : giaiPhap.items.map((g, i) => (
+            <div key={i} className="bc-sum-row">
+              <span className="bc-sum-label">
+                <span style={{ color: '#9ca3af', marginRight: 6 }}>↳</span>{g.mo_ta}
+                <span className="bc-sum-sub"> · {g.trang_thai === 'yes' ? 'đã thực hiện' : g.trang_thai === 'no' ? 'không dùng' : 'dự kiến'}</span>
+              </span>
+              <span className="bc-sum-val" style={{ color: g.trang_thai === 'no' ? '#9ca3af' : '#15803d', textDecoration: g.trang_thai === 'no' ? 'line-through' : 'none' }}>{fmt(g.kh)} đ</span>
+            </div>
+          ))}
+          <SumRow label="(+) Giải pháp cân đối" value={fmt(giaiPhap.kh) + ' đ'} color="var(--bc-green)" />
+          <SumRow label="(=) Dòng tiền sau cân đối" value={fmtSigned(summary.closing + giaiPhap.kh) + ' đ'} color={(summary.closing + giaiPhap.kh) < 0 ? 'var(--bc-red)' : 'var(--bc-navy)'} strong highlight />
         </div>
       </div>
-
-      {/* ── IV. GIẢI PHÁP CÂN ĐỐI (chỉ Năm / Quý) ── */}
-      {view !== 'month' && (
-        <div className="bc-summary" style={{ maxWidth: 620, marginTop: 18 }}>
-          <div className="bc-sum-head">IV. GIẢI PHÁP CÂN ĐỐI · {scopeLabel}</div>
-          <div className="bc-sum-body">
-            {giaiPhap.items.length === 0 ? (
-              <div className="bc-sum-row">
-                <span className="bc-sum-label" style={{ color: '#9ca3af' }}>Chưa có giải pháp cân đối trong kỳ (nhập ở tab Giải pháp cân đối).</span>
-              </div>
-            ) : giaiPhap.items.map((g, i) => (
-              <div key={i} className="bc-sum-row">
-                <span className="bc-sum-label">
-                  {g.mo_ta}
-                  <span className="bc-sum-sub"> · {g.trang_thai === 'yes' ? 'đã thực hiện' : g.trang_thai === 'no' ? 'không dùng' : 'dự kiến'}</span>
-                </span>
-                <span className="bc-sum-val" style={{ color: g.trang_thai === 'no' ? '#9ca3af' : '#15803d', textDecoration: g.trang_thai === 'no' ? 'line-through' : 'none' }}>{fmt(g.kh)} đ</span>
-              </div>
-            ))}
-            <div className="bc-sum-row">
-              <span className="bc-sum-label">Thừa/thiếu tiền cuối kỳ</span>
-              <span className="bc-sum-val" style={{ color: summary.closing < 0 ? '#dc2626' : '#1C3557' }}>{fmtSigned(summary.closing)} đ</span>
-            </div>
-            <div className="bc-sum-row">
-              <span className="bc-sum-label">(+) Giải pháp cân đối</span>
-              <span className="bc-sum-val" style={{ color: '#15803d' }}>{fmt(giaiPhap.kh)} đ</span>
-            </div>
-            <div className="bc-sum-row hl">
-              <span className="bc-sum-label" style={{ fontWeight: 700 }}>(=) Dòng tiền sau cân đối</span>
-              <span className="bc-sum-val" style={{ fontWeight: 700, color: (summary.closing + giaiPhap.kh) < 0 ? '#dc2626' : '#1C3557' }}>{fmtSigned(summary.closing + giaiPhap.kh)} đ</span>
-            </div>
-          </div>
-        </div>
-      )}
       </div>
     </div>
   )
