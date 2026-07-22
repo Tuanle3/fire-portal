@@ -34,13 +34,14 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
   const [year, mon] = thang.split('-')
   const thangLabel = `T${parseInt(mon)}.${year}`
 
-  // Collapsed group IDs — default all groups collapsed
-  const [collapsed, setCollapsed] = useState<Set<string>>(
-    () => new Set(items.filter(it => it.is_group).map(it => it.id))
-  )
+  // Expanded group IDs — default empty ⇒ mọi nhóm đóng (+). Người dùng bấm để mở.
+  // Dùng opt-in (expanded) thay vì opt-out (collapsed) vì id của items được sinh lại
+  // mỗi lần dữ liệu tải từ Firebase, nên set khởi tạo theo id ban đầu sẽ không khớp.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [showTonQuyDetail, setShowTonQuyDetail] = useState(false)
   const toggle = (id: string) =>
-    setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+    setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const groupIds = useMemo(() => items.filter(it => it.is_group).map(it => it.id), [items])
 
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
@@ -113,11 +114,18 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
           Kế hoạch dòng tiền {thangLabel}
         </span>
         <span style={{ fontSize: 11.5, color: '#9CA3AF' }}>cập nhật {ngay_cap_nhat}</span>
-        {collapsed.size > 0 && (
-          <button onClick={() => setCollapsed(new Set())}
-            style={{ fontSize: 11, color: '#6B7280', background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>
-            Mở rộng tất cả
-          </button>
+        {groupIds.length > 0 && (
+          expanded.size < groupIds.length ? (
+            <button onClick={() => setExpanded(new Set(groupIds))}
+              style={{ fontSize: 11, color: '#6B7280', background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>
+              Mở rộng tất cả
+            </button>
+          ) : (
+            <button onClick={() => setExpanded(new Set())}
+              style={{ fontSize: 11, color: '#6B7280', background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>
+              Thu gọn tất cả
+            </button>
+          )
         )}
         {unallocatedChi > 0 && (
           <span style={{ fontSize: 11.5, background: '#FEF9C3', color: '#854D0E', padding: '2px 8px', borderRadius: 5, fontWeight: 600 }}>
@@ -152,8 +160,8 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
         </thead>
         <tbody>
           {resolved.map(it => {
-            // Hide children of collapsed groups
-            if (it.parent_id && collapsed.has(it.parent_id)) return null
+            // Hide children of collapsed groups (chỉ hiện khi nhóm cha được mở)
+            if (it.parent_id && !expanded.has(it.parent_id)) return null
 
             // ── MAJOR SECTION (A/B/C/D) ──────────────────────────────────────
             if (it.is_section) {
@@ -242,7 +250,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
             // ── SUB-GROUP HEADER (I/II/III...) ───────────────────────────────
             if (it.is_group) {
               const gt = groupTotals.get(it.id) ?? { kh: 0, th: 0 }
-              const isOpen = !collapsed.has(it.id)
+              const isOpen = expanded.has(it.id)
               const bg = it.nhom === 'B' ? '#DBEAFE' : it.nhom === 'C' ? '#FFEDD5' : '#F3F4F6'
               const conlai = gt.kh - gt.th
               return (
