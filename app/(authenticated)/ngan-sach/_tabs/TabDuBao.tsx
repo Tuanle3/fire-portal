@@ -25,21 +25,14 @@ interface PoolItem {
   roll_count?: number
 }
 
-interface MonthAgg {
-  idx: number               // 0..11
-  thu: number
-  chi: number
-  net: number
-  opening: number
-  closing: number
-  isCurrent: boolean
-}
+// Ô dữ liệu 1 tháng của 1 khoản mục
+type Cell = { plan: number; actual: number; hasActual: boolean; rolledIn: number }
+// Ô đã chuẩn hoá cho hiển thị (actual null = kỳ tương lai / chưa đến kỳ)
+type RowCell = { plan: number; actual: number | null; rolledIn: number }
+interface Leaf { key: string; label: string; nhom: 'B' | 'C'; m: Cell[] }
 
 const MONTH_FULL = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12']
 const MONTH_SHORT = ['Th.1', 'Th.2', 'Th.3', 'Th.4', 'Th.5', 'Th.6', 'Th.7', 'Th.8', 'Th.9', 'Th.10', 'Th.11', 'Th.12']
-const MONO = 'ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace'
-
-const DEFER_LABEL: Record<'week' | 'month', string> = { week: 'tuần sau', month: 'tháng sau' }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function buildPool(monthDocs: Map<string, NganSachThang>): PoolItem[] {
@@ -58,6 +51,7 @@ function buildPool(monthDocs: Map<string, NganSachThang>): PoolItem[] {
   })
   return pool
 }
+const effMonth = (p: PoolItem) => (p.ngay ? p.ngay.slice(0, 7) : p.docMonth)
 function advanceDate(iso: string, mode: 'week' | 'month'): string {
   const [y, m, d] = iso.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
@@ -65,27 +59,49 @@ function advanceDate(iso: string, mode: 'week' | 'month'): string {
   else dt.setMonth(dt.getMonth() + 1)
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
-const fmt = (n: number) => (n < 0 ? '-' : '') + Math.abs(Math.round(n)).toLocaleString('vi-VN') + ' ₫'
-const fmtShort = (n: number) => {
-  const a = Math.abs(n)
-  const s = n < 0 ? '-' : ''
-  if (a >= 1e9) return s + (a / 1e9).toFixed(1).replace(/\.0$/, '') + ' tỷ'
-  if (a >= 1e6) return s + (a / 1e6).toFixed(1).replace(/\.0$/, '') + ' tr'
-  return s + a.toLocaleString('vi-VN')
+// Hiển thị theo đơn vị Triệu ₫ (đồng bộ mẫu: bảng gọn, dễ đọc)
+const fmtM = (n: number | null | undefined) =>
+  n === null || n === undefined ? '—' : Math.round(n / 1e6).toLocaleString('vi-VN')
+
+const zeroRC = (): RowCell => ({ plan: 0, actual: null, rolledIn: 0 })
+function addRC(a: RowCell, b: RowCell): RowCell {
+  return {
+    plan: a.plan + b.plan,
+    actual: a.actual === null && b.actual === null ? null : (a.actual ?? 0) + (b.actual ?? 0),
+    rolledIn: a.rolledIn + b.rolledIn,
+  }
+}
+function subRC(a: RowCell, b: RowCell): RowCell {
+  return {
+    plan: a.plan - b.plan,
+    actual: a.actual === null && b.actual === null ? null : (a.actual ?? 0) - (b.actual ?? 0),
+    rolledIn: 0,
+  }
+}
+// gộp nhiều tháng của 1 khoản mục thành 1 RowCell
+function aggMonths(cells: Cell[], months: number[]): RowCell {
+  let plan = 0, actual = 0, has = false, rolled = 0
+  for (const mi of months) {
+    const c = cells[mi]; if (!c) continue
+    plan += c.plan
+    if (c.hasActual) { actual += c.actual; has = true }
+    rolled += c.rolledIn
+  }
+  return { plan, actual: has ? actual : null, rolledIn: rolled }
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
 export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActual }: Props) {
   const curYear = parseInt(month.split('-')[0])
-  const curMon  = parseInt(month.split('-')[1])
+  const curMon = parseInt(month.split('-')[1])   // 1..12
 
   const [selectedYear, setSelectedYear] = useState(curYear)
-  const [quarter, setQuarter]   = useState<'all' | number>('all')  // 0..3
-  const [monthSel, setMonthSel] = useState<'all' | number>('all')  // 0..11
-  const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
+  const [view, setView] = useState<'year' | 'quarter' | 'month'>('year')
+  const [quarter, setQuarter] = useState(Math.ceil(curMon / 3))  // 1..4
+  const [monthSel, setMonthSel] = useState(curMon)               // 1..12
   const [monthDocs, setMonthDocs] = useState<Map<string, NganSachThang>>(new Map())
   const [loading, setLoading] = useState(false)
-  const [openRows, setOpenRows] = useState<Set<number>>(new Set())
+  const [collapsed, setCollapsed] = useState<{ thu: boolean; chi: boolean }>({ thu: false, chi: false })
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const todayISO = useMemo(() => {
@@ -93,7 +109,7 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
   }, [])
 
-  // ── Load 12 tháng của năm đang chọn (+ năm của tháng topbar) ────────────────
+  // ── Load 12 tháng của năm đang chọn (+ năm của tháng topbar) ──────────────────
   useEffect(() => {
     const years = new Set<number>([selectedYear, parseInt(month.split('-')[0])])
     const need: string[] = []
@@ -114,7 +130,6 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
 
   const pool = useMemo(() => buildPool(monthDocs), [monthDocs])
 
-  const effMonth = (p: PoolItem) => (p.ngay ? p.ngay.slice(0, 7) : p.docMonth)
   const amountOf = (p: PoolItem) => {
     if (effMonth(p) === month && p.kmcp && kmcpActual[p.kmcp] !== undefined) return kmcpActual[p.kmcp]
     return p.ke_hoach
@@ -123,81 +138,140 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
     if (p.done_override === true) return true
     if (p.ke_hoach > 0 && p.thuc_hien >= p.ke_hoach * 0.9) return true
     if (effMonth(p) === month && p.kmcp && p.ke_hoach > 0 &&
-        kmcpActual[p.kmcp] !== undefined && kmcpActual[p.kmcp] >= p.ke_hoach * 0.9) return true
+      kmcpActual[p.kmcp] !== undefined && kmcpActual[p.kmcp] >= p.ke_hoach * 0.9) return true
     return false
   }
 
-  // Tổng hợp 12 tháng của selectedYear (thu/chi + tồn đầu/cuối kỳ nối tiếp)
-  const monthsAgg = useMemo((): MonthAgg[] => {
+  // ── Gom pool → khoản mục (leaf) × 12 tháng của selectedYear ────────────────────
+  const leaves = useMemo((): Leaf[] => {
     const yStr = String(selectedYear)
-    const bc = Array.from({ length: 12 }, () => ({ B: 0, C: 0 }))
+    // tháng "đã chốt" (có số thực hiện) so với năm/tháng hiện tại
+    const isClosed = (mi: number) =>
+      selectedYear < curYear || (selectedYear === curYear && mi <= curMon - 1)
+    const map = new Map<string, Leaf>()
     for (const p of pool) {
       const em = effMonth(p)
       if (em.slice(0, 4) !== yStr) continue
       const mi = parseInt(em.slice(5, 7)) - 1
       if (mi < 0 || mi > 11) continue
-      const v = amountOf(p)
-      if (v === 0) continue
-      if (p.nhom === 'B') bc[mi].B += v; else bc[mi].C += v
+      const label = p.dien_giai || '(không tên)'
+      const key = p.nhom + '|' + label
+      let lf = map.get(key)
+      if (!lf) {
+        lf = { key, label, nhom: p.nhom, m: Array.from({ length: 12 }, () => ({ plan: 0, actual: 0, hasActual: false, rolledIn: 0 })) }
+        map.set(key, lf)
+      }
+      const c = lf.m[mi]
+      c.plan += p.ke_hoach
+      if (isClosed(mi)) {
+        const act = em === month && p.kmcp && kmcpActual[p.kmcp] !== undefined ? kmcpActual[p.kmcp] : p.thuc_hien
+        c.actual += act
+        c.hasActual = true
+      }
+      if ((p.roll_count ?? 0) > 0) c.rolledIn += p.ke_hoach
     }
-    const anchorIdx = selectedYear === curYear ? curMon - 1 : -1
-    const openings = new Array(12).fill(0)
-    if (anchorIdx >= 0) {
-      openings[anchorIdx] = tonDauKy
-      for (let i = anchorIdx - 1; i >= 0; i--) openings[i] = openings[i + 1] - bc[i].B + bc[i].C
-      for (let i = anchorIdx + 1; i < 12; i++) openings[i] = openings[i - 1] + bc[i - 1].B - bc[i - 1].C
-    } else {
-      for (let i = 1; i < 12; i++) openings[i] = openings[i - 1] + bc[i - 1].B - bc[i - 1].C
-    }
-    const todayM = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-    return bc.map((c, i) => ({
-      idx: i, thu: c.B, chi: c.C, net: c.B - c.C,
-      opening: openings[i], closing: openings[i] + c.B - c.C,
-      isCurrent: `${selectedYear}-${String(i + 1).padStart(2, '0')}` === todayM,
-    }))
+    const yearPlan = (l: Leaf) => l.m.reduce((s, c) => s + c.plan, 0)
+    return [...map.values()].sort((a, b) => yearPlan(b) - yearPlan(a))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, selectedYear, tonDauKy, month, curYear, curMon, kmcpActual])
+  }, [pool, selectedYear, month, kmcpActual, curYear, curMon])
 
-  // Chi tiết hạng mục 1 tháng (gộp theo diễn giải)
-  const detailFor = (i: number) => {
-    const mk = `${selectedYear}-${String(i + 1).padStart(2, '0')}`
-    const inc = new Map<string, number>(), exp = new Map<string, number>()
-    for (const p of pool) {
-      if (effMonth(p) !== mk) continue
-      const v = amountOf(p)
-      if (v === 0) continue
-      const map = p.nhom === 'B' ? inc : exp
-      const key = p.dien_giai || '(không tên)'
-      map.set(key, (map.get(key) ?? 0) + v)
-    }
-    const toArr = (m: Map<string, number>) => [...m].map(([name, amt]) => ({ name, amt })).sort((a, b) => b.amt - a.amt)
-    return { income: toArr(inc), expense: toArr(exp) }
-  }
-
-  // Chia tuần trong 1 tháng (theo ngày dự kiến; khoản chưa có ngày gộp riêng)
-  const weeksFor = (i: number) => {
-    const mk = `${selectedYear}-${String(i + 1).padStart(2, '0')}`
-    const wk = new Map<number, { income: number; expense: number }>()
-    let uns = { income: 0, expense: 0 }; let hasUns = false
-    for (const p of pool) {
-      const v = amountOf(p)
-      if (v === 0) continue
-      if (p.ngay && p.ngay.slice(0, 7) === mk) {
-        const w = Math.ceil(parseInt(p.ngay.slice(8, 10)) / 7)
-        const cur = wk.get(w) ?? { income: 0, expense: 0 }
-        if (p.nhom === 'B') cur.income += v; else cur.expense += v
-        wk.set(w, cur)
-      } else if (!p.ngay && p.docMonth === mk) {
-        if (p.nhom === 'B') uns.income += v; else uns.expense += v
-        hasUns = true
+  // ── Thống kê cả năm (cho KPI + tồn quỹ đầu năm) ────────────────────────────────
+  const yearStat = useMemo(() => {
+    let thuPlan = 0, thuAct = 0, chiPlan = 0, chiAct = 0
+    const thuV = new Array(12).fill(0), chiV = new Array(12).fill(0)
+    for (const l of leaves) {
+      for (let mi = 0; mi < 12; mi++) {
+        const c = l.m[mi]
+        const val = c.hasActual ? c.actual : c.plan
+        if (l.nhom === 'B') { thuPlan += c.plan; if (c.hasActual) thuAct += c.actual; thuV[mi] += val }
+        else { chiPlan += c.plan; if (c.hasActual) chiAct += c.actual; chiV[mi] += val }
       }
     }
-    const arr = [...wk.entries()].sort((a, b) => a[0] - b[0]).map(([w, v]) => ({ label: `Tuần ${w}`, ...v }))
-    if (hasUns) arr.push({ label: 'Chưa có ngày', ...uns })
-    return arr
-  }
+    const net = thuV.map((v, i) => v - chiV[i])
+    const openings = new Array(12).fill(0)
+    const anchor = selectedYear === curYear ? curMon - 1 : -1
+    if (anchor >= 0) {
+      openings[anchor] = tonDauKy
+      for (let i = anchor - 1; i >= 0; i--) openings[i] = openings[i + 1] - net[i]
+      for (let i = anchor + 1; i < 12; i++) openings[i] = openings[i - 1] + net[i - 1]
+    } else {
+      for (let i = 1; i < 12; i++) openings[i] = openings[i - 1] + net[i - 1]
+    }
+    return { thuPlan, thuAct, chiPlan, chiAct, openingYear: openings[0] }
+  }, [leaves, selectedYear, tonDauKy, curYear, curMon])
 
-  // Khoản quá hạn (mọi doc): có ngày < hôm nay & chưa xong
+  // ── Mô hình bảng theo chế độ xem ───────────────────────────────────────────────
+  const model = useMemo(() => {
+    let cols: { key: string; label: string }[]
+    let totalLabel: string
+    let cellOf: (l: Leaf, colKey: string) => RowCell
+    let totalOf: (l: Leaf) => RowCell
+
+    if (view === 'year') {
+      cols = [1, 2, 3, 4].map(q => ({ key: 'Q' + q, label: 'Quý ' + q }))
+      totalLabel = 'Cả năm'
+      cellOf = (l, k) => { const q = parseInt(k.slice(1)) - 1; return aggMonths(l.m, [q * 3, q * 3 + 1, q * 3 + 2]) }
+      totalOf = (l) => aggMonths(l.m, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    } else if (view === 'quarter') {
+      const ms = [(quarter - 1) * 3, (quarter - 1) * 3 + 1, (quarter - 1) * 3 + 2]
+      cols = ms.map(m => ({ key: 'M' + m, label: MONTH_SHORT[m] }))
+      totalLabel = 'Quý ' + quarter
+      cellOf = (l, k) => aggMonths(l.m, [parseInt(k.slice(1))])
+      totalOf = (l) => aggMonths(l.m, ms)
+    } else {
+      // month view → chia theo tuần (dựa vào ngày dự kiến)
+      const mi = monthSel - 1
+      const yStr = String(selectedYear)
+      const isClosed = selectedYear < curYear || (selectedYear === curYear && mi <= curMon - 1)
+      const wkPlan = new Map<string, Record<string, { plan: number; rolled: number }>>()
+      let hasU = false
+      for (const p of pool) {
+        const em = effMonth(p)
+        if (em.slice(0, 4) !== yStr || parseInt(em.slice(5, 7)) - 1 !== mi) continue
+        const label = p.dien_giai || '(không tên)'
+        const key = p.nhom + '|' + label
+        const wk = p.ngay ? 'W' + Math.min(4, Math.max(1, Math.ceil(parseInt(p.ngay.slice(8, 10)) / 7))) : 'U'
+        if (wk === 'U') hasU = true
+        const rec = wkPlan.get(key) ?? {}
+        const cur = rec[wk] ?? { plan: 0, rolled: 0 }
+        cur.plan += p.ke_hoach
+        if ((p.roll_count ?? 0) > 0) cur.rolled += p.ke_hoach
+        rec[wk] = cur; wkPlan.set(key, rec)
+      }
+      cols = [1, 2, 3, 4].map(w => ({ key: 'W' + w, label: 'Tuần ' + w }))
+      if (hasU) cols.push({ key: 'U', label: 'Chưa xếp' })
+      totalLabel = MONTH_FULL[mi]
+      cellOf = (l, k) => {
+        const rec = wkPlan.get(l.key) ?? {}
+        const wp = rec[k]?.plan ?? 0
+        const wr = rec[k]?.rolled ?? 0
+        const mp = l.m[mi].plan, ma = l.m[mi].actual, mHas = l.m[mi].hasActual && isClosed
+        // TH tuần = phân bổ theo tỉ trọng kế hoạch (số thực nằm ở cột Tổng)
+        const actual = mHas ? (mp > 0 ? ma * (wp / mp) : 0) : null
+        return { plan: wp, actual, rolledIn: wr }
+      }
+      totalOf = (l) => aggMonths(l.m, [mi])
+    }
+
+    const buildGroup = (type: 'thu' | 'chi', label: string) => {
+      const gl = leaves.filter(l => (type === 'thu' ? l.nhom === 'B' : l.nhom === 'C'))
+      const items = gl.map(l => ({
+        label: l.label,
+        cells: cols.map(c => cellOf(l, c.key)),
+        total: totalOf(l),
+      }))
+      const totalCells = cols.map((_, ci) => items.reduce((acc, it) => addRC(acc, it.cells[ci]), zeroRC()))
+      const total = items.reduce((acc, it) => addRC(acc, it.total), zeroRC())
+      return { type, label, items, totalCells, total }
+    }
+    const thu = buildGroup('thu', 'THU — Nguồn thu')
+    const chi = buildGroup('chi', 'CHI — Nhu cầu chi')
+    const netCells = cols.map((_, ci) => subRC(thu.totalCells[ci], chi.totalCells[ci]))
+    const grandNet = subRC(thu.total, chi.total)
+    return { cols, totalLabel, thu, chi, netCells, grandNet }
+  }, [leaves, pool, view, quarter, monthSel, selectedYear, curYear, curMon])
+
+  // ── Khoản quá hạn (mọi doc): có ngày < hôm nay & chưa xong ─────────────────────
   const overdue = useMemo(() => pool
     .filter(p => p.ngay && p.ngay < todayISO && !isDone(p))
     .map(p => ({ ...p, daysLate: Math.max(0, Math.round((new Date(todayISO).getTime() - new Date(p.ngay!).getTime()) / 86400000)) }))
@@ -205,7 +279,7 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
     // eslint-disable-next-line react-hooks/exhaustive-deps
   , [pool, todayISO, month, kmcpActual])
 
-  // ── Ghi 1 doc ────────────────────────────────────────────────────────────────
+  // ── Ghi 1 doc ──────────────────────────────────────────────────────────────────
   const patchItem = async (docMonth: string, id: string, patch: Record<string, unknown>) => {
     const doc = monthDocs.get(docMonth)
     if (!doc) return
@@ -215,284 +289,324 @@ export function TabDuBao({ month, localData, tonDauKy, tonQuyRealtime, kmcpActua
     try { await saveNganSach(updated) } catch { /* giữ state local nếu lỗi mạng */ }
     finally { setBusyId(null) }
   }
+  const deferMode = view === 'month' ? 'week' : 'month'
   const deferItem = (o: PoolItem) =>
-    patchItem(o.docMonth, o.id, { ngay_du_kien: advanceDate(o.ngay!, viewMode), roll_count: (o.roll_count ?? 0) + 1 })
+    patchItem(o.docMonth, o.id, { ngay_du_kien: advanceDate(o.ngay!, deferMode), roll_count: (o.roll_count ?? 0) + 1 })
   const markDone = (o: PoolItem) => patchItem(o.docMonth, o.id, { done_override: true })
 
-  // ── Phạm vi kỳ đang chọn ────────────────────────────────────────────────────
-  const monthIdxs = useMemo(() => {
-    if (monthSel !== 'all') return [monthSel]
-    if (quarter === 'all') return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-    return [quarter * 3, quarter * 3 + 1, quarter * 3 + 2]
-  }, [monthSel, quarter])
-
-  const safety = Math.max(0, Math.round((tonDauKy || tonQuyRealtime) * 0.15))
-  const sel = monthIdxs.map(i => monthsAgg[i]).filter(Boolean)
-  const totalThu = sel.reduce((s, m) => s + m.thu, 0)
-  const totalChi = sel.reduce((s, m) => s + m.chi, 0)
-  const net = totalThu - totalChi
-  const endingBal = sel.length ? sel[sel.length - 1].closing : (tonDauKy || tonQuyRealtime)
-  const riskMonths = sel.filter(m => m.closing < safety)
-  const periodLabel = monthSel !== 'all' ? `${MONTH_FULL[monthSel as number]} · ${selectedYear}`
-    : quarter === 'all' ? `Năm ${selectedYear}` : `Quý ${(quarter as number) + 1} · ${selectedYear}`
-
-  const toggleRow = (i: number) =>
-    setOpenRows(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s })
-
-  // ── styles (nền sáng, đồng bộ app) ──────────────────────────────────────────
-  const INK = '#1C3557', DIM = '#64748B', FAINT = '#94A3B8'
-  const GREEN = '#15803D', CORAL = '#B91C1C', AMBER = '#D97706', EXP = '#9A3412'
-  const panel: CSSProperties = { background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14 }
-  const chip = (active: boolean): CSSProperties => ({
-    border: `1px solid ${active ? INK : '#E5E7EB'}`, background: active ? INK : '#fff',
-    color: active ? '#fff' : DIM, padding: '6px 13px', borderRadius: 20, fontSize: 12.5, fontWeight: 600,
-    cursor: 'pointer', fontFamily: 'inherit',
-  })
-  const num: CSSProperties = { fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }
-  const balColor = (v: number) => v < 0 ? CORAL : v < safety ? AMBER : INK
+  // ── KPI (cả năm) ───────────────────────────────────────────────────────────────
+  const netPlanY = yearStat.thuPlan - yearStat.chiPlan
+  const netActY = yearStat.thuAct - yearStat.chiAct
+  const kpis: {
+    label: string; value: string; pct?: number; color?: string; sub?: string; subTone?: 'pos' | 'neg'; accent?: boolean
+  }[] = [
+    { label: `Tổng thu · KH ${selectedYear}`, value: fmtM(yearStat.thuPlan), pct: yearStat.thuPlan ? yearStat.thuAct / yearStat.thuPlan * 100 : 0, color: 'var(--green)', sub: `Thực hiện ${fmtM(yearStat.thuAct)} tr₫` },
+    { label: `Tổng chi · KH ${selectedYear}`, value: fmtM(yearStat.chiPlan), pct: yearStat.chiPlan ? yearStat.chiAct / yearStat.chiPlan * 100 : 0, color: 'var(--red)', sub: `Thực hiện ${fmtM(yearStat.chiAct)} tr₫` },
+    { label: 'Dòng tiền ròng · TH', value: fmtM(netActY), sub: `Kế hoạch ${fmtM(netPlanY)} tr₫`, subTone: netActY >= netPlanY ? 'pos' : 'neg' },
+    { label: `Tồn quỹ đầu ${selectedYear}`, value: fmtM(yearStat.openingYear), sub: 'Số dư đầu kỳ ước tính' },
+    { label: 'Tồn quỹ hiện tại', value: fmtM(tonQuyRealtime), sub: 'Số dư thực tế', accent: true },
+  ]
 
   const YEARS = [curYear - 2, curYear - 1, curYear, curYear + 1, curYear + 2]
+  const toggle = (t: 'thu' | 'chi') => setCollapsed(p => ({ ...p, [t]: !p[t] }))
+
+  // ── Ô số KH/TH ─────────────────────────────────────────────────────────────────
+  function RC({ rc, good }: { rc: RowCell; good: boolean }) {
+    if (rc.plan === 0 && (rc.actual === null || rc.actual === 0))
+      return <div className="du-pair"><span className="du-future">—</span></div>
+    if (rc.actual === null)
+      return <div className="du-pair"><span className="du-plan">{fmtM(rc.plan)}</span><span className="du-future">chưa đến kỳ</span></div>
+    const delta = rc.actual - rc.plan
+    const fav = good ? delta >= 0 : delta <= 0
+    return (
+      <div className="du-pair">
+        <span className="du-plan">KH {fmtM(rc.plan)}</span>
+        <span className="du-actual">{fmtM(rc.actual)}</span>
+        <span className={'du-delta ' + (fav ? 'pos' : 'neg')}>{delta >= 0 ? '+' : '−'}{fmtM(Math.abs(delta))}</span>
+        {rc.rolledIn > 0 && <span className="du-roll">↩ dời {fmtM(rc.rolledIn)}</span>}
+      </div>
+    )
+  }
+
+  const renderGroup = (g: typeof model.thu) => (
+    <>
+      <tr className={'row-group' + (collapsed[g.type] ? ' collapsed' : '')}>
+        <td className="label-cell" onClick={() => toggle(g.type)}>
+          <span className="lc">
+            <span className="caret">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 9l6 6 6-6" /></svg>
+            </span>
+            <span className={'type-icon ' + g.type}>{g.type === 'thu' ? '↑' : '↓'}</span>
+            {g.label}
+          </span>
+        </td>
+        {g.totalCells.map((rc, ci) => <td key={ci} className="num-cell"><RC rc={rc} good={g.type === 'thu'} /></td>)}
+        <td className="num-cell total-col"><RC rc={g.total} good={g.type === 'thu'} /></td>
+      </tr>
+      {!collapsed[g.type] && g.items.map(it => (
+        <tr className="item-row" key={it.label}>
+          <td className="label-cell">{it.label}</td>
+          {it.cells.map((rc, ci) => <td key={ci} className="num-cell"><RC rc={rc} good={g.type === 'thu'} /></td>)}
+          <td className="num-cell total-col"><RC rc={it.total} good={g.type === 'thu'} /></td>
+        </tr>
+      ))}
+    </>
+  )
 
   return (
-    <div>
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
-        <div>
-          <div style={{ fontSize: 10.5, letterSpacing: '.16em', textTransform: 'uppercase', color: FAINT, fontWeight: 700 }}>Sổ cái dòng tiền</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: INK, marginTop: 3 }}>📅 Dự báo dòng tiền</div>
-          <div style={{ fontSize: 12.5, color: DIM, marginTop: 3 }}>Theo dõi thu – chi, phát hiện kỳ thiếu hụt và gợi ý cân đối.</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>{periodLabel}</div>
-          <div style={{ fontSize: 11.5, color: FAINT, marginTop: 2 }}>
-            {sel.length} tháng · {riskMonths.length ? `${riskMonths.length} kỳ rủi ro` : 'Đủ dòng tiền'}
+    <div className="dubao">
+      <style>{CSS}</style>
+
+      {/* ── HEADER ── */}
+      <div className="du-topbar">
+        <div className="du-brand">
+          <div className="du-mark"><span>SA</span></div>
+          <div>
+            <div className="du-eyebrow">Sơn An Group · Kiểm soát tài chính</div>
+            <h1 className="du-title">Dự Báo Dòng Tiền — Năm {selectedYear}</h1>
+            <div className="du-sub">Kế hoạch (KH) so với Thực hiện (TH) · khoản chưa TH tự dời sang kỳ sau</div>
           </div>
+        </div>
+        <div className="du-top-right">
+          {loading && <span style={{ fontSize: 12, color: 'var(--grey)' }}>⏳ Đang tải…</span>}
+          <span className="du-unit-chip">Đơn vị: Triệu ₫</span>
+          <button className="du-btn" onClick={() => window.print()}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 3v13m0 0l-4-4m4 4l4-4M4 21h16" /></svg>
+            Xuất báo cáo
+          </button>
         </div>
       </div>
 
-      {/* ── Filter bar ── */}
-      <div style={{ ...panel, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700 }}>Năm</span>
-          <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
-            style={{ background: '#fff', color: INK, border: '1px solid #E5E7EB', borderRadius: 8, padding: '7px 10px', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>
-            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700 }}>Kỳ</span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {([['all', 'Cả năm'], [0, 'Quý 1'], [1, 'Quý 2'], [2, 'Quý 3'], [3, 'Quý 4']] as [('all' | number), string][]).map(([v, l]) => (
-              <button key={String(v)} style={chip(monthSel === 'all' && quarter === v)}
-                onClick={() => { setQuarter(v); setMonthSel('all') }}>{l}</button>
-            ))}
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700 }}>Tháng</span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button style={chip(monthSel === 'all')} onClick={() => setMonthSel('all')}>Tất cả</button>
-            {MONTH_SHORT.map((l, i) => (
-              <button key={i} style={chip(monthSel === i)} onClick={() => setMonthSel(i)}>{l}</button>
-            ))}
-          </div>
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700 }}>Hiển thị</span>
-          <div style={{ display: 'flex', border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden' }}>
-            {(['month', 'week'] as const).map(v => (
-              <button key={v} onClick={() => setViewMode(v)} style={{
-                background: viewMode === v ? INK : '#fff', color: viewMode === v ? '#fff' : DIM,
-                border: 'none', padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-              }}>{v === 'month' ? 'Theo tháng' : 'Theo tuần'}</button>
-            ))}
-          </div>
-        </div>
-        {loading && <span style={{ fontSize: 12, color: FAINT }}>⏳ Đang tải…</span>}
-      </div>
-
-      {/* ── Overview cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
-        {[
-          { label: 'Tổng thu', value: fmt(totalThu), color: GREEN, tag: null as [string, boolean] | null },
-          { label: 'Tổng chi', value: fmt(totalChi), color: EXP, tag: null },
-          { label: 'Chênh lệch dòng tiền', value: (net >= 0 ? '+' : '') + fmt(net), color: net >= 0 ? GREEN : CORAL, tag: (net >= 0 ? ['Dư dòng tiền', true] : ['Thiếu hụt', false]) as [string, boolean] },
-          { label: 'Số dư cuối kỳ dự kiến', value: fmt(endingBal), color: balColor(endingBal), tag: (riskMonths.length ? [`${riskMonths.length} kỳ rủi ro`, false] : ['Ổn định', true]) as [string, boolean] },
-        ].map(c => (
-          <div key={c.label} style={{ ...panel, padding: '16px 18px', position: 'relative' }}>
-            {c.tag && (
-              <span style={{
-                position: 'absolute', top: 14, right: 14, fontSize: 9.5, padding: '3px 8px', borderRadius: 6,
-                textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700,
-                background: c.tag[1] ? '#ECFDF5' : '#FEF2F2', color: c.tag[1] ? GREEN : CORAL,
-              }}>{c.tag[0]}</span>
+      {/* ── KPI ── */}
+      <div className="du-kpi-grid">
+        {kpis.map(k => (
+          <div key={k.label} className={'du-kpi' + (k.accent ? ' accent' : '')}>
+            <div className="du-kpi-label">{k.label}</div>
+            <div className="du-kpi-val">{k.value}<small>tr₫</small></div>
+            {k.pct !== undefined ? (
+              <div className="du-kpi-bar-row">
+                <span>{k.pct.toFixed(0)}% TH</span>
+                <span className="du-kpi-bar"><i style={{ width: Math.min(100, Math.max(0, k.pct)) + '%', background: k.color }} /></span>
+              </div>
+            ) : (
+              <div className={'du-kpi-sub ' + (k.subTone ?? '')}>{k.sub}</div>
             )}
-            <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: FAINT, fontWeight: 700, marginBottom: 10 }}>{c.label}</div>
-            <div style={{ ...num, fontSize: 22, fontWeight: 700, color: c.color }}>{c.value}</div>
           </div>
         ))}
       </div>
 
-      {/* ── Ledger ── */}
-      <div style={{ ...panel, overflow: 'hidden', marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #E5E7EB' }}>
-          <span style={{ fontWeight: 700, fontSize: 15, color: INK }}>Chi tiết dòng tiền</span>
-          <span style={{ fontSize: 12, color: FAINT }}>Bấm vào từng dòng để mở/đóng chi tiết hạng mục</span>
+      {/* ── CONTROLS ── */}
+      <div className="du-controls">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div className="du-switch">
+            {([['year', 'Cả năm'], ['quarter', 'Theo Quý'], ['month', 'Theo Tháng']] as const).map(([v, l]) => (
+              <button key={v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>{l}</button>
+            ))}
+          </div>
+          <select className="du-select" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
+            {YEARS.map(y => <option key={y} value={y}>Năm {y}</option>)}
+          </select>
         </div>
-        {sel.length === 0 && !loading && (
-          <div style={{ padding: 32, textAlign: 'center', color: FAINT, fontSize: 13 }}>Chưa có dữ liệu cho kỳ này.</div>
-        )}
-        {sel.map(m => {
-          const open = openRows.has(m.idx)
-          const bad = m.closing < 0
-          const thin = !bad && m.closing < safety
-          const detail = open ? detailFor(m.idx) : null
-          const weeks = open && viewMode === 'week' ? weeksFor(m.idx) : []
-          const topExp = detail?.expense[0]
-          return (
-            <div key={m.idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-              <div onClick={() => toggleRow(m.idx)} style={{
-                display: 'grid', gridTemplateColumns: '24px 1.6fr .9fr .9fr .9fr 1fr', alignItems: 'center',
-                gap: 10, padding: '13px 20px', cursor: 'pointer', background: m.isCurrent ? '#FEFCE8' : 'transparent',
-              }}>
-                <span style={{ color: open ? INK : FAINT, fontSize: 11, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
-                <div style={{ fontWeight: 700, fontSize: 14, color: INK, display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: bad ? CORAL : thin ? AMBER : GREEN, flexShrink: 0 }} />
-                  {MONTH_FULL[m.idx]}
-                  {m.isCurrent && <span style={{ fontSize: 9.5, fontWeight: 700, color: AMBER, background: '#FEF9C3', padding: '1px 6px', borderRadius: 10 }}>hiện tại</span>}
-                </div>
-                <div><div style={colLbl(FAINT)}>Thu</div><div style={{ ...num, fontSize: 13.5, color: GREEN }}>{m.thu ? fmtShort(m.thu) : '—'}</div></div>
-                <div><div style={colLbl(FAINT)}>Chi</div><div style={{ ...num, fontSize: 13.5, color: EXP }}>{m.chi ? fmtShort(m.chi) : '—'}</div></div>
-                <div><div style={colLbl(FAINT)}>Chênh lệch</div><div style={{ ...num, fontSize: 13.5, color: m.net >= 0 ? GREEN : CORAL }}>{m.net >= 0 ? '+' : ''}{fmtShort(m.net)}</div></div>
-                <div><div style={colLbl(FAINT)}>Số dư cuối kỳ</div><div style={{ ...num, fontSize: 13.5, fontWeight: 700, color: balColor(m.closing) }}>{fmtShort(m.closing)}</div></div>
-              </div>
 
-              {open && detail && (
-                <div style={{ padding: '2px 20px 18px 54px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 12 }}>
-                    <div>
-                      <div style={detailHdr(FAINT)}>Khoản thu</div>
-                      {detail.income.length ? detail.income.map(r => (
-                        <div key={r.name} style={catLine}><span style={{ color: '#334155' }}>{r.name}</span><span style={{ ...num, color: GREEN }}>{fmt(r.amt)}</span></div>
-                      )) : <div style={{ fontSize: 12.5, color: FAINT, padding: '6px 0' }}>—</div>}
-                    </div>
-                    <div>
-                      <div style={detailHdr(FAINT)}>Khoản chi</div>
-                      {detail.expense.length ? detail.expense.map(r => (
-                        <div key={r.name} style={catLine}><span style={{ color: '#334155' }}>{r.name}</span><span style={{ ...num, color: EXP }}>{fmt(r.amt)}</span></div>
-                      )) : <div style={{ fontSize: 12.5, color: FAINT, padding: '6px 0' }}>—</div>}
-                    </div>
-                  </div>
+        <div className="du-picker">
+          {view === 'quarter' && <>
+            <span className="du-picker-label">Chọn Quý:</span>
+            {[1, 2, 3, 4].map(q => (
+              <button key={q} className={'du-chip' + (quarter === q ? ' active' : '')} onClick={() => setQuarter(q)}>Quý {q}</button>
+            ))}
+          </>}
+          {view === 'month' && <>
+            <span className="du-picker-label">Chọn Tháng:</span>
+            {MONTH_SHORT.map((l, i) => (
+              <button key={i} className={'du-chip' + (monthSel === i + 1 ? ' active' : '')} onClick={() => setMonthSel(i + 1)}>{l}</button>
+            ))}
+          </>}
+        </div>
 
-                  {viewMode === 'week' && weeks.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 8, marginBottom: 4 }}>
-                      {weeks.map(w => {
-                        const wnet = w.income - w.expense
-                        return (
-                          <div key={w.label} style={{ background: '#F8FAFC', border: '1px solid #F1F5F9', borderRadius: 9, padding: '9px 12px' }}>
-                            <div style={{ fontSize: 10.5, color: FAINT, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 5 }}>{w.label}</div>
-                            <div style={wkRow}><span>Thu</span><span style={{ ...num, color: GREEN }}>{fmtShort(w.income)}</span></div>
-                            <div style={wkRow}><span>Chi</span><span style={{ ...num, color: EXP }}>{fmtShort(w.expense)}</span></div>
-                            <div style={wkRow}><span>Chênh lệch</span><span style={{ ...num, color: wnet >= 0 ? GREEN : CORAL }}>{wnet >= 0 ? '+' : ''}{fmtShort(wnet)}</span></div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {(bad || thin) && (
-                    <div style={{ marginTop: 12, background: bad ? '#FEF2F2' : '#FFFBEB', border: `1px solid ${bad ? '#FCA5A5' : '#FDE68A'}`, borderRadius: 10, padding: '11px 14px', fontSize: 12.5, color: bad ? '#7F1D1D' : '#78350F', display: 'flex', gap: 9 }}>
-                      <span>💡</span>
-                      <span>
-                        {bad ? 'Âm quỹ ' : 'Quỹ mỏng '}<b>{fmt(bad ? -m.closing : safety - m.closing)}</b> ở tháng này.
-                        {topExp && <> Hạng mục chi lớn nhất: <b>{topExp.name}</b> ({fmt(topExp.amt)}). Gợi ý: cắt 10–15% mục này (~{fmt(topExp.amt * 0.12)}), đẩy nhanh thu đúng hạn hoặc chuẩn bị nguồn bù.</>}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        <div className="du-legend">
+          <span><span className="dot" style={{ background: 'var(--green)' }} />Đạt / vượt KH</span>
+          <span><span className="dot" style={{ background: 'var(--red)' }} />Chưa đạt KH</span>
+          <span><span className="dot" style={{ background: 'var(--amber)' }} />Dời sang kỳ sau</span>
+        </div>
       </div>
 
-      {/* ── Cảnh báo: khoản quá hạn + kỳ thiếu hụt ── */}
-      <div style={{ ...panel, borderColor: (overdue.length || riskMonths.length) ? '#FCA5A5' : '#BBF7D0', padding: '18px 20px' }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: (overdue.length || riskMonths.length) ? CORAL : GREEN, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span>⚠</span> Cảnh báo dòng tiền
+      {/* ── BẢNG ── */}
+      <div className="du-card">
+        <div className="du-scroll">
+          <table className="cf">
+            <thead>
+              <tr className="period-row">
+                <th rowSpan={2}>Khoản mục dòng tiền</th>
+                {model.cols.map(c => <th key={c.key}>{c.label}</th>)}
+                <th className="total-col">{model.totalLabel} (Tổng)</th>
+              </tr>
+              <tr className="sub-row">
+                {model.cols.map(c => <th key={c.key}>KH&nbsp;/&nbsp;TH</th>)}
+                <th className="total-col">KH&nbsp;/&nbsp;TH</th>
+              </tr>
+            </thead>
+            <tbody>
+              {renderGroup(model.thu)}
+              {renderGroup(model.chi)}
+
+              <tr className="total-row">
+                <td className="label-cell">Tổng THU</td>
+                {model.thu.totalCells.map((rc, ci) => <td key={ci} className="num-cell"><RC rc={rc} good /></td>)}
+                <td className="num-cell total-col"><RC rc={model.thu.total} good /></td>
+              </tr>
+              <tr className="total-row">
+                <td className="label-cell">Tổng CHI</td>
+                {model.chi.totalCells.map((rc, ci) => <td key={ci} className="num-cell"><RC rc={rc} good={false} /></td>)}
+                <td className="num-cell total-col"><RC rc={model.chi.total} good={false} /></td>
+              </tr>
+              <tr className="net-row">
+                <td className="label-cell">Dòng tiền ròng (Thu − Chi)</td>
+                {model.netCells.map((rc, ci) => <td key={ci} className="num-cell"><RC rc={rc} good /></td>)}
+                <td className="num-cell total-col"><RC rc={model.grandNet} good /></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div style={{ fontSize: 12.5, color: DIM, marginBottom: 14 }}>Khoản quá hạn cần xử lý và các kỳ chi vượt/âm quỹ, kèm gợi ý.</div>
-
-        {overdue.length > 0 && (
-          <div style={{ marginBottom: riskMonths.length ? 16 : 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: FAINT, letterSpacing: '.04em', marginBottom: 7 }}>
-              QUÁ HẠN CHƯA THU/CHI · {overdue.length} khoản
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                <tbody>
-                  {overdue.map(o => (
-                    <tr key={`${o.docMonth}-${o.id}`} style={{ borderTop: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '6px 8px 6px 0', color: CORAL, fontWeight: 600, whiteSpace: 'nowrap', ...num }}>
-                        {o.ngay}<span style={{ color: FAINT, fontWeight: 500 }}> · trễ {o.daysLate}d{o.roll_count ? ` · dời ${o.roll_count}×` : ''}</span>
-                      </td>
-                      <td style={{ padding: '6px 8px', color: '#1F2937' }}>{o.dien_giai || '—'}</td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: o.nhom === 'B' ? GREEN : EXP, ...num }}>
-                        {(o.nhom === 'B' ? '+' : '−') + fmtShort(amountOf(o))}
-                      </td>
-                      <td style={{ padding: '6px 0 6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button onClick={() => deferItem(o)} disabled={busyId === o.id} style={actBtn('#FFF7ED', EXP, '#FED7AA', busyId === o.id)}>↪ Dời {DEFER_LABEL[viewMode]}</button>
-                        <button onClick={() => markDone(o)} disabled={busyId === o.id} style={{ ...actBtn('#ECFDF5', GREEN, '#86EFAC', busyId === o.id), marginLeft: 6 }}>✓ Đã xong</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {riskMonths.length > 0 ? (
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: FAINT, letterSpacing: '.04em', marginBottom: 7 }}>
-              KỲ THIẾU HỤT / RỦI RO · ngưỡng an toàn ≈ {fmtShort(safety)} ₫
-            </div>
-            {riskMonths.map(m => {
-              const d = detailFor(m.idx)
-              const top = d.expense[0]
-              const bad = m.closing < 0
-              return (
-                <div key={m.idx} style={{ borderTop: '1px solid #F1F5F9', padding: '11px 0', display: 'grid', gridTemplateColumns: '140px 1fr', gap: 16 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13.5, color: INK }}>{MONTH_FULL[m.idx]}</div>
-                    <div style={{ ...num, fontSize: 12.5, color: bad ? CORAL : AMBER, marginTop: 3 }}>{bad ? 'Âm quỹ' : 'Quỹ mỏng'} {fmt(bad ? -m.closing : safety - m.closing)}</div>
-                  </div>
-                  <div style={{ fontSize: 12.5, color: DIM, lineHeight: 1.6 }}>
-                    Tồn cuối kỳ <b style={{ color: balColor(m.closing) }}>{fmt(m.closing)}</b>.
-                    {top && <> Chi lớn nhất: <b style={{ color: INK }}>{top.name}</b> ({fmt(top.amt)}).</>}
-                    {' '}Đề xuất: giảm 10–15% mục lớn, dời khoản không thiết yếu sang kỳ sau, hoặc chuẩn bị nguồn bù ~{fmt(Math.abs(bad ? -m.closing : safety - m.closing) * 1.1)}.
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : overdue.length === 0 ? (
-          <div style={{ fontSize: 13.5, color: GREEN }}>✓ Không có khoản quá hạn và không có kỳ nào thiếu hụt trong phạm vi đang chọn.</div>
-        ) : null}
+        <div className="footnote">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+          Khoản chưa thực hiện được dời sang kỳ kế tiếp — đánh dấu bằng nhãn hổ phách. Nhấp vào tên nhóm “THU” / “CHI” để mở rộng hoặc thu gọn chi tiết.
+          {view === 'month' && ' Số TH theo tuần là ước tính phân bổ theo kế hoạch; số thực tế tổng nằm ở cột Tổng.'}
+        </div>
       </div>
+
+      {/* ── CẢNH BÁO: khoản quá hạn ── */}
+      {overdue.length > 0 && (
+        <div className="du-card" style={{ padding: '18px 20px', marginBottom: 20 }}>
+          <div style={{ fontFamily: 'var(--du-serif)', fontWeight: 700, fontSize: 16, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            ⚠ Khoản quá hạn cần xử lý
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--grey)', marginBottom: 12 }}>
+            {overdue.length} khoản có ngày dự kiến đã qua nhưng chưa thực hiện — dời sang kỳ sau hoặc đánh dấu đã xong.
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+              <tbody>
+                {overdue.map(o => (
+                  <tr key={`${o.docMonth}-${o.id}`} style={{ borderTop: '1px solid #F1F5F9' }}>
+                    <td style={{ padding: '7px 8px 7px 0', color: 'var(--red)', fontWeight: 600, whiteSpace: 'nowrap', fontFamily: MONO }}>
+                      {o.ngay}<span style={{ color: 'var(--grey)', fontWeight: 500 }}> · trễ {o.daysLate}d{o.roll_count ? ` · dời ${o.roll_count}×` : ''}</span>
+                    </td>
+                    <td style={{ padding: '7px 8px', color: '#1F2937' }}>{o.dien_giai || '—'}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: o.nhom === 'B' ? 'var(--green)' : 'var(--red)', fontFamily: MONO }}>
+                      {(o.nhom === 'B' ? '+' : '−') + fmtM(amountOf(o))} tr₫
+                    </td>
+                    <td style={{ padding: '7px 0 7px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => deferItem(o)} disabled={busyId === o.id} style={actBtn('#FBF0DD', '#B8862F', '#EBD9AE', busyId === o.id)}>↪ Dời {deferMode === 'week' ? 'tuần sau' : 'tháng sau'}</button>
+                      <button onClick={() => markDone(o)} disabled={busyId === o.id} style={{ ...actBtn('#E4F3EC', '#2F7D5E', '#B7DEC9', busyId === o.id), marginLeft: 6 }}>✓ Đã xong</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function colLbl(c: string): CSSProperties {
-  return { fontSize: 10, textTransform: 'uppercase', letterSpacing: '.06em', color: c, marginBottom: 3 }
-}
-function detailHdr(c: string): CSSProperties {
-  return { fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.07em', color: c, fontWeight: 700, marginBottom: 8 }
-}
-const catLine: CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 12.5, borderBottom: '1px dashed #F1F5F9' }
-const wkRow: CSSProperties = { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3, color: '#475569' }
+const MONO = "'JetBrains Mono', ui-monospace, Consolas, monospace"
 function actBtn(bg: string, color: string, border: string, busy: boolean): CSSProperties {
-  return { padding: '3px 10px', fontSize: 11, fontWeight: 700, borderRadius: 6, background: bg, color, border: `1px solid ${border}`, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit' }
+  return { padding: '4px 11px', fontSize: 11, fontWeight: 700, borderRadius: 6, background: bg, color, border: `1px solid ${border}`, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit' }
 }
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+.dubao{
+  --navy:#1C3557; --navy-deep:#122238; --navy-mid:#2A4770; --navy-pale:#EEF2F7;
+  --gold:#D4A64A; --gold-soft:#F3E3C0; --gold-deep:#B4832E;
+  --ink:#1B2430; --line:#DFE1E6; --green:#2F7D5E; --green-soft:#E4F3EC;
+  --red:#B4453A; --red-soft:#FBEAE7; --amber:#B8862F; --amber-soft:#FBF0DD; --grey:#8A8F98;
+  --du-serif:'Playfair Display', Georgia, 'Times New Roman', serif;
+  --du-mono:'JetBrains Mono', ui-monospace, Consolas, monospace;
+  color:var(--ink);
+}
+.dubao *{box-sizing:border-box;}
+.dubao .du-topbar{display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:20px;margin-bottom:22px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:14px;}
+.dubao .du-brand{display:flex;align-items:center;gap:14px;}
+.dubao .du-mark{width:46px;height:46px;border-radius:10px;background:linear-gradient(155deg,var(--navy),var(--navy-deep));display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;box-shadow:0 1px 2px rgba(28,53,87,.12);flex:none;}
+.dubao .du-mark::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 40%,rgba(212,166,74,.5) 50%,transparent 60%);}
+.dubao .du-mark span{font-family:var(--du-serif);color:var(--gold);font-weight:700;font-size:20px;z-index:1;}
+.dubao .du-eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-deep);font-weight:700;margin-bottom:3px;}
+.dubao .du-title{font-family:var(--du-serif);font-weight:600;font-size:24px;color:var(--navy-deep);margin:0;letter-spacing:-.01em;}
+.dubao .du-sub{font-size:12.5px;color:var(--grey);margin-top:3px;}
+.dubao .du-top-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.dubao .du-unit-chip{font-size:12px;color:var(--navy);background:var(--navy-pale);padding:7px 13px;border-radius:20px;font-weight:600;border:1px solid rgba(28,53,87,.10);}
+.dubao .du-btn{display:flex;align-items:center;gap:7px;background:var(--navy-deep);color:#fff;border:none;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:transform .15s,box-shadow .15s;}
+.dubao .du-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(18,34,56,.14);}
+
+.dubao .du-kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;}
+.dubao .du-kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 17px;position:relative;overflow:hidden;box-shadow:0 1px 2px rgba(28,53,87,.05);}
+.dubao .du-kpi.accent::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--gold),var(--gold-deep));}
+.dubao .du-kpi-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--grey);font-weight:700;margin-bottom:10px;}
+.dubao .du-kpi-val{font-family:var(--du-mono);font-size:20px;font-weight:600;color:var(--navy-deep);letter-spacing:-.01em;}
+.dubao .du-kpi-val small{font-size:11px;color:var(--grey);font-weight:500;margin-left:3px;}
+.dubao .du-kpi-bar-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11.5px;font-weight:600;color:var(--grey);}
+.dubao .du-kpi-bar{flex:1;height:5px;background:var(--navy-pale);border-radius:3px;overflow:hidden;}
+.dubao .du-kpi-bar i{display:block;height:100%;border-radius:3px;}
+.dubao .du-kpi-sub{margin-top:10px;font-size:11.5px;color:var(--grey);font-weight:500;}
+.dubao .du-kpi-sub.pos{color:var(--green);font-weight:600;}
+.dubao .du-kpi-sub.neg{color:var(--red);font-weight:600;}
+
+.dubao .du-controls{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px;box-shadow:0 1px 2px rgba(28,53,87,.05);}
+.dubao .du-switch{display:flex;background:var(--navy-pale);border-radius:9px;padding:4px;gap:2px;}
+.dubao .du-switch button{font-family:inherit;border:none;background:transparent;padding:8px 16px;border-radius:7px;font-size:13px;font-weight:700;color:var(--navy-mid);cursor:pointer;transition:all .15s;}
+.dubao .du-switch button.active{background:var(--navy-deep);color:#fff;}
+.dubao .du-select{font-family:inherit;font-size:12.5px;font-weight:700;color:var(--navy);background:#fff;border:1px solid var(--line);border-radius:20px;padding:8px 12px;cursor:pointer;}
+.dubao .du-picker{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.dubao .du-picker-label{font-size:12px;color:var(--grey);font-weight:600;margin-right:2px;}
+.dubao .du-chip{font-family:inherit;border:1px solid var(--line);background:#fff;padding:6px 13px;border-radius:20px;font-size:12.5px;font-weight:600;color:var(--navy);cursor:pointer;transition:all .15s;}
+.dubao .du-chip:hover{border-color:var(--gold-deep);}
+.dubao .du-chip.active{background:var(--gold-soft);border-color:var(--gold-deep);color:var(--gold-deep);}
+.dubao .du-legend{display:flex;align-items:center;gap:14px;font-size:11.5px;color:var(--grey);flex-wrap:wrap;}
+.dubao .du-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;}
+
+.dubao .du-card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(28,53,87,.05);overflow:hidden;margin-bottom:20px;}
+.dubao .du-scroll{overflow-x:auto;}
+.dubao table.cf{border-collapse:collapse;width:100%;min-width:900px;}
+.dubao table.cf thead tr.period-row th{background:var(--navy-deep);color:#fff;font-weight:700;font-size:12.5px;padding:12px 14px 8px;text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:var(--du-serif);letter-spacing:.02em;}
+.dubao table.cf thead tr.period-row th:first-child{text-align:left;position:sticky;left:0;z-index:3;background:var(--navy-deep);}
+.dubao table.cf thead tr.sub-row th{background:var(--navy-mid);color:rgba(255,255,255,.88);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:7px 10px;text-align:right;border-right:1px solid rgba(255,255,255,.08);}
+.dubao table.cf thead tr.sub-row th:first-child{position:sticky;left:0;background:var(--navy-mid);text-align:left;z-index:3;}
+.dubao table.cf th.total-col{background:#16294a;}
+.dubao .row-group>td.label-cell{background:var(--navy-pale);font-weight:700;color:var(--navy-deep);padding:11px 14px;font-size:13px;cursor:pointer;position:sticky;left:0;z-index:2;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+.dubao .row-group>td.label-cell .lc{display:flex;align-items:center;gap:9px;}
+.dubao .row-group .caret{display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center;transition:transform .18s;color:var(--gold-deep);flex:none;}
+.dubao .row-group.collapsed .caret{transform:rotate(-90deg);}
+.dubao .row-group td.num-cell{background:var(--navy-pale);border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+.dubao tr.item-row td{border-bottom:1px solid #EEEFF1;}
+.dubao tr.item-row td.label-cell{padding:9px 14px 9px 34px;font-size:12.5px;color:var(--ink);position:sticky;left:0;background:#fff;z-index:1;}
+.dubao tr.item-row:nth-child(even) td.label-cell,.dubao tr.item-row:nth-child(even) td.num-cell{background:#FBFAF8;}
+.dubao .num-cell{padding:8px 10px;text-align:right;border-right:1px solid #EEEFF1;vertical-align:top;}
+.dubao .du-pair{display:flex;flex-direction:column;gap:2px;align-items:flex-end;}
+.dubao .du-plan{font-family:var(--du-mono);font-size:11px;color:var(--grey);}
+.dubao .du-actual{font-family:var(--du-mono);font-size:12.5px;font-weight:700;color:var(--navy-deep);}
+.dubao .du-future{font-family:var(--du-mono);font-size:11px;color:#C6CAD2;}
+.dubao .du-delta{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:8px;display:inline-block;margin-top:1px;}
+.dubao .du-delta.pos{background:var(--green-soft);color:var(--green);}
+.dubao .du-delta.neg{background:var(--red-soft);color:var(--red);}
+.dubao .du-roll{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;background:var(--amber-soft);color:var(--amber);padding:1px 6px;border-radius:8px;margin-top:1px;}
+.dubao tr.total-row td{background:var(--navy-deep);color:#fff;font-weight:700;}
+.dubao tr.total-row td.label-cell{position:sticky;left:0;z-index:2;background:var(--navy-deep);color:#fff;font-size:13px;padding:12px 14px;font-family:var(--du-serif);}
+.dubao tr.total-row .du-plan{color:rgba(255,255,255,.55);}
+.dubao tr.total-row .du-actual,.dubao tr.total-row .du-future{color:#fff;}
+.dubao tr.net-row td{background:var(--gold-soft);}
+.dubao tr.net-row td.label-cell{position:sticky;left:0;z-index:2;background:var(--gold-soft);color:var(--gold-deep);font-size:13px;font-family:var(--du-serif);font-weight:700;padding:12px 14px;}
+.dubao tr.net-row .du-actual{color:var(--gold-deep);font-size:13.5px;}
+.dubao tr.net-row .du-plan{color:var(--gold-deep);opacity:.6;}
+.dubao .num-cell.total-col{background:#F4F1EA;border-right:none;}
+.dubao .row-group td.num-cell.total-col{background:#E4E0D3;}
+.dubao tr.total-row td.num-cell.total-col{background:#0E1F38;}
+.dubao tr.net-row td.num-cell.total-col{background:#EAD9AE;}
+.dubao .type-icon{width:15px;height:15px;flex:none;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+.dubao .type-icon.thu{background:var(--green-soft);color:var(--green);}
+.dubao .type-icon.chi{background:var(--red-soft);color:var(--red);}
+.dubao .footnote{display:flex;align-items:center;gap:8px;padding:12px 16px;font-size:11.5px;color:var(--grey);border-top:1px solid var(--line);background:#FBFAF8;}
+.dubao .footnote svg{color:var(--gold-deep);flex:none;}
+@media (max-width:900px){.dubao .du-kpi-grid{grid-template-columns:repeat(2,1fr);}}
+`
