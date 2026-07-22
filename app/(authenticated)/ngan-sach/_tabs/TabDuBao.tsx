@@ -66,6 +66,7 @@ export function TabDuBao({ month, localData }: Props) {
   const [monthSel, setMonthSel] = useState(curMon)               // 1..12
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [fetchedDoc, setFetchedDoc] = useState<NganSachThang | null>(null)
+  const [scopeDocs, setScopeDocs] = useState<Map<string, NganSachThang>>(new Map())
 
   useEffect(() => {
     let alive = true
@@ -111,11 +112,17 @@ export function TabDuBao({ month, localData }: Props) {
   const { thu, chi } = useMemo(() => {
     // ── Chế độ Tháng: nhóm theo khoản mục ngân sách (KH nhập tay) + TH khớp theo mã ──
     if (view === 'month') {
-      const thOf = (it: NganSachItem) => (it.kmcp && monthTH[it.kmcp] !== undefined ? monthTH[it.kmcp] : it.thuc_hien) || 0
+      // TH khớp theo mã ngân sách — giống hệt cách tab Kế hoạch & Thực hiện tính
+      const khOf = (it: NganSachItem) => Number(it.ke_hoach) || 0
+      const thOf = (it: NganSachItem) => {
+        const auto = it.kmcp ? monthTH[it.kmcp] : undefined
+        return Number(auto !== undefined ? auto : it.thuc_hien) || 0
+      }
       const buildPlan = (want: 'B' | 'C'): Section => {
         const items = (planDoc?.items ?? []).filter(it => it.nhom === want)
         const kidsOf = new Map<string, NganSachItem[]>()
         for (const it of items) if (it.parent_id) { const a = kidsOf.get(it.parent_id) ?? []; a.push(it); kidsOf.set(it.parent_id, a) }
+        // Giữ nguyên thứ tự như tab Kế hoạch (không sắp lại) để số liệu khớp từng dòng
         const rowsArr: GroupAgg[] = []
         for (const it of items) {
           if (it.is_section || it.parent_id) continue
@@ -123,17 +130,16 @@ export function TabDuBao({ month, localData }: Props) {
             const kids = kidsOf.get(it.id) ?? []
             const c = { KH: 0, TH: 0 }
             const units: UnitAgg[] = kids.map(k => {
-              const kc = { KH: k.ke_hoach || 0, TH: thOf(k) }
+              const kc = { KH: khOf(k), TH: thOf(k) }
               c.KH += kc.KH; c.TH += kc.TH
               return { unit: k.dien_giai || '(không tên)', cols: kc, total: kc.TH }
             })
             rowsArr.push({ nhom: it.dien_giai || '(nhóm)', cols: c, total: c.TH, units })
           } else {
-            const c = { KH: it.ke_hoach || 0, TH: thOf(it) }
+            const c = { KH: khOf(it), TH: thOf(it) }
             rowsArr.push({ nhom: it.dien_giai || '(không tên)', cols: c, total: c.TH, units: [] })
           }
         }
-        rowsArr.sort((a, b) => b.total - a.total)
         const colTotals = {
           KH: rowsArr.reduce((s, r) => s + (r.cols.KH ?? 0), 0),
           TH: rowsArr.reduce((s, r) => s + (r.cols.TH ?? 0), 0),
@@ -207,6 +213,38 @@ export function TabDuBao({ month, localData }: Props) {
     const net = thuReal - chiReal
     return { opening, thu: thuReal, chi: chiReal, net, closing: opening + net }
   }, [rows, scopeMonths, loaiKey, selectedYear, view, monthSel])
+
+  // ── Giải pháp cân đối (chỉ Năm/Quý): gom từ các doc ngân sách trong kỳ ─────────
+  useEffect(() => {
+    if (view === 'month') return
+    const need = scopeMonths.map(mi => `${selectedYear}-${pad2(mi + 1)}`)
+    let alive = true
+    Promise.all(need.map(ms =>
+      ms === month ? Promise.resolve([ms, localData] as [string, NganSachThang])
+        : getNganSach(ms).then(d => [ms, d] as [string, NganSachThang])
+    )).then(pairs => {
+      if (!alive) return
+      setScopeDocs(prev => { const m = new Map(prev); pairs.forEach(([k, d]) => m.set(k, d)); return m })
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [view, scopeMonths, selectedYear, month, localData])
+
+  const giaiPhap = useMemo(() => {
+    if (view === 'month') return { items: [] as { mo_ta: string; kh: number; th: number; trang_thai: string; thang: string }[], kh: 0, th: 0 }
+    const items: { mo_ta: string; kh: number; th: number; trang_thai: string; thang: string }[] = []
+    let kh = 0, th = 0
+    for (const mi of scopeMonths) {
+      const ms = `${selectedYear}-${pad2(mi + 1)}`
+      const doc = ms === month ? localData : scopeDocs.get(ms)
+      if (!doc) continue
+      for (const gp of doc.giai_phap ?? []) {
+        if (!gp.mo_ta?.trim()) continue
+        items.push({ mo_ta: gp.mo_ta, kh: gp.so_tien_ke_hoach || 0, th: gp.so_tien_thuc_hien || 0, trang_thai: gp.trang_thai, thang: ms })
+        if (gp.trang_thai !== 'no') { kh += gp.so_tien_ke_hoach || 0; th += gp.so_tien_thuc_hien || 0 }
+      }
+    }
+    return { items, kh, th }
+  }, [view, scopeMonths, selectedYear, month, localData, scopeDocs])
 
   // ── Nhãn kỳ / tiêu đề ───────────────────────────────────────────────────────────
   const scopeLabel =
@@ -309,16 +347,7 @@ export function TabDuBao({ month, localData }: Props) {
     <div className="baocao">
       <style>{CSS}</style>
 
-      {/* ── HEADER ── */}
-      <div className="bc-head">
-        <div className="bc-eyebrow">SƠN AN GROUP</div>
-        <h1 className="bc-title">BÁO CÁO DÒNG TIỀN {scopeLabel}</h1>
-        <div className="bc-meta">
-          Đơn vị tính: đ · Nguồn: Firebase Realtime Database · Ngày in: {printDate} · Kỳ: {kyLabel}
-        </div>
-      </div>
-
-      {/* ── CONTROLS ── */}
+      {/* ── CONTROLS (ngoài giấy) ── */}
       <div className="bc-controls">
         <div className="bc-switch">
           {([['year', 'Cả năm'], ['quarter', 'Theo Quý'], ['month', 'Theo Tháng']] as [View, string][]).map(([v, l]) => (
@@ -347,6 +376,16 @@ export function TabDuBao({ month, localData }: Props) {
         <button className="bc-print" onClick={() => window.print()}>⬇ Xuất báo cáo</button>
       </div>
 
+      <div className="bc-paper">
+      {/* ── HEADER ── */}
+      <div className="bc-head">
+        <div className="bc-eyebrow">SƠN AN GROUP</div>
+        <h1 className="bc-title">BÁO CÁO DÒNG TIỀN {scopeLabel}</h1>
+        <div className="bc-meta">
+          Đơn vị tính: đ · Nguồn: Firebase Realtime Database · Ngày in: {printDate} · Kỳ: {kyLabel}
+        </div>
+      </div>
+
       {renderSection(thu, 'thu', 'I', 'DÒNG TIỀN THU', view === 'month' ? 'KHOẢN MỤC THU' : 'NHÓM GIAO DỊCH / ĐƠN VỊ')}
       {renderSection(chi, 'chi', 'II', 'DÒNG TIỀN CHI', view === 'month' ? 'KHOẢN MỤC CHI' : 'NHÓM CHI PHÍ / ĐƠN VỊ')}
 
@@ -360,6 +399,41 @@ export function TabDuBao({ month, localData }: Props) {
           <SumRow label="(=) Dòng tiền ròng trong kỳ" value={fmtSigned(summary.net) + ' đ'} color={summary.net >= 0 ? 'var(--bc-green)' : 'var(--bc-red)'} strong />
           <SumRow label="Số dư cuối kỳ" value={fmt(summary.closing) + ' đ'} strong highlight />
         </div>
+      </div>
+
+      {/* ── IV. GIẢI PHÁP CÂN ĐỐI (chỉ Năm / Quý) ── */}
+      {view !== 'month' && (
+        <div className="bc-summary" style={{ maxWidth: 620, marginTop: 18 }}>
+          <div className="bc-sum-head">IV. GIẢI PHÁP CÂN ĐỐI · {scopeLabel}</div>
+          <div className="bc-sum-body">
+            {giaiPhap.items.length === 0 ? (
+              <div className="bc-sum-row">
+                <span className="bc-sum-label" style={{ color: '#9ca3af' }}>Chưa có giải pháp cân đối trong kỳ (nhập ở tab Giải pháp cân đối).</span>
+              </div>
+            ) : giaiPhap.items.map((g, i) => (
+              <div key={i} className="bc-sum-row">
+                <span className="bc-sum-label">
+                  {g.mo_ta}
+                  <span className="bc-sum-sub"> · {g.trang_thai === 'yes' ? 'đã thực hiện' : g.trang_thai === 'no' ? 'không dùng' : 'dự kiến'}</span>
+                </span>
+                <span className="bc-sum-val" style={{ color: g.trang_thai === 'no' ? '#9ca3af' : '#15803d', textDecoration: g.trang_thai === 'no' ? 'line-through' : 'none' }}>{fmt(g.kh)} đ</span>
+              </div>
+            ))}
+            <div className="bc-sum-row">
+              <span className="bc-sum-label">Thừa/thiếu tiền cuối kỳ</span>
+              <span className="bc-sum-val" style={{ color: summary.closing < 0 ? '#dc2626' : '#1C3557' }}>{fmtSigned(summary.closing)} đ</span>
+            </div>
+            <div className="bc-sum-row">
+              <span className="bc-sum-label">(+) Giải pháp cân đối</span>
+              <span className="bc-sum-val" style={{ color: '#15803d' }}>{fmt(giaiPhap.kh)} đ</span>
+            </div>
+            <div className="bc-sum-row hl">
+              <span className="bc-sum-label" style={{ fontWeight: 700 }}>(=) Dòng tiền sau cân đối</span>
+              <span className="bc-sum-val" style={{ fontWeight: 700, color: (summary.closing + giaiPhap.kh) < 0 ? '#dc2626' : '#1C3557' }}>{fmtSigned(summary.closing + giaiPhap.kh)} đ</span>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   )
@@ -378,65 +452,74 @@ function SumRow({ label, sub, value, color, strong, highlight }: { label: string
 
 const CSS = `
 .baocao{
-  --bc-navy:#1C3557; --bc-navy-deep:#122238; --bc-ink:#1B2430; --bc-line:#E3E6EB;
-  --bc-green:#15803D; --bc-red:#B91C1C; --bc-grey:#8A8F98;
-  --bc-mono:ui-monospace,'Cascadia Code',Consolas,'Liberation Mono',monospace;
+  --bc-navy:#1C3557; --bc-navy-deep:#0D1F33; --bc-ink:#1F2430; --bc-line:#D0DCE8;
+  --bc-green:#15803d; --bc-red:#dc2626; --bc-grey:#9ca3af; --bc-muted:#4B6A8A;
+  --bc-blue:#EEF3FA; --bc-blue2:#E3EBF6; --bc-head:#F5F8FC;
+  --bc-mono:'Roboto Mono',ui-monospace,'Cascadia Code',Consolas,monospace;
   color:var(--bc-ink);font-size:13px;
 }
 .baocao *{box-sizing:border-box;}
-.bc-head{text-align:center;margin-bottom:18px;padding-bottom:16px;border-bottom:2px solid var(--bc-navy);}
-.bc-eyebrow{font-size:11px;letter-spacing:.22em;color:var(--bc-grey);font-weight:700;text-transform:uppercase;margin-bottom:6px;}
-.bc-title{font-size:20px;font-weight:800;color:var(--bc-navy-deep);margin:0;letter-spacing:.01em;}
-.bc-meta{font-size:11.5px;color:var(--bc-grey);margin-top:7px;}
 
-.bc-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid var(--bc-line);border-radius:10px;padding:11px 13px;margin-bottom:22px;}
-.bc-switch{display:flex;background:#EEF2F7;border-radius:8px;padding:3px;gap:2px;}
-.bc-switch button{font-family:inherit;border:none;background:transparent;padding:7px 15px;border-radius:6px;font-size:12.5px;font-weight:700;color:#2A4770;cursor:pointer;}
-.bc-switch button.active{background:var(--bc-navy-deep);color:#fff;}
-.bc-select{font-family:inherit;font-size:12.5px;font-weight:700;color:var(--bc-navy);background:#fff;border:1px solid var(--bc-line);border-radius:20px;padding:7px 12px;cursor:pointer;}
+/* Toolbar (ngoài giấy) */
+.bc-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+.bc-switch{display:flex;border:1px solid var(--bc-line);border-radius:8px;overflow:hidden;}
+.bc-switch button{font-family:inherit;border:none;background:#fff;padding:7px 16px;font-size:12.5px;font-weight:700;color:#6b7280;cursor:pointer;}
+.bc-switch button.active{background:var(--bc-navy);color:#fff;}
+.bc-select{font-family:inherit;font-size:12.5px;font-weight:600;color:var(--bc-ink);background:#fff;border:1px solid var(--bc-line);border-radius:7px;padding:7px 11px;cursor:pointer;}
 .bc-chips{display:flex;gap:6px;flex-wrap:wrap;}
 .bc-chip{font-family:inherit;border:1px solid var(--bc-line);background:#fff;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;color:var(--bc-navy);cursor:pointer;}
 .bc-chip.active{background:var(--bc-navy);border-color:var(--bc-navy);color:#fff;}
 .bc-loading{font-size:12px;color:var(--bc-grey);}
-.bc-print{font-family:inherit;background:var(--bc-navy-deep);color:#fff;border:none;padding:8px 15px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;}
+.bc-print{font-family:inherit;background:var(--bc-navy);color:#fff;border:1px solid var(--bc-navy);padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;}
 
-.bc-section{margin-bottom:26px;}
-.bc-sec-head{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--bc-navy);padding-bottom:6px;margin-bottom:2px;}
-.bc-sec-title{font-size:14px;font-weight:800;color:var(--bc-navy-deep);letter-spacing:.02em;}
-.bc-sec-total{font-family:var(--bc-mono);font-size:15px;font-weight:700;}
+/* Giấy báo cáo */
+.bc-paper{background:#fff;border:1px solid #E5E0D8;border-radius:14px;padding:32px 36px;max-width:1080px;margin:0 auto;box-shadow:0 2px 14px rgba(13,31,51,.07);}
+
+.bc-head{text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2.5px solid var(--bc-navy);}
+.bc-eyebrow{font-size:11px;letter-spacing:.16em;color:var(--bc-grey);font-weight:700;text-transform:uppercase;margin-bottom:5px;}
+.bc-title{font-size:21px;font-weight:800;color:var(--bc-navy);margin:0;}
+.bc-meta{font-size:11px;color:var(--bc-grey);margin-top:7px;line-height:1.7;}
+
+.bc-section{margin-bottom:24px;}
+.bc-sec-head{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--bc-navy);padding-bottom:7px;margin-bottom:1px;}
+.bc-sec-title{font-size:12.5px;font-weight:800;color:var(--bc-navy);text-transform:uppercase;letter-spacing:.06em;}
+.bc-sec-total{font-family:var(--bc-mono);font-size:13px;font-weight:800;}
 .bc-scroll{overflow-x:auto;}
-.bc-table{border-collapse:collapse;width:100%;min-width:640px;}
-.bc-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bc-grey);font-weight:700;padding:8px 10px;border-bottom:1.5px solid var(--bc-line);background:#F8FAFC;white-space:nowrap;}
-.bc-idx{width:34px;text-align:center;color:var(--bc-grey);font-size:11.5px;}
+.bc-table{border-collapse:collapse;width:100%;min-width:560px;}
+.bc-table thead th{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--bc-muted);font-weight:700;padding:7px 10px;border-top:1px solid var(--bc-line);border-bottom:1px solid var(--bc-line);background:var(--bc-head);white-space:nowrap;text-align:right;}
+.bc-idx{width:30px;text-align:center;color:#C4CACF;font-weight:700;}
 .bc-name{text-align:left;}
 .bc-num-h,.bc-pct-h{text-align:right;}
 .bc-row td{padding:8px 10px;border-bottom:1px solid #F1F3F6;vertical-align:middle;}
+.bc-group td{background:var(--bc-blue);border-bottom:1px solid var(--bc-line);}
 .bc-row.bc-group{cursor:default;}
 .bc-row.bc-group .bc-name{cursor:pointer;}
-.bc-group:hover td{background:#FBFAF7;}
+.bc-group:hover td{background:var(--bc-blue2);}
 .bc-caret{display:inline-block;font-size:8px;color:var(--bc-navy);margin-right:7px;transition:transform .15s;transform:rotate(0deg);}
 .bc-group.open .bc-caret{transform:rotate(90deg);}
-.bc-gname{font-weight:600;color:var(--bc-navy-deep);font-size:13px;}
-.bc-uname{color:#475569;font-size:12px;padding-left:20px;display:inline-block;}
-.bc-unit td{background:#FAFBFC;}
-.bc-num{text-align:right;font-family:var(--bc-mono);font-size:12.5px;color:var(--bc-ink);white-space:nowrap;}
-.bc-num.bc-strong{font-weight:700;color:var(--bc-navy-deep);}
+.bc-gname{font-weight:700;color:var(--bc-navy);font-size:12.5px;}
+.bc-uname{color:var(--bc-muted);font-size:12px;padding-left:22px;display:inline-block;}
+.bc-unit td{background:#fff;}
+.bc-num{text-align:right;font-family:var(--bc-mono);font-size:12px;color:#374151;white-space:nowrap;}
+.bc-group .bc-num{color:var(--bc-navy);font-weight:700;}
+.bc-num.bc-strong{font-weight:800;color:var(--bc-navy);}
 .bc-delta.good{color:var(--bc-green);}
 .bc-delta.bad{color:var(--bc-red);}
-.bc-pct{text-align:right;font-size:12px;color:var(--bc-grey);white-space:nowrap;}
+.bc-pct{text-align:right;font-size:11px;color:#6b7280;white-space:nowrap;}
+.bc-group .bc-pct{color:#6b7280;}
 .bc-empty{text-align:center;color:var(--bc-grey);padding:20px;font-size:12.5px;}
-.bc-total-row td{background:var(--bc-navy-deep);color:#fff;font-weight:700;padding:10px;border:none;}
-.bc-total-row .bc-name{font-size:13px;letter-spacing:.02em;}
+.bc-total-row td{background:var(--bc-navy);color:#fff;font-weight:800;padding:9px 10px;border:none;}
+.bc-total-row .bc-name{font-size:12.5px;letter-spacing:.05em;}
 .bc-total-row .bc-num,.bc-total-row .bc-pct{color:#fff;}
 
-.bc-summary{border:1px solid var(--bc-line);border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(28,53,87,.05);max-width:560px;}
-.bc-sum-head{background:var(--bc-navy-deep);color:#fff;font-weight:700;font-size:13px;padding:11px 16px;letter-spacing:.02em;}
-.bc-sum-body{padding:4px 0;}
-.bc-sum-row{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid #F1F3F6;font-size:13px;}
+.bc-summary{border:1.5px solid var(--bc-navy);border-radius:10px;overflow:hidden;max-width:560px;}
+.bc-sum-head{background:var(--bc-navy);color:#fff;font-weight:800;font-size:11px;padding:10px 18px;text-transform:uppercase;letter-spacing:.07em;}
+.bc-sum-body{padding:0;}
+.bc-sum-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--bc-line);font-size:13px;}
 .bc-sum-row:last-child{border-bottom:none;}
-.bc-sum-row.hl{background:#F0FDF4;}
-.bc-sum-label{color:var(--bc-ink);}
-.bc-sum-sub{color:var(--bc-grey);font-size:11.5px;}
-.bc-sum-val{font-family:var(--bc-mono);}
-@media print{.bc-controls,.bc-print{display:none;}}
+.bc-sum-row.hl{background:var(--bc-blue);border-top:2px solid var(--bc-navy);}
+.bc-sum-label{color:#374151;}
+.bc-sum-sub{color:var(--bc-grey);font-size:11px;}
+.bc-sum-val{font-family:var(--bc-mono);font-weight:700;white-space:nowrap;}
+@media print{.bc-controls{display:none;}.bc-paper{border:none;box-shadow:none;max-width:100%;padding:0;}}
 `
