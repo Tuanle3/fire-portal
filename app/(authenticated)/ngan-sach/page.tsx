@@ -14,6 +14,13 @@ import { TabDuBao } from './_tabs/TabDuBao'
 
 type TabId = 'tong-hop' | 'ke-hoach' | 'giai-phap' | 'du-bao'
 
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'tong-hop',  label: '📊 Tổng hợp' },
+  { id: 'ke-hoach',  label: '✏️ Kế hoạch & Thực hiện' },
+  { id: 'du-bao',    label: '📅 Dự báo dòng tiền' },
+  { id: 'giai-phap', label: '💡 Giải pháp cân đối' },
+]
+
 function curMonth() { return new Date().toISOString().slice(0, 7) }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,15 +67,18 @@ export default function NganSachPage() {
   const handleSaveRef = useRef(handleSave)
   useEffect(() => { handleSaveRef.current = handleSave }, [handleSave])
 
-  // Topbar left: title (stable — never changes)
+  // Topbar left: thanh tab thay cho tiêu đề module
   useEffect(() => {
     setLeft(
-      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', lineHeight: 1.15 }}>
-        <div style={{ fontSize: 11, color: '#6B7280' }}>Module › Ngân sách</div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#1C3557' }}>💰 Ngân sách dòng tiền</div>
+      <div className="ns-tab-bar" style={{ marginBottom: 0, borderBottom: 'none', gap: 2 }}>
+        {TABS.map(t => (
+          <button key={t.id} className={`ns-tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
       </div>
     )
-  }, [setLeft])
+  }, [setLeft, tab])
 
   // Topbar right: Lưu button (when ke-hoach) + month picker
   // Use handleSaveRef so we don't re-run on every localData change
@@ -234,13 +244,6 @@ export default function NganSachPage() {
     </div>
   )
 
-  const TABS: { id: TabId; label: string }[] = [
-    { id: 'tong-hop',  label: '📊 Tổng hợp' },
-    { id: 'ke-hoach',  label: '✏️ Kế hoạch & Thực hiện' },
-    { id: 'du-bao',    label: '📅 Dự báo dòng tiền' },
-    { id: 'giai-phap', label: '💡 Giải pháp cân đối' },
-  ]
-
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', minHeight: 0 }}>
     <>
@@ -251,15 +254,6 @@ export default function NganSachPage() {
         .ns-tab:hover { color:#1C3557; }
         .ns-tab.active { color:#1C3557; border-bottom-color:#1C3557; }
       `}</style>
-
-      {/* Tab bar */}
-      <div className="ns-tab-bar">
-        {TABS.map(t => (
-          <button key={t.id} className={`ns-tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {tab === 'tong-hop' && (
         <TabTongHop

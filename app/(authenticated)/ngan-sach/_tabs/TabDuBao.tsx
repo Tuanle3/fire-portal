@@ -51,8 +51,6 @@ function rowType(r: Row): 'thu' | 'chi' | null {
   if (ps < 0) return 'chi'
   return null
 }
-const loaiMatch = (col: 'TH' | 'KH', loai: string) =>
-  col === 'KH' ? loai === 'Kế hoạch' : (loai === '' || loai === 'Thực tế')
 
 export function TabDuBao({ month, localData }: Props) {
   const curYear = parseInt(month.split('-')[0])
@@ -89,8 +87,6 @@ export function TabDuBao({ month, localData }: Props) {
     return () => { alive = false }
   }, [view, monthStr, month])
   const planDoc = monthStr === month ? localData : (fetchedDoc?.thang === monthStr ? fetchedDoc : null)
-  // TH khớp theo mã ngân sách (Mã_ngân_sách / Nhóm_CP) cho tháng đang chọn
-  const monthTH = useMemo(() => (view === 'month' ? buildKmcpActual(rows, monthStr) : {}), [rows, view, monthStr])
 
   // ── Định nghĩa cột theo chế độ xem ─────────────────────────────────────────────
   const cols: ColDef[] = useMemo(() => {
@@ -108,88 +104,53 @@ export function TabDuBao({ month, localData }: Props) {
   const scopeMonths = useMemo(() => [...new Set(cols.flatMap(c => c.months))].sort((a, b) => a - b), [cols])
   const totalKey = view === 'month' ? 'TH' : null   // month: total = TH; khác: cộng tất cả cột
 
-  // ── Gom nhóm theo Nhóm_CP + Đơn vị ─────────────────────────────────────────────
+  // ── Bảng theo cấu trúc khoản mục của tab Kế hoạch & Thực hiện (mọi chế độ) ──────
+  // Cấu trúc dòng lấy từ doc ngân sách; TH khớp theo mã ngân sách theo từng kỳ;
+  // KH (chỉ chế độ Tháng) lấy trực tiếp số nhập tay.
   const { thu, chi } = useMemo(() => {
-    // ── Chế độ Tháng: nhóm theo khoản mục ngân sách (KH nhập tay) + TH khớp theo mã ──
-    if (view === 'month') {
-      // TH khớp theo mã ngân sách — giống hệt cách tab Kế hoạch & Thực hiện tính
-      const khOf = (it: NganSachItem) => Number(it.ke_hoach) || 0
-      const thOf = (it: NganSachItem) => {
-        const auto = it.kmcp ? monthTH[it.kmcp] : undefined
-        return Number(auto !== undefined ? auto : it.thuc_hien) || 0
-      }
-      const buildPlan = (want: 'B' | 'C'): Section => {
-        const items = (planDoc?.items ?? []).filter(it => it.nhom === want)
-        const kidsOf = new Map<string, NganSachItem[]>()
-        for (const it of items) if (it.parent_id) { const a = kidsOf.get(it.parent_id) ?? []; a.push(it); kidsOf.set(it.parent_id, a) }
-        // Giữ nguyên thứ tự như tab Kế hoạch (không sắp lại) để số liệu khớp từng dòng
-        const rowsArr: GroupAgg[] = []
-        for (const it of items) {
-          if (it.is_section || it.parent_id) continue
-          if (it.is_group) {
-            const kids = kidsOf.get(it.id) ?? []
-            const c = { KH: 0, TH: 0 }
-            const units: UnitAgg[] = kids.map(k => {
-              const kc = { KH: khOf(k), TH: thOf(k) }
-              c.KH += kc.KH; c.TH += kc.TH
-              return { unit: k.dien_giai || '(không tên)', cols: kc, total: kc.TH }
-            })
-            rowsArr.push({ nhom: it.dien_giai || '(nhóm)', cols: c, total: c.TH, units })
-          } else {
-            const c = { KH: khOf(it), TH: thOf(it) }
-            rowsArr.push({ nhom: it.dien_giai || '(không tên)', cols: c, total: c.TH, units: [] })
-          }
-        }
-        const colTotals = {
-          KH: rowsArr.reduce((s, r) => s + (r.cols.KH ?? 0), 0),
-          TH: rowsArr.reduce((s, r) => s + (r.cols.TH ?? 0), 0),
-        }
-        return { rows: rowsArr, colTotals, grandTotal: colTotals.TH }
-      }
-      return { thu: buildPlan('B'), chi: buildPlan('C') }
+    const planItems = (planDoc ?? localData)?.items ?? []
+    const monthMaps = new Map<number, Record<string, number>>()
+    for (const mi of scopeMonths) monthMaps.set(mi, buildKmcpActual(rows, `${selectedYear}-${pad2(mi + 1)}`))
+    const thOver = (kmcp: string, months: number[]) => {
+      if (!kmcp) return 0
+      let s = 0
+      for (const mi of months) s += Number(monthMaps.get(mi)?.[kmcp] ?? 0)
+      return s
     }
+    const cellFor = (it: NganSachItem, col: ColDef) =>
+      col.loai === 'KH' ? (Number(it.ke_hoach) || 0) : thOver(it.kmcp, col.months)
+    const totalOf = (c: Record<string, number>) =>
+      totalKey ? (c[totalKey] ?? 0) : cols.reduce((s, col) => s + (c[col.key] ?? 0), 0)
 
-    const yPrefix = String(selectedYear) + '-'
-    const build = (want: 'thu' | 'chi'): Section => {
-      const g = new Map<string, { cols: Record<string, number>; units: Map<string, Record<string, number>> }>()
-      for (const r of rows) {
-        const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
-        if (!ngay.startsWith(yPrefix)) continue
-        if (rowType(r) !== want) continue
-        const mi = parseInt(ngay.slice(5, 7)) - 1
-        if (mi < 0 || mi > 11) continue
-        const amt = Math.abs(Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0))
-        if (!amt) continue
-        const loai = loaiKey ? String(r[loaiKey] ?? '').trim() : ''
-        const nhom = String(r['Nhóm_CP'] ?? r['Nhom_CP'] ?? '').trim() || '(Chưa phân nhóm)'
-        const unit = String(r['Đơn_vị'] ?? r['Đơn vị'] ?? r['Don_vi'] ?? '').trim() || '(Không rõ)'
-        let grp = g.get(nhom)
-        if (!grp) { grp = { cols: {}, units: new Map() }; g.set(nhom, grp) }
-        for (const c of cols) {
-          if (!c.months.includes(mi) || !loaiMatch(c.loai, loai)) continue
-          grp.cols[c.key] = (grp.cols[c.key] ?? 0) + amt
-          const u = grp.units.get(unit) ?? {}
-          u[c.key] = (u[c.key] ?? 0) + amt
-          grp.units.set(unit, u)
+    const build = (want: 'B' | 'C'): Section => {
+      const items = planItems.filter(it => it.nhom === want)
+      const kidsOf = new Map<string, NganSachItem[]>()
+      for (const it of items) if (it.parent_id) { const a = kidsOf.get(it.parent_id) ?? []; a.push(it); kidsOf.set(it.parent_id, a) }
+      // Giữ nguyên thứ tự như tab Kế hoạch (không sắp lại)
+      const rowsArr: GroupAgg[] = []
+      for (const it of items) {
+        if (it.is_section || it.parent_id) continue
+        const c: Record<string, number> = {}
+        let units: UnitAgg[] = []
+        const kids = kidsOf.get(it.id) ?? []
+        if (it.is_group && kids.length > 0) {
+          units = kids.map(k => {
+            const kc: Record<string, number> = {}
+            cols.forEach(col => { kc[col.key] = cellFor(k, col); c[col.key] = (c[col.key] ?? 0) + kc[col.key] })
+            return { unit: k.dien_giai || '(không tên)', cols: kc, total: totalOf(kc) }
+          })
+        } else {
+          cols.forEach(col => { c[col.key] = cellFor(it, col) })
         }
+        rowsArr.push({ nhom: it.dien_giai || '(không tên)', cols: c, total: totalOf(c), units })
       }
-      const totalOf = (c: Record<string, number>) =>
-        totalKey ? (c[totalKey] ?? 0) : cols.reduce((s, col) => s + (c[col.key] ?? 0), 0)
-      const rowsArr: GroupAgg[] = [...g.entries()].map(([nhom, grp]) => ({
-        nhom, cols: grp.cols, total: totalOf(grp.cols),
-        units: [...grp.units.entries()]
-          .map(([unit, uc]) => ({ unit, cols: uc, total: totalOf(uc) }))
-          .sort((a, b) => b.total - a.total),
-      }))
-        .filter(r => cols.some(c => (r.cols[c.key] ?? 0) !== 0))
-        .sort((a, b) => b.total - a.total)
       const colTotals: Record<string, number> = {}
-      cols.forEach(c => { colTotals[c.key] = rowsArr.reduce((s, r) => s + (r.cols[c.key] ?? 0), 0) })
+      cols.forEach(col => { colTotals[col.key] = rowsArr.reduce((s, r) => s + (r.cols[col.key] ?? 0), 0) })
       const grandTotal = rowsArr.reduce((s, r) => s + r.total, 0)
       return { rows: rowsArr, colTotals, grandTotal }
     }
-    return { thu: build('thu'), chi: build('chi') }
-  }, [rows, cols, loaiKey, selectedYear, totalKey, view, planDoc, monthTH])
+    return { thu: build('B'), chi: build('C') }
+  }, [rows, cols, scopeMonths, selectedYear, totalKey, planDoc, localData])
 
   // ── Tóm tắt kỳ ─────────────────────────────────────────────────────────────────
   const summary = useMemo(() => {
@@ -386,8 +347,8 @@ export function TabDuBao({ month, localData }: Props) {
         </div>
       </div>
 
-      {renderSection(thu, 'thu', 'I', 'DÒNG TIỀN THU', view === 'month' ? 'KHOẢN MỤC THU' : 'NHÓM GIAO DỊCH / ĐƠN VỊ')}
-      {renderSection(chi, 'chi', 'II', 'DÒNG TIỀN CHI', view === 'month' ? 'KHOẢN MỤC CHI' : 'NHÓM CHI PHÍ / ĐƠN VỊ')}
+      {renderSection(thu, 'thu', 'I', 'DÒNG TIỀN THU', 'KHOẢN MỤC THU')}
+      {renderSection(chi, 'chi', 'II', 'DÒNG TIỀN CHI', 'KHOẢN MỤC CHI')}
 
       {/* ── III. TÓM TẮT KỲ ── */}
       <div className="bc-summary">
