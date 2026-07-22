@@ -43,9 +43,7 @@ export default function NganSachPage() {
   const [thuThang,    setThuThang]    = useState(0)
   const [kmcpActual,  setKmcpActual]  = useState<Record<string, number>>({})
   const [tonDauKy,    setTonDauKy]    = useState(0)
-  const [quyLoaded,   setQuyLoaded]   = useState(false)
   const [tonQuyDetail, setTonQuyDetail] = useState<{ stk: string; bank: string; unit: string; dauKy: number; ton: number }[]>([])
-  const [showDetail,   setShowDetail]   = useState(false)
 
   const handleSave = useCallback(async () => {
     setSaving(true); setSaveMsg('')
@@ -119,7 +117,6 @@ export default function NganSachPage() {
 
   // Fetch ALL data_quy once, then derive everything from it (KMCP map + chi/thu + ton quy)
   useEffect(() => {
-    setQuyLoaded(false)
     setTonQuyLoading(true)
     get(ref(getDb(), 'data_quy')).then(snap => {
       const rows = toArr(snap)
@@ -225,7 +222,6 @@ export default function NganSachPage() {
 
       // KMCP-level actual from Nhóm_CP field
       setKmcpActual(buildKmcpActual(rows, month))
-      setQuyLoaded(true)
     }).catch(() => {})
       .finally(() => setTonQuyLoading(false))
   }, [month])
@@ -245,12 +241,6 @@ export default function NganSachPage() {
     { id: 'giai-phap', label: '💡 Giải pháp cân đối' },
   ]
 
-  const [y, m] = month.split('-')
-  const thangLabel = `T${parseInt(m)}.${y}`
-
-  // Count how many KMCP codes have auto data
-  const autoCount = Object.keys(kmcpActual).length
-
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', minHeight: 0 }}>
     <>
@@ -261,70 +251,6 @@ export default function NganSachPage() {
         .ns-tab:hover { color:#1C3557; }
         .ns-tab.active { color:#1C3557; border-bottom-color:#1C3557; }
       `}</style>
-
-      {/* Reconciliation bar */}
-      <div style={{ marginBottom: 16, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '10px 16px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <RCard label="Tồn quỹ thực tế" val={tonQuy} loading={tonQuyLoading} color="#166534" />
-            <button
-              onClick={() => setShowDetail(v => !v)}
-              title="Xem chi tiết từng tài khoản"
-              style={{
-                marginTop: 10, width: 20, height: 20, borderRadius: 4, border: '1px solid #D1FAE5',
-                background: showDetail ? '#D1FAE5' : '#fff', color: '#166534', fontSize: 13, fontWeight: 700,
-                cursor: 'pointer', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >{showDetail ? '−' : '+'}</button>
-          </div>
-          <div style={{ width: 1, height: 32, background: '#E5E7EB' }} />
-          <RCard label={`Thu ${thangLabel} (Quỹ)`} val={thuThang} color="#1C3557" />
-          <RCard label={`Chi ${thangLabel} (Quỹ)`} val={chiThang} color="#9A3412" />
-          <div style={{ width: 1, height: 32, background: '#E5E7EB' }} />
-          <div style={{ fontSize: 11.5, color: quyLoaded ? '#166534' : '#9CA3AF' }}>
-            {quyLoaded
-              ? `✓ Đã map ${autoCount} mục KMCP từ Quỹ`
-              : tonQuyLoading ? '⏳ Đang tải data_quy…' : '—'}
-          </div>
-          <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-            {saveMsg && <span style={{ fontSize: 12.5, color: saveMsg.startsWith('Lỗi') ? '#991B1B' : '#166534', fontWeight: 600 }}>{saveMsg}</span>}
-          </div>
-        </div>
-
-        {/* Chi tiết tồn quỹ từng tài khoản */}
-        {showDetail && (
-          <div style={{ borderTop: '1px solid #E5E7EB', padding: '8px 16px 12px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-              <thead>
-                <tr style={{ color: '#6B7280', borderBottom: '1px solid #E5E7EB' }}>
-                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Đơn vị</th>
-                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Ngân hàng</th>
-                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Số tài khoản</th>
-                  <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 600 }}>Tồn quỹ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tonQuyDetail.map(d => (
-                  <tr key={d.stk} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                    <td style={{ padding: '4px 8px', color: '#374151' }}>{d.unit || '—'}</td>
-                    <td style={{ padding: '4px 8px', color: '#374151' }}>{d.bank || '—'}</td>
-                    <td style={{ padding: '4px 8px', color: '#6B7280', fontFamily: 'monospace' }}>{d.stk}</td>
-                    <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: d.ton < 0 ? '#991B1B' : '#166534' }}>
-                      {d.ton.toLocaleString('vi-VN')} ₫
-                    </td>
-                  </tr>
-                ))}
-                <tr style={{ borderTop: '2px solid #D1FAE5', background: '#F0FDF4' }}>
-                  <td colSpan={3} style={{ padding: '5px 8px', fontWeight: 700, color: '#166534', fontSize: 13 }}>Tổng cộng</td>
-                  <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 13 }}>
-                    {tonQuy.toLocaleString('vi-VN')} ₫
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
 
       {/* Tab bar */}
       <div className="ns-tab-bar">
@@ -374,17 +300,6 @@ export default function NganSachPage() {
         <TabGiaiPhap data={localData} onChange={setLocalData} onSave={handleSave} saving={saving} />
       )}
     </>
-    </div>
-  )
-}
-
-function RCard({ label, val, loading, color = '#1C3557' }: { label: string; val: number; loading?: boolean; color?: string }) {
-  return (
-    <div style={{ minWidth: 150 }}>
-      <div style={{ fontSize: 10.5, color: '#9CA3AF', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color }}>
-        {loading ? '…' : val.toLocaleString('vi-VN') + ' ₫'}
-      </div>
     </div>
   )
 }
