@@ -7,7 +7,7 @@ import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup } 
 // Sinh file mẫu Excel ở client theo đúng cấu trúc tháng đang chọn.
 // - Nội dung gốc = các dòng đã lưu của tháng (đã gồm phần tích luỹ qua các tháng).
 // - Tự bổ sung các mã KMCP đã khai báo (DEFAULT_ITEMS) nếu tháng đó còn thiếu.
-// - Chỉ nhập cột "Kế hoạch"; cột "Thực hiện" để hệ thống tự lấy từ Quỹ.
+// - Chỉ nhập cột "Kế hoạch"; số thực hiện do hệ thống tự lấy từ Quỹ (không có trong file).
 function buildExportItems(items: NganSachItem[]): NganSachItem[] {
   const present = new Set(items.filter(i => i.kmcp).map(i => i.kmcp))
   const result = [...items]
@@ -28,8 +28,8 @@ function downloadTemplate(data: NganSachThang, month: string) {
 
   // ── Sheet 1: Kế hoạch ──
   const aoa: (string | number)[][] = [
-    ['KẾ HOẠCH DÒNG TIỀN - NHẬP DỮ LIỆU', '', '', '', '', ''],
-    ['STT', 'Diễn giải', 'KMCP', 'Kế hoạch (₫)', 'Thực hiện (₫)', 'Ghi chú'],
+    ['KẾ HOẠCH DÒNG TIỀN - NHẬP DỮ LIỆU', '', '', '', ''],
+    ['STT', 'Diễn giải', 'KMCP', 'Kế hoạch (₫)', 'Ghi chú'],
   ]
   for (const it of items) {
     const isComputed = it.is_section || it.is_group  // section/nhóm: hệ thống tự tính tổng
@@ -38,15 +38,14 @@ function downloadTemplate(data: NganSachThang, month: string) {
       it.dien_giai,
       it.is_section ? '' : it.kmcp,
       isComputed ? 0 : it.ke_hoach,   // chỉ dòng chi tiết mới có Kế hoạch
-      0,                              // Thực hiện: tự động cập nhật trong app
       it.ghi_chu ?? '',
     ])
   }
-  for (let i = 0; i < 5; i++) aoa.push(['', '', '', 0, 0, ''])  // dòng trống để thêm mục tuỳ ý
+  for (let i = 0; i < 5; i++) aoa.push(['', '', '', 0, ''])  // dòng trống để thêm mục tuỳ ý
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }]
-  ws['!cols'] = [{ wch: 6 }, { wch: 42 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 30 }]
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }]
+  ws['!cols'] = [{ wch: 6 }, { wch: 42 }, { wch: 14 }, { wch: 20 }, { wch: 30 }]
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Kế hoạch')
@@ -77,7 +76,7 @@ function downloadTemplate(data: NganSachThang, month: string) {
     [''],
     ['Sheet "Kế hoạch"'],
     ['• Chỉ cần nhập cột "Kế hoạch (₫)" cho từng dòng chi tiết.'],
-    ['• Cột "Thực hiện (₫)" KHÔNG cần nhập — hệ thống tự lấy số thực tế từ Quỹ (data_quy) theo mã KMCP.'],
+    ['• File chỉ chứa số liệu kế hoạch. Số thực hiện do hệ thống tự lấy từ Quỹ (data_quy) theo mã KMCP.'],
     ['• Dòng section (A, B, C, D) và dòng nhóm: hệ thống tự tính tổng, không cần nhập.'],
     ['• Có thể thêm dòng mới ở cuối; nhớ điền KMCP nếu muốn khớp số thực hiện tự động.'],
     ['• Nhập số tiền dạng số nguyên (VD: 175466148, không có dấu phẩy).'],
@@ -129,8 +128,7 @@ function parseExcel(file: File, templateItems: NganSachItem[]): Promise<{ items:
           const dien_giai  = String(row[1] ?? '').trim()
           const kmcp       = String(row[2] ?? '').trim()
           const ke_hoach   = Math.abs(Number(String(row[3]).replace(/[^0-9.-]/g, '')) || 0)
-          const thuc_hien  = Math.abs(Number(String(row[4]).replace(/[^0-9.-]/g, '')) || 0)
-          const ghi_chu    = String(row[5] ?? '').trim()
+          const ghi_chu    = String(row[4] ?? '').trim()
 
           if (!stt && !dien_giai) continue  // blank row
 
@@ -146,7 +144,7 @@ function parseExcel(file: File, templateItems: NganSachItem[]): Promise<{ items:
             dien_giai:        dien_giai || (tmpl?.dien_giai ?? ''),
             kmcp:             kmcp || (tmpl?.kmcp ?? ''),
             ke_hoach,
-            thuc_hien,
+            thuc_hien:        0,   // file chỉ chứa kế hoạch; thực hiện lấy tự động từ Quỹ
             thuc_hien_manual: tmpl ? !tmpl.is_section && tmpl.nhom !== 'A' : true,
             ghi_chu,
             ...(tmpl?.is_group ? { is_group: true } : {}),
@@ -359,8 +357,8 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#1C3557' }}>Nhập kế hoạch & thực hiện</div>
-          <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 2 }}>Nhập trực tiếp hoặc import từ file Excel theo mẫu. Mục "Tồn quỹ" thực hiện tự động từ Firebase.</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#1C3557' }}>Data kế hoạch</div>
+          <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 2 }}>Nhập số liệu kế hoạch trực tiếp hoặc import từ file Excel theo mẫu.</div>
           {importMsg && (
             <div style={{ marginTop: 6, fontSize: 12, color: importMsg.startsWith('Lỗi') ? '#991B1B' : '#166534', fontWeight: 600 }}>
               {importMsg}
@@ -426,7 +424,6 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Diễn giải</th>
               <th style={TH(150)}>KMCP</th>
               <th style={TH(150)}>Kế hoạch (₫)</th>
-              <th style={TH(150)}>Thực hiện (₫)</th>
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Ghi chú</th>
               <th style={TH(110)}>Ngày DK</th>
               <th style={TH(72)}>Thao tác</th>
@@ -445,21 +442,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                 const standaloneKh = data.items
                   .filter(x => x.nhom === it.nhom && !x.is_section && !x.is_group && !x.parent_id)
                   .reduce((s, x) => s + x.ke_hoach, 0)
-                const standaloneTh = data.items
-                  .filter(x => x.nhom === it.nhom && !x.is_section && !x.is_group && !x.parent_id)
-                  .reduce((s, x) => {
-                    const auto = x.kmcp ? kmcpActual[x.kmcp] : undefined
-                    return s + (auto !== undefined ? auto : x.thuc_hien)
-                  }, 0)
                 const groupsKh = data.items
                   .filter(x => x.nhom === it.nhom && x.is_group)
                   .reduce((s, g) => s + groupSum(g.id).kh, 0)
-                const groupsTh = data.items
-                  .filter(x => x.nhom === it.nhom && x.is_group)
-                  .reduce((s, g) => s + groupSum(g.id).th, 0)
                 const isD = it.nhom === 'D'
                 const secKh = isA ? tonQuySoDu : isD ? sectionTotals.D_kh : standaloneKh + groupsKh
-                const secTh = isA ? tonQuyRealtime : isD ? sectionTotals.D_th : standaloneTh + groupsTh
                 const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
                 return (
                   <>
@@ -488,11 +475,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                     <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: isD ? (secKh < 0 ? '#B91C1C' : '#1C3557') : '#1C3557', fontSize: 12.5 }}>
                       {isD ? (secKh < 0 ? `(${Math.abs(secKh).toLocaleString('vi-VN')})` : fmt(secKh)) : fmt(secKh)}
                     </td>
-                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: isD ? (secTh < 0 ? '#B91C1C' : '#166534') : '#166534', fontSize: 12.5 }}>
-                      {isD ? (secTh < 0 ? `(${Math.abs(secTh).toLocaleString('vi-VN')})` : fmt(secTh)) : fmt(secTh)}{isA && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
-                      {isD && <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#FEF9C3', color: '#854D0E', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>}
-                    </td>
-                    <td />{/* Ngày DK — section rows don't have a date */}
+                    <td />{/* Ghi chú / Ngày DK — section rows don't have a date */}
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       {(it.nhom === 'B' || it.nhom === 'C') && (
                         <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
@@ -515,9 +498,6 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                       </td>
                       <td style={{ padding: '4px 8px', textAlign: 'right', color: d.dauKy < 0 ? '#991B1B' : '#374151', fontSize: 12 }}>
                         {d.dauKy !== 0 ? d.dauKy.toLocaleString('vi-VN') + ' ₫' : '—'}
-                      </td>
-                      <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: d.ton < 0 ? '#991B1B' : '#166534', fontSize: 12 }}>
-                        {d.ton !== 0 ? d.ton.toLocaleString('vi-VN') + ' ₫' : '—'}
                       </td>
                       <td /><td /><td />
                     </tr>
@@ -555,17 +535,12 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                         style={{ width: '100%', textAlign: 'center', border: '1px solid #BFDBFE', borderRadius: 5, padding: '3px 4px', fontSize: 11, fontFamily: 'monospace', background: 'transparent' }} />
                     </td>
                     {(() => {
-                      const { kh, th } = groupSum(it.id)
+                      const { kh } = groupSum(it.id)
                       const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
                       return (
-                        <>
-                          <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}>
-                            {fmt(kh)}
-                          </td>
-                          <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#166534', fontSize: 12.5 }}>
-                            {fmt(th)}
-                          </td>
-                        </>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}>
+                          {fmt(kh)}
+                        </td>
                       )
                     })()}
                     <td style={{ padding: '5px 6px' }}>
@@ -625,17 +600,6 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                       style={{ width: '100%', textAlign: 'center', border: '1px solid #E5E7EB', borderRadius: 5, padding: '3px 4px', fontSize: 11, fontFamily: 'monospace' }} />
                   </td>
                   <td style={{ padding: '5px 6px' }}>{numInput(it.id, 'ke_hoach', it.ke_hoach)}</td>
-                  <td style={{ padding: '5px 6px' }}>
-                    {hasAuto ? (
-                      <div style={{ textAlign: 'right', padding: '4px 6px' }}>
-                        <span style={{ fontWeight: 600, color: '#166534', fontSize: 12.5 }}>
-                          {(isAutoTonQuy ? 0 : autoVal ?? 0).toLocaleString('vi-VN')}
-                        </span>
-                        <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '1px 4px', borderRadius: 3 }}>AUTO</span>
-                        {isAutoTonQuy && <div style={{ fontSize: 10, color: '#9CA3AF' }}>Tồn quỹ TT</div>}
-                      </div>
-                    ) : numInput(it.id, 'thuc_hien', it.thuc_hien)}
-                  </td>
                   <td style={{ padding: '5px 6px' }}>
                     <input value={it.ghi_chu} onChange={e => upd(it.id, 'ghi_chu', e.target.value)}
                       style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit' }} />

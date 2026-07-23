@@ -15,9 +15,9 @@ import { TabDuBao } from './_tabs/TabDuBao'
 type TabId = 'tong-hop' | 'ke-hoach' | 'giai-phap' | 'du-bao'
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'tong-hop',  label: '📊 Tổng hợp' },
-  { id: 'ke-hoach',  label: '✏️ Kế hoạch & Thực hiện' },
-  { id: 'du-bao',    label: '📅 Dự báo dòng tiền' },
+  { id: 'du-bao',    label: '📅 Kế hoạch dòng tiền' },
+  { id: 'tong-hop',  label: '📊 Báo cáo thực hiện' },
+  { id: 'ke-hoach',  label: '✏️ Data kế hoạch' },
   { id: 'giai-phap', label: '💡 Giải pháp cân đối' },
 ]
 
@@ -37,7 +37,7 @@ export default function NganSachPage() {
   const { loading: sessLoading, can } = useUserSession()
   const { setLeft, setRight } = useTopbarInfo()
 
-  const [tab, setTab]         = useState<TabId>('tong-hop')
+  const [tab, setTab]         = useState<TabId>('du-bao')
   const [month, setMonth]     = useState(curMonth())
   const [localData, setLocalData] = useState<NganSachThang>(makeDefault(month))
   const [saving, setSaving]   = useState(false)
