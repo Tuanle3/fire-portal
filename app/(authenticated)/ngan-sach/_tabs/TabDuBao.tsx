@@ -1,6 +1,6 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 import { NganSachThang, NganSachItem } from '@/lib/ngan-sach-types'
@@ -231,6 +231,33 @@ export function TabDuBao({ month, localData }: Props) {
     return s
   })
 
+  // ── Xuất báo cáo (PDF qua print) ────────────────────────────────────────────────
+  // Tất cả group có thể mở chi tiết (nhiều đơn vị con).
+  const allGroupKeys = useMemo(() => {
+    const ks: string[] = []
+    thu.rows.forEach(g => { if (g.units.length > 1) ks.push('thu|' + g.nhom) })
+    chi.rows.forEach(g => { if (g.units.length > 1) ks.push('chi|' + g.nhom) })
+    return ks
+  }, [thu, chi])
+
+  // "gọn" = đóng hết nhóm; "đầy đủ" = mở hết chi tiết. In xong khôi phục màn hình như cũ.
+  const [printReq, setPrintReq] = useState(0)
+  const restoreRef = useRef<Set<string> | null>(null)
+  const exportReport = (mode: 'compact' | 'full') => {
+    restoreRef.current = expanded
+    setExpanded(mode === 'full' ? new Set(allGroupKeys) : new Set())
+    setPrintReq(n => n + 1)
+  }
+  useEffect(() => {
+    if (printReq === 0) return
+    // Effect chạy sau khi DOM đã cập nhật theo expanded mới; chờ 1 nhịp cho paint rồi in.
+    const t = setTimeout(() => {
+      window.print()
+      if (restoreRef.current) { setExpanded(restoreRef.current); restoreRef.current = null }
+    }, 120)
+    return () => clearTimeout(t)
+  }, [printReq])
+
   // ── Render 1 dòng giá trị (các cột + cột cuối + tỷ trọng) ────────────────────────
   const valueCells = (c: Record<string, number>, total: number, grand: number, isThu: boolean) => (
     <>
@@ -339,7 +366,8 @@ export function TabDuBao({ month, localData }: Props) {
         )}
         <div style={{ flex: 1 }} />
         {loading && <span className="bc-loading">⏳ Đang tải…</span>}
-        <button className="bc-print" onClick={() => window.print()}>⬇ Xuất báo cáo</button>
+        <button className="bc-print bc-print-ghost" onClick={() => exportReport('compact')} title="Chỉ hiện các nhóm chính (không mở chi tiết đơn vị)">⬇ Xuất gọn</button>
+        <button className="bc-print" onClick={() => exportReport('full')} title="Mở hết chi tiết từng đơn vị trong mọi nhóm">⬇ Xuất đầy đủ</button>
       </div>
 
       <div className="bc-paper">
@@ -425,6 +453,8 @@ const CSS = `
 .bc-chip.active{background:var(--bc-navy);border-color:var(--bc-navy);color:#fff;}
 .bc-loading{font-size:12px;color:var(--bc-grey);}
 .bc-print{font-family:inherit;background:var(--bc-navy);color:#fff;border:1px solid var(--bc-navy);padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;}
+.bc-print-ghost{background:#fff;color:var(--bc-navy);}
+.bc-print-ghost:hover{background:var(--bc-blue);}
 
 /* Giấy báo cáo */
 .bc-paper{background:#fff;border:1px solid #E5E0D8;border-radius:14px;padding:32px 36px;max-width:1080px;margin:0 auto;box-shadow:0 2px 14px rgba(13,31,51,.07);}
