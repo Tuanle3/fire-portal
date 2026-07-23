@@ -356,7 +356,7 @@ export function TabDuBao({ month, localData }: Props) {
       {renderSection(chi, 'chi', 'II', 'DÒNG TIỀN CHI', 'KHOẢN MỤC CHI')}
 
       {/* ── III. TÓM TẮT & CÂN ĐỐI KỲ ── */}
-      <div className="bc-summary" style={{ maxWidth: 640 }}>
+      <div className="bc-summary" style={{ maxWidth: 'none' }}>
         <div className="bc-sum-head">III. TÓM TẮT & CÂN ĐỐI KỲ · {scopeLabel}</div>
         <div className="bc-sum-body">
           <SumRow label="Tồn quỹ đầu kỳ" sub={kyLabel.split(' – ')[0]} value={fmt(summary.opening) + ' đ'} />
@@ -372,7 +372,13 @@ export function TabDuBao({ month, localData }: Props) {
           ) : giaiPhap.items.map((g, i) => (
             <div key={i} className="bc-sum-row">
               <span className="bc-sum-label">
-                <span style={{ color: '#9ca3af', marginRight: 6 }}>↳</span>{g.mo_ta}
+                <span style={{ color: '#9ca3af', marginRight: 6 }}>↳</span>
+                {view !== 'month' && (
+                  <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color: '#fff', background: 'var(--bc-navy)', borderRadius: 4, padding: '1px 6px', marginRight: 7 }}>
+                    Th.{parseInt(g.thang.slice(5, 7))}
+                  </span>
+                )}
+                {g.mo_ta}
                 <span className="bc-sum-sub"> · {g.trang_thai === 'yes' ? 'đã thực hiện' : g.trang_thai === 'no' ? 'không dùng' : 'dự kiến'}</span>
               </span>
               <span className="bc-sum-val" style={{ color: g.trang_thai === 'no' ? '#9ca3af' : '#15803d', textDecoration: g.trang_thai === 'no' ? 'line-through' : 'none' }}>{fmt(g.kh)} đ</span>
