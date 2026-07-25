@@ -1,7 +1,7 @@
 import {
   Document, Packer, Paragraph, TextRun,
   Table, TableRow, TableCell, WidthType, AlignmentType,
-  ShadingType, VerticalAlign, PageOrientation, BorderStyle,
+  ShadingType, VerticalAlign, PageOrientation, BorderStyle, TableLayoutType,
 } from 'docx'
 
 // ── Kiểu dữ liệu (khớp với TabDuBao) ────────────────────────────────────────────
@@ -59,7 +59,7 @@ function cell(opts: {
       : opts.align === 'center' ? AlignmentType.CENTER
         : AlignmentType.LEFT
   return new TableCell({
-    width: { size: opts.width, type: WidthType.PERCENTAGE },
+    width: { size: opts.width, type: WidthType.DXA },
     columnSpan: opts.columnSpan,
     shading: opts.bg ? { type: ShadingType.CLEAR, color: 'auto', fill: opts.bg } : undefined,
     verticalAlign: VerticalAlign.CENTER,
@@ -72,10 +72,18 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
   const { cols, view, thu, chi, summary, giaiPhap, mode, scopeLabel, kyLabel, printDate } = input
   const showUnits = mode === 'full'
 
-  // Layout cột (theo %): #, tên khoản mục, [các cột giá trị], cột tổng/chênh lệch, tỷ trọng
+  // Layout cột (bề rộng tuyệt đối theo twip): #, tên khoản mục, [các cột giá trị],
+  // cột tổng/chênh lệch, tỷ trọng. Cột # (STT) hẹp, cột tên rộng — giống bản web.
+  // Dùng layout FIXED + columnWidths bằng twip nên Word tôn trọng đúng bề rộng
+  // (không tự co giãn theo nội dung như trước).
   const nVal = cols.length
-  const W_IDX = 5, W_PCT = 9, W_TOT = 13, W_NAME = 26
-  const W_VAL = (100 - W_IDX - W_PCT - W_TOT - W_NAME) / nVal
+  const PAGE_W = 15398                                   // A4 ngang, trừ lề 2 bên (twip)
+  const dxa = (pct: number, base = PAGE_W) => Math.round(base * pct / 100)
+  const SUMMARY_W = dxa(72)                              // bảng tóm tắt hẹp hơn cho đẹp
+  const W_IDX = dxa(4), W_PCT = dxa(8), W_TOT = dxa(12)
+  const W_VAL = dxa(nVal <= 2 ? 18 : nVal === 3 ? 15 : 12)
+  const W_NAME = PAGE_W - W_IDX - W_PCT - W_TOT - W_VAL * nVal
+  const SECTION_COLW = [W_IDX, W_NAME, ...cols.map(() => W_VAL), W_TOT, W_PCT]
   const lastLabel = view === 'month' ? 'Chênh lệch' : 'Tổng (đ)'
 
   // ── 1 dòng giá trị (nhóm hoặc đơn vị) ─────────────────────────────────────────
@@ -117,7 +125,7 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
 
     if (sec.rows.length === 0) {
       rows.push(new TableRow({
-        children: [cell({ runs: [txt('Không có dữ liệu trong kỳ.', { color: GREY })], width: 100, align: 'center', columnSpan: nVal + 4 })],
+        children: [cell({ runs: [txt('Không có dữ liệu trong kỳ.', { color: GREY })], width: PAGE_W, align: 'center', columnSpan: nVal + 4 })],
       }))
     }
 
@@ -156,7 +164,9 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
 
     const border = { style: BorderStyle.SINGLE, size: 2, color: 'D0DCE8' }
     return new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
+      width: { size: PAGE_W, type: WidthType.DXA },
+      columnWidths: SECTION_COLW,
+      layout: TableLayoutType.FIXED,
       borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
       rows,
     })
@@ -166,17 +176,19 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
     const noB = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
     const botB = { style: BorderStyle.SINGLE, size: 12, color: NAVY }
     return new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
+      width: { size: PAGE_W, type: WidthType.DXA },
+      columnWidths: [dxa(60), dxa(40)],
+      layout: TableLayoutType.FIXED,
       borders: { top: noB, left: noB, right: noB, bottom: botB, insideHorizontal: noB, insideVertical: noB },
       rows: [new TableRow({
         children: [
           new TableCell({
-            width: { size: 60, type: WidthType.PERCENTAGE }, verticalAlign: VerticalAlign.BOTTOM,
+            width: { size: dxa(60), type: WidthType.DXA }, verticalAlign: VerticalAlign.BOTTOM,
             margins: { top: 200, bottom: 60, left: 0, right: 0 },
             children: [new Paragraph({ children: [txt(`${roman}. ${title}`, { bold: true, size: 21, color: NAVY })] })],
           }),
           new TableCell({
-            width: { size: 40, type: WidthType.PERCENTAGE }, verticalAlign: VerticalAlign.BOTTOM,
+            width: { size: dxa(40), type: WidthType.DXA }, verticalAlign: VerticalAlign.BOTTOM,
             margins: { top: 200, bottom: 60, left: 0, right: 0 },
             children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [txt(`${fmt(total)} đ`, { bold: true, size: 21, color })] })],
           }),
@@ -189,14 +201,14 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
   const sumRow = (label: string, value: string, color?: string, bold?: boolean, bg?: string) =>
     new TableRow({
       children: [
-        cell({ runs: [txt(label, { bold, color: '374151' })], width: 62, align: 'left', bg }),
-        cell({ runs: [txt(value, { bold: true, color })], width: 38, align: 'right', bg }),
+        cell({ runs: [txt(label, { bold, color: '374151' })], width: dxa(62, SUMMARY_W), align: 'left', bg }),
+        cell({ runs: [txt(value, { bold: true, color })], width: dxa(38, SUMMARY_W), align: 'right', bg }),
       ],
     })
 
   const sumRows: TableRow[] = [
     new TableRow({
-      children: [cell({ runs: [txt(`III. TÓM TẮT & CÂN ĐỐI KỲ · ${scopeLabel}`, { bold: true, color: 'FFFFFF', size: 17 })], width: 100, align: 'left', bg: NAVY, columnSpan: 2 })],
+      children: [cell({ runs: [txt(`III. TÓM TẮT & CÂN ĐỐI KỲ · ${scopeLabel}`, { bold: true, color: 'FFFFFF', size: 17 })], width: SUMMARY_W, align: 'left', bg: NAVY, columnSpan: 2 })],
     }),
     sumRow(`Tồn quỹ đầu kỳ (${kyLabel.split(' – ')[0]})`, fmt(summary.opening) + ' đ'),
     sumRow('(+) Tổng thu trong kỳ', fmt(summary.thu) + ' đ', GREEN),
@@ -205,7 +217,7 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
   ]
   if (giaiPhap.items.length === 0) {
     sumRows.push(new TableRow({
-      children: [cell({ runs: [txt('Giải pháp cân đối: chưa có (nhập ở tab Giải pháp cân đối)', { color: GREY })], width: 100, align: 'left', columnSpan: 2 })],
+      children: [cell({ runs: [txt('Giải pháp cân đối: chưa có (nhập ở tab Giải pháp cân đối)', { color: GREY })], width: SUMMARY_W, align: 'left', columnSpan: 2 })],
     }))
   } else {
     for (const g of giaiPhap.items) {
@@ -219,7 +231,9 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
 
   const sumBorder = { style: BorderStyle.SINGLE, size: 4, color: NAVY }
   const summaryTable = new Table({
-    width: { size: 72, type: WidthType.PERCENTAGE },
+    width: { size: SUMMARY_W, type: WidthType.DXA },
+    columnWidths: [dxa(62, SUMMARY_W), dxa(38, SUMMARY_W)],
+    layout: TableLayoutType.FIXED,
     borders: { top: sumBorder, bottom: sumBorder, left: sumBorder, right: sumBorder, insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: 'D0DCE8' }, insideVertical: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' } },
     rows: sumRows,
   })
