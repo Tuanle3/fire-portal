@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/firebase'
-import { ref, get, set } from 'firebase/database'
+import { getAdminDb } from '@/lib/firebase-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,11 +10,19 @@ async function sha256(msg: string) {
 }
 
 export async function GET(req: NextRequest) {
+  // Bảo vệ: nếu đặt SEED_SECRET trong env thì phải truyền ?secret=... khớp mới chạy được
+  // (tránh việc bất kỳ ai cũng gọi /api/seed?force=true để reset mật khẩu admin).
+  const secret = process.env.SEED_SECRET
+  if (secret && req.nextUrl.searchParams.get('secret') !== secret) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const force    = req.nextUrl.searchParams.get('force') === 'true'
   const password = req.nextUrl.searchParams.get('password') ?? 'Admin@123'
+  const db = getAdminDb()
 
   // Kiểm tra user hiện có — chỉ block nếu không có ?force=true
-  const snap = await get(ref(getDb(), 'portal_users'))
+  const snap = await db.ref('portal_users').get()
   if (snap.exists() && !force) {
     return NextResponse.json({
       error: 'Đã có user. Dùng ?force=true để reset.',
@@ -27,7 +34,7 @@ export async function GET(req: NextRequest) {
   const hash = await sha256(password)
   const id   = Date.now().toString()
 
-  await set(ref(getDb(), 'portal_users'), {
+  await db.ref('portal_users').set({
     [id]: {
       username:   'admin',
       hash,

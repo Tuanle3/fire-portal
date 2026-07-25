@@ -1,0 +1,10 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "$top": {
+      ".read": "auth != null && $top !== 'portal_users'",
+      ".write": "auth != null && $top !== 'portal_users'"
+    }
+  }
+}
