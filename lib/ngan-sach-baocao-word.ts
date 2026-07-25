@@ -2,6 +2,7 @@ import {
   Document, Packer, Paragraph, TextRun,
   Table, TableRow, TableCell, WidthType, AlignmentType,
   ShadingType, VerticalAlign, PageOrientation, BorderStyle, TableLayoutType,
+  Footer, PageNumber,
 } from 'docx'
 
 // ── Kiểu dữ liệu (khớp với TabDuBao) ────────────────────────────────────────────
@@ -87,6 +88,8 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
   const lastLabel = view === 'month' ? 'Còn phải thực hiện' : 'Tổng (đ)'
   // Còn phải thực hiện = max(0, Kế hoạch − Thực hiện).
   const conPhaiThucHien = (c: Record<string, number>) => Math.max(0, (c['KH'] ?? 0) - (c['TH'] ?? 0))
+  // Dòng "không phát sinh": tất cả cột giá trị (gồm cả Kế hoạch & Thực hiện) đều = 0 → ẩn khi xuất Word.
+  const isEmptyRow = (c: Record<string, number>) => cols.every(col => (c[col.key] ?? 0) === 0)
 
   // ── 1 dòng giá trị (nhóm hoặc đơn vị) ─────────────────────────────────────────
   const valueCells = (c: Record<string, number>, total: number, grand: number, bg?: string) => {
@@ -129,9 +132,12 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
       }))
     }
 
-    sec.rows.forEach((g, i) => {
+    let idx = 0
+    for (const g of sec.rows) {
+      if (isEmptyRow(g.cols)) continue        // bỏ nhóm không phát sinh
+      idx++
       const gCells: TableCell[] = [
-        cell({ runs: [txt(String(i + 1), { color: 'C4CACF', bold: true })], width: W_IDX, align: 'center', bg: GROUP_BG }),
+        cell({ runs: [txt(String(idx), { color: 'C4CACF', bold: true })], width: W_IDX, align: 'center', bg: GROUP_BG }),
         cell({ runs: [txt(g.nhom, { color: NAVY, bold: true })], width: W_NAME, align: 'left', bg: GROUP_BG }),
         ...valueCells(g.cols, g.total, sec.grandTotal, GROUP_BG),
       ]
@@ -139,6 +145,7 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
 
       if (showUnits && g.units.length > 1) {
         for (const u of g.units) {
+          if (isEmptyRow(u.cols)) continue    // bỏ đơn vị con không phát sinh
           const uCells: TableCell[] = [
             cell({ runs: [txt('', {})], width: W_IDX, align: 'center' }),
             cell({ runs: [txt('└ ' + u.unit, { color: MUTED, size: 17 })], width: W_NAME, align: 'left' }),
@@ -147,7 +154,7 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
           rows.push(new TableRow({ children: uCells }))
         }
       }
-    })
+    }
 
     // TỔNG
     const totalCells: TableCell[] = [
@@ -238,6 +245,17 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
     rows: sumRows,
   })
 
+  // Chân trang: "Trang X/Y" (Y = tổng số trang) để người đọc biết tổng số trang.
+  const footer = new Footer({
+    children: [new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({
+        children: ['Trang ', PageNumber.CURRENT, '/', PageNumber.TOTAL_PAGES],
+        font: FONT, size: 16, color: GREY,
+      })],
+    })],
+  })
+
   // ── Ghép tài liệu ─────────────────────────────────────────────────────────────
   const doc = new Document({
     styles: { default: { document: { run: { font: FONT, size: 18, color: INK } } } },
@@ -248,6 +266,7 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
           margin: { top: 720, bottom: 720, left: 720, right: 720 },
         },
       },
+      footers: { default: footer },
       children: [
         new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [txt('SƠN AN GROUP', { bold: true, size: 16, color: GREY })] }),
         new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [txt(`BÁO CÁO DÒNG TIỀN ${scopeLabel}`, { bold: true, size: 30, color: NAVY })] }),
