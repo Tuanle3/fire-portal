@@ -84,10 +84,12 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
   const W_VAL = dxa(nVal <= 2 ? 18 : nVal === 3 ? 15 : 12)
   const W_NAME = PAGE_W - W_IDX - W_PCT - W_TOT - W_VAL * nVal
   const SECTION_COLW = [W_IDX, W_NAME, ...cols.map(() => W_VAL), W_TOT, W_PCT]
-  const lastLabel = view === 'month' ? 'Chênh lệch' : 'Tổng (đ)'
+  const lastLabel = view === 'month' ? 'Còn phải thực hiện' : 'Tổng (đ)'
+  // Còn phải thực hiện = max(0, Kế hoạch − Thực hiện).
+  const conPhaiThucHien = (c: Record<string, number>) => Math.max(0, (c['KH'] ?? 0) - (c['TH'] ?? 0))
 
   // ── 1 dòng giá trị (nhóm hoặc đơn vị) ─────────────────────────────────────────
-  const valueCells = (c: Record<string, number>, total: number, grand: number, isThu: boolean, bg?: string) => {
+  const valueCells = (c: Record<string, number>, total: number, grand: number, bg?: string) => {
     const cellsArr: TableCell[] = []
     for (const col of cols) {
       cellsArr.push(cell({
@@ -96,9 +98,7 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
       }))
     }
     if (view === 'month') {
-      const d = (c['TH'] ?? 0) - (c['KH'] ?? 0)
-      const good = (d >= 0) === isThu
-      cellsArr.push(cell({ runs: [txt(fmtSigned(d), { color: good ? GREEN : RED, bold: true })], width: W_TOT, align: 'right', bg }))
+      cellsArr.push(cell({ runs: [txt(fmt(conPhaiThucHien(c)), { color: NAVY, bold: true })], width: W_TOT, align: 'right', bg }))
     } else {
       cellsArr.push(cell({ runs: [txt(fmt(total), { color: NAVY, bold: true })], width: W_TOT, align: 'right', bg }))
     }
@@ -133,7 +133,7 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
       const gCells: TableCell[] = [
         cell({ runs: [txt(String(i + 1), { color: 'C4CACF', bold: true })], width: W_IDX, align: 'center', bg: GROUP_BG }),
         cell({ runs: [txt(g.nhom, { color: NAVY, bold: true })], width: W_NAME, align: 'left', bg: GROUP_BG }),
-        ...valueCells(g.cols, g.total, sec.grandTotal, isThu, GROUP_BG),
+        ...valueCells(g.cols, g.total, sec.grandTotal, GROUP_BG),
       ]
       rows.push(new TableRow({ children: gCells }))
 
@@ -142,7 +142,7 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
           const uCells: TableCell[] = [
             cell({ runs: [txt('', {})], width: W_IDX, align: 'center' }),
             cell({ runs: [txt('└ ' + u.unit, { color: MUTED, size: 17 })], width: W_NAME, align: 'left' }),
-            ...valueCells(u.cols, u.total, sec.grandTotal, isThu),
+            ...valueCells(u.cols, u.total, sec.grandTotal),
           ]
           rows.push(new TableRow({ children: uCells }))
         }
@@ -156,7 +156,7 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
     ]
     for (const col of cols) totalCells.push(cell({ runs: [txt(fmt(sec.colTotals[col.key] ?? 0), { color: 'FFFFFF', bold: true })], width: W_VAL, align: 'right', bg: NAVY }))
     totalCells.push(cell({
-      runs: [txt(view === 'month' ? fmtSigned((sec.colTotals['TH'] ?? 0) - (sec.colTotals['KH'] ?? 0)) : fmt(sec.grandTotal), { color: 'FFFFFF', bold: true })],
+      runs: [txt(view === 'month' ? fmt(sec.rows.reduce((s, g) => s + conPhaiThucHien(g.cols), 0)) : fmt(sec.grandTotal), { color: 'FFFFFF', bold: true })],
       width: W_TOT, align: 'right', bg: NAVY,
     }))
     totalCells.push(cell({ runs: [txt('100%', { color: 'FFFFFF', bold: true })], width: W_PCT, align: 'right', bg: NAVY }))

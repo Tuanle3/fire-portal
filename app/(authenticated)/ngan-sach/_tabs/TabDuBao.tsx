@@ -253,16 +253,17 @@ export function TabDuBao({ month, localData }: Props) {
     }
   }
 
+  // Còn phải thực hiện = max(0, Kế hoạch − Thực hiện). Nếu TH ≥ KH → 0 (hiển thị "—").
+  const conPhaiThucHien = (c: Record<string, number>) => Math.max(0, (c['KH'] ?? 0) - (c['TH'] ?? 0))
+
   // ── Render 1 dòng giá trị (các cột + cột cuối + tỷ trọng) ────────────────────────
-  const valueCells = (c: Record<string, number>, total: number, grand: number, isThu: boolean) => (
+  const valueCells = (c: Record<string, number>, total: number, grand: number) => (
     <>
       {cols.map(col => (
         <td key={col.key} className="bc-num">{fmt(c[col.key] ?? 0)}</td>
       ))}
       {view === 'month' ? (
-        <td className={'bc-num bc-delta ' + (((c['TH'] ?? 0) - (c['KH'] ?? 0)) >= 0 === isThu ? 'good' : 'bad')}>
-          {fmtSigned((c['TH'] ?? 0) - (c['KH'] ?? 0))}
-        </td>
+        <td className="bc-num bc-strong">{fmt(conPhaiThucHien(c))}</td>
       ) : (
         <td className="bc-num bc-strong">{fmt(total)}</td>
       )}
@@ -286,7 +287,7 @@ export function TabDuBao({ month, localData }: Props) {
                 <th className="bc-idx">#</th>
                 <th className="bc-name">{nameHead}</th>
                 {cols.map(c => <th key={c.key} className="bc-num-h">{c.label}</th>)}
-                <th className="bc-num-h">{view === 'month' ? 'Chênh lệch' : 'Tổng (đ)'}</th>
+                <th className="bc-num-h">{view === 'month' ? 'Còn phải thực hiện' : 'Tổng (đ)'}</th>
                 <th className="bc-pct-h">Tỷ trọng</th>
               </tr>
             </thead>
@@ -305,13 +306,13 @@ export function TabDuBao({ month, localData }: Props) {
                         {g.units.length > 1 && <span className="bc-caret">▶</span>}
                         <span className="bc-gname">{g.nhom}</span>
                       </td>
-                      {valueCells(g.cols, g.total, sec.grandTotal, isThu)}
+                      {valueCells(g.cols, g.total, sec.grandTotal)}
                     </tr>
                     {open && g.units.map(u => (
                       <tr key={ek + '|' + u.unit} className="bc-row bc-unit">
                         <td className="bc-idx" />
                         <td className="bc-name"><span className="bc-uname">└ {u.unit}</span></td>
-                        {valueCells(u.cols, u.total, sec.grandTotal, isThu)}
+                        {valueCells(u.cols, u.total, sec.grandTotal)}
                       </tr>
                     ))}
                   </>
@@ -321,7 +322,7 @@ export function TabDuBao({ month, localData }: Props) {
                 <td className="bc-idx" />
                 <td className="bc-name">TỔNG {isThu ? 'THU' : 'CHI'}</td>
                 {cols.map(c => <td key={c.key} className="bc-num">{fmt(sec.colTotals[c.key] ?? 0)}</td>)}
-                <td className="bc-num">{view === 'month' ? fmtSigned((sec.colTotals['TH'] ?? 0) - (sec.colTotals['KH'] ?? 0)) : fmt(sec.grandTotal)}</td>
+                <td className="bc-num">{view === 'month' ? fmt(sec.rows.reduce((s, g) => s + conPhaiThucHien(g.cols), 0)) : fmt(sec.grandTotal)}</td>
                 <td className="bc-pct">100%</td>
               </tr>
             </tbody>
