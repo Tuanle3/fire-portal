@@ -133,6 +133,24 @@ export function TabDuBao({ month, localData }: Props) {
     return m
   }, [scopeMonths, selectedYear, month, localData, scopeDocs])
 
+  // Tổng Thu/Chi kế hoạch mỗi tháng (theo nhóm B/C, không cần chi tiết KMCP) —
+  // dùng cho bảng "Chi tiết theo tháng" trong ô Cân đối kỳ.
+  const monthPlanTotals = useMemo(() => {
+    const m = new Map<number, { thu: number; chi: number }>()
+    for (const mi of scopeMonths) {
+      const ms = `${selectedYear}-${pad2(mi + 1)}`
+      const doc = ms === month ? localData : scopeDocs.get(ms)
+      let thu = 0, chi = 0
+      for (const it of doc?.items ?? []) {
+        if (it.is_section || it.is_group) continue
+        if (it.nhom === 'B') thu += Number(it.ke_hoach) || 0
+        else if (it.nhom === 'C') chi += Number(it.ke_hoach) || 0
+      }
+      m.set(mi, { thu, chi })
+    }
+    return m
+  }, [scopeMonths, selectedYear, month, localData, scopeDocs])
+
   // ── Bảng theo cấu trúc khoản mục của tab Kế hoạch & Thực hiện (mọi chế độ) ──────
   // Cấu trúc dòng lấy từ doc ngân sách; TH khớp theo mã ngân sách theo từng kỳ;
   // KH (chỉ chế độ Tháng) lấy trực tiếp số nhập tay.
@@ -253,6 +271,46 @@ export function TabDuBao({ month, localData }: Props) {
     const residual = closing - opening - netTT - noiBoNet - xlNet - khacNet
     return { opening, closing, thu: thuTT, chi: chiTT, netTT, noiBoNet, xlNet, khacNet, residual }
   }, [rows, scopeMonths, loaiKey, selectedYear, view, monthSel])
+
+  // ── Chi tiết cân đối theo từng tháng trong kỳ (Quý/Năm) ─────────────────────────
+  // Tháng đã có dữ liệu Thực tế (data_quy) → dùng Thực tế; tháng chưa tới (chưa có
+  // dòng nào) → dùng Kế hoạch đã nhập. Nối tiếp: cuối kỳ tháng trước = đầu kỳ
+  // tháng sau, để thấy CHÍNH XÁC tháng nào trong kỳ bị thiếu tiền theo kế hoạch.
+  const monthlyRecon = useMemo(() => {
+    if (view === 'month' || scopeMonths.length <= 1) return []
+    const monthHasActual = (mi: number) => {
+      const pfx = `${selectedYear}-${pad2(mi + 1)}`
+      return rows.some(r => {
+        if (!String(r['Ngày'] ?? r['Ngay'] ?? '').startsWith(pfx)) return false
+        const loai = loaiKey ? String(r[loaiKey] ?? '').trim() : ''
+        return loai === 'Thực tế'
+      })
+    }
+    const monthActual = (mi: number) => {
+      const pfx = `${selectedYear}-${pad2(mi + 1)}`
+      let thu = 0, chi = 0
+      for (const r of rows) {
+        if (!String(r['Ngày'] ?? r['Ngay'] ?? '').startsWith(pfx)) continue
+        const loai = loaiKey ? String(r[loaiKey] ?? '').trim() : ''
+        if (loai !== 'Thực tế') continue
+        const t = rowType(r); if (!t) continue
+        const amt = Math.abs(Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0))
+        if (t === 'thu') thu += amt; else chi += amt
+      }
+      return { thu, chi }
+    }
+    let openingCarry: number | null = null
+    const list: { mi: number; opening: number; thu: number; chi: number; closing: number; hasActual: boolean }[] = []
+    for (const mi of scopeMonths) {
+      const mOpen: number = openingCarry !== null ? openingCarry : buildTonKy(rows, selectedYear, mi, mi).opening
+      const hasActual = monthHasActual(mi)
+      const { thu, chi } = hasActual ? monthActual(mi) : (monthPlanTotals.get(mi) ?? { thu: 0, chi: 0 })
+      const mClose = mOpen + thu - chi
+      list.push({ mi, opening: mOpen, thu, chi, closing: mClose, hasActual })
+      openingCarry = mClose
+    }
+    return list
+  }, [view, scopeMonths, rows, selectedYear, loaiKey, monthPlanTotals])
 
   // ── Giải pháp cân đối (chỉ Năm/Quý): gom từ các doc ngân sách trong kỳ ─────────
   useEffect(() => {
@@ -480,6 +538,25 @@ export function TabDuBao({ month, localData }: Props) {
           {summary.residual ? <NoteRow label="Chênh lệch sổ quỹ chưa đối chiếu" sub="Tồn biến động nhưng thiếu bút toán thu/chi" value={summary.residual} /> : null}
 
           <SumRow label="(=) Số dư cuối kỳ thực tế" sub="theo sổ quỹ · khớp Dashboard" value={fmtSigned(summary.closing) + ' đ'} color={summary.closing < 0 ? 'var(--bc-red)' : 'var(--bc-navy)'} strong highlight />
+
+          {/* Chi tiết theo từng tháng trong kỳ — tháng đã qua dùng Thực tế, tháng chưa tới dùng Kế hoạch */}
+          {monthlyRecon.length > 0 && (
+            <div className="bc-sum-note-head">Chi tiết theo tháng trong kỳ (tháng đã qua: Thực tế · tháng chưa tới: Kế hoạch)</div>
+          )}
+          {monthlyRecon.map(m => (
+            <div key={m.mi} className="bc-sum-row bc-sum-note">
+              <span className="bc-sum-label">
+                <span style={{ color: '#9ca3af', marginRight: 6 }}>↳</span>
+                <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color: '#fff', background: m.hasActual ? 'var(--bc-navy)' : 'var(--bc-amber)', borderRadius: 4, padding: '1px 6px', marginRight: 7 }}>
+                  {MONTH_SHORT[m.mi]} · {m.hasActual ? 'Thực tế' : 'Kế hoạch'}
+                </span>
+                <span className="bc-sum-sub">Đầu {fmt(m.opening)} đ · Thu {fmt(m.thu)} đ · Chi {fmt(m.chi)} đ</span>
+              </span>
+              <span className="bc-sum-val" style={{ color: m.closing < 0 ? 'var(--bc-red)' : 'var(--bc-green)' }}>
+                {m.closing < 0 ? 'Thiếu ' : 'Đủ '}{fmtSigned(m.closing)} đ
+              </span>
+            </div>
+          ))}
 
           {/* Giải pháp cân đối */}
           {giaiPhap.items.length === 0 ? (

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useMemo, useCallback } from 'react'
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { NganSachThang, NganSachItem, GiaiPhap, DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
 import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup } from '@/lib/ngan-sach-store'
@@ -212,6 +212,25 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(data.items.filter(it => it.is_group).map(it => it.id))
   )
+  // TabKeHoach không unmount khi đổi tháng (không có key theo month ở page.tsx),
+  // nên state "collapsed" khởi tạo 1 lần (useState lazy init) sẽ giữ id nhóm của
+  // BẤT KỲ dữ liệu nào đang có tại thời điểm mount — thường là doc rỗng tạm thời
+  // (makeDefault, chưa có nhóm) trước khi Firestore trả dữ liệu thật về, hoặc dữ
+  // liệu của THÁNG TRƯỚC khi vừa đổi tháng. Vì mỗi tháng có id nhóm khác nhau, id
+  // cũ trong "collapsed" không khớp id nhóm mới → trạng thái đóng/mở coi như vô
+  // nghĩa, nút bấm không phản ánh đúng thực tế. Đồng bộ lại mỗi khi tập hợp id
+  // nhóm thực sự đổi (đổi tháng, hoặc dữ liệu thật vừa tải xong) — mặc định về
+  // "đóng tất cả", không ảnh hưởng khi người dùng chỉ đang gõ số trong cùng 1 tháng.
+  const groupIdsSig = useMemo(
+    () => data.items.filter(it => it.is_group).map(it => it.id).sort().join(','),
+    [data.items],
+  )
+  const lastSyncedSig = useRef<string | null>(null)
+  useEffect(() => {
+    if (groupIdsSig === lastSyncedSig.current) return
+    lastSyncedSig.current = groupIdsSig
+    setCollapsed(new Set(groupIdsSig ? groupIdsSig.split(',') : []))
+  }, [groupIdsSig])
   const toggleCollapse = (id: string) =>
     setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   const [importing, setImporting] = useState(false)
