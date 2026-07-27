@@ -273,9 +273,13 @@ export function TabDuBao({ month, localData }: Props) {
   }, [rows, scopeMonths, loaiKey, selectedYear, view, monthSel])
 
   // ── Chi tiết cân đối theo từng tháng trong kỳ (Quý/Năm) ─────────────────────────
-  // Tháng đã có dữ liệu Thực tế (data_quy) → dùng Thực tế; tháng chưa tới (chưa có
-  // dòng nào) → dùng Kế hoạch đã nhập. Nối tiếp: cuối kỳ tháng trước = đầu kỳ
-  // tháng sau, để thấy CHÍNH XÁC tháng nào trong kỳ bị thiếu tiền theo kế hoạch.
+  // Tháng đã có dữ liệu Thực tế: đầu kỳ/cuối kỳ lấy THẲNG từ Tồn thực tế (buildTonKy,
+  // cùng thuật toán với Dashboard/ô Tóm tắt) — vì Tồn thực tế đã phản ánh MỌI biến
+  // động quỹ (Thực tế + Nội bộ + XL + chưa gán loại), không chỉ riêng thu/chi đã
+  // phân loại. Nếu tự cộng "đầu kỳ + Thu(TT) − Chi(TT)" sẽ ra số KHÁC với Tồn thực
+  // tế thật (thiếu phần "chưa phân loại" đã thuyết minh phía trên) — sai nguyên tắc
+  // và không khớp ô Tóm tắt. Tháng chưa tới (chưa có dữ liệu) → chỉ khi đó mới CHIẾU
+  // theo Kế hoạch, nối tiếp từ số dư thực tế/dự phóng gần nhất.
   const monthlyRecon = useMemo(() => {
     if (view === 'month' || scopeMonths.length <= 1) return []
     const monthHasActual = (mi: number) => {
@@ -299,15 +303,22 @@ export function TabDuBao({ month, localData }: Props) {
       }
       return { thu, chi }
     }
-    let openingCarry: number | null = null
+    let carry: number | null = null   // số dư gần nhất (thực tế hoặc dự phóng) để làm đầu kỳ tháng Kế hoạch kế tiếp
     const list: { mi: number; opening: number; thu: number; chi: number; closing: number; hasActual: boolean }[] = []
     for (const mi of scopeMonths) {
-      const mOpen: number = openingCarry !== null ? openingCarry : buildTonKy(rows, selectedYear, mi, mi).opening
       const hasActual = monthHasActual(mi)
-      const { thu, chi } = hasActual ? monthActual(mi) : (monthPlanTotals.get(mi) ?? { thu: 0, chi: 0 })
-      const mClose = mOpen + thu - chi
-      list.push({ mi, opening: mOpen, thu, chi, closing: mClose, hasActual })
-      openingCarry = mClose
+      if (hasActual) {
+        const { opening, closing } = buildTonKy(rows, selectedYear, mi, mi)
+        const { thu, chi } = monthActual(mi)
+        list.push({ mi, opening, thu, chi, closing, hasActual })
+        carry = closing
+      } else {
+        const mOpen: number = carry !== null ? carry : buildTonKy(rows, selectedYear, mi, mi).opening
+        const { thu, chi } = monthPlanTotals.get(mi) ?? { thu: 0, chi: 0 }
+        const mClose = mOpen + thu - chi
+        list.push({ mi, opening: mOpen, thu, chi, closing: mClose, hasActual })
+        carry = mClose
+      }
     }
     return list
   }, [view, scopeMonths, rows, selectedYear, loaiKey, monthPlanTotals])
