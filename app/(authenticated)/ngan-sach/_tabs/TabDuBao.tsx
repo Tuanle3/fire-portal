@@ -539,24 +539,63 @@ export function TabDuBao({ month, localData }: Props) {
 
           <SumRow label="(=) Số dư cuối kỳ thực tế" sub="theo sổ quỹ · khớp Dashboard" value={fmtSigned(summary.closing) + ' đ'} color={summary.closing < 0 ? 'var(--bc-red)' : 'var(--bc-navy)'} strong highlight />
 
-          {/* Chi tiết theo từng tháng trong kỳ — tháng đã qua dùng Thực tế, tháng chưa tới dùng Kế hoạch */}
+          {/* Chi tiết theo từng tháng trong kỳ — tháng đã qua dùng Thực tế, tháng chưa tới dùng Kế hoạch.
+              Bố cục theo cột từng tháng (Th.7 | Th.8 | Th.9…), đồng nhất với mẫu bảng
+              I. DÒNG TIỀN THU / II. DÒNG TIỀN CHI phía trên. */}
           {monthlyRecon.length > 0 && (
-            <div className="bc-sum-note-head">Chi tiết theo tháng trong kỳ (tháng đã qua: Thực tế · tháng chưa tới: Kế hoạch)</div>
+            <>
+              <div className="bc-sum-note-head">Chi tiết theo tháng trong kỳ (tháng đã qua: Thực tế · tháng chưa tới: Kế hoạch)</div>
+              <div className="bc-month-wrap">
+                <table className="bc-month-table">
+                  <thead>
+                    <tr>
+                      <th className="bc-mn-name" />
+                      {monthlyRecon.map(m => (
+                        <th key={m.mi} className="bc-mn-num">
+                          {MONTH_SHORT[m.mi]}
+                          <span className="bc-mn-tag" style={{ background: m.hasActual ? 'var(--bc-navy)' : 'var(--bc-amber)' }}>
+                            {m.hasActual ? 'TT' : 'KH'}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="bc-mn-name">Đầu kỳ</td>
+                      {monthlyRecon.map(m => <td key={m.mi} className="bc-mn-num">{fmt(m.opening)}</td>)}
+                    </tr>
+                    <tr>
+                      <td className="bc-mn-name">Thu</td>
+                      {monthlyRecon.map(m => <td key={m.mi} className="bc-mn-num" style={{ color: 'var(--bc-green)' }}>{fmt(m.thu)}</td>)}
+                    </tr>
+                    <tr>
+                      <td className="bc-mn-name">Chi</td>
+                      {monthlyRecon.map(m => <td key={m.mi} className="bc-mn-num" style={{ color: 'var(--bc-red)' }}>{fmt(m.chi)}</td>)}
+                    </tr>
+                    <tr>
+                      <td className="bc-mn-name bc-mn-strong">Cuối kỳ</td>
+                      {monthlyRecon.map(m => (
+                        <td key={m.mi} className="bc-mn-num bc-mn-strong" style={{ color: m.closing < 0 ? 'var(--bc-red)' : 'var(--bc-navy)' }}>
+                          {fmtSigned(m.closing)}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <td className="bc-mn-name">Trạng thái</td>
+                      {monthlyRecon.map(m => (
+                        <td key={m.mi} className="bc-mn-num">
+                          <span className="bc-mn-badge" style={{ color: m.closing < 0 ? 'var(--bc-red)' : 'var(--bc-green)', background: m.closing < 0 ? '#FEF2F2' : '#F0FDF4' }}>
+                            {m.closing < 0 ? 'THIẾU' : 'ĐỦ'}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
-          {monthlyRecon.map(m => (
-            <div key={m.mi} className="bc-sum-row bc-sum-note">
-              <span className="bc-sum-label">
-                <span style={{ color: '#9ca3af', marginRight: 6 }}>↳</span>
-                <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color: '#fff', background: m.hasActual ? 'var(--bc-navy)' : 'var(--bc-amber)', borderRadius: 4, padding: '1px 6px', marginRight: 7 }}>
-                  {MONTH_SHORT[m.mi]} · {m.hasActual ? 'Thực tế' : 'Kế hoạch'}
-                </span>
-                <span className="bc-sum-sub">Đầu {fmt(m.opening)} đ · Thu {fmt(m.thu)} đ · Chi {fmt(m.chi)} đ</span>
-              </span>
-              <span className="bc-sum-val" style={{ color: m.closing < 0 ? 'var(--bc-red)' : 'var(--bc-green)' }}>
-                {m.closing < 0 ? 'Thiếu ' : 'Đủ '}{fmtSigned(m.closing)} đ
-              </span>
-            </div>
-          ))}
 
           {/* Giải pháp cân đối */}
           {giaiPhap.items.length === 0 ? (
@@ -687,5 +726,17 @@ const CSS = `
 .bc-sum-label{color:#374151;}
 .bc-sum-sub{color:var(--bc-grey);font-size:11px;}
 .bc-sum-val{font-family:var(--bc-mono);font-weight:700;white-space:nowrap;}
+
+.bc-month-wrap{background:#FAFBFD;padding:4px 14px 12px;overflow-x:auto;}
+.bc-month-table{border-collapse:collapse;width:100%;min-width:420px;}
+.bc-month-table thead th{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--bc-muted);font-weight:700;padding:6px 8px;border-bottom:1px solid var(--bc-line);white-space:nowrap;text-align:right;}
+.bc-mn-name{text-align:left;font-size:12.5px;font-weight:700;color:var(--bc-navy);white-space:nowrap;}
+.bc-mn-num{text-align:right;font-family:var(--bc-mono);font-size:12px;color:#374151;white-space:nowrap;padding:7px 8px;}
+.bc-mn-strong{font-weight:800;}
+.bc-month-table tbody td{padding:7px 8px;border-bottom:1px solid var(--bc-line);}
+.bc-month-table tbody tr:last-child td{border-bottom:none;}
+.bc-mn-tag{display:inline-block;font-size:9px;font-weight:700;color:#fff;border-radius:4px;padding:1px 5px;margin-left:6px;letter-spacing:.02em;}
+.bc-mn-badge{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;border-radius:5px;padding:2px 9px;}
+
 @media print{.bc-controls{display:none;}.bc-paper{border:none;box-shadow:none;max-width:100%;padding:0;}}
 `

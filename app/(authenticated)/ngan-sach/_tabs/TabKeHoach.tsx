@@ -267,8 +267,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
   // hiển thị, dữ liệu gốc giữ nguyên.
   const ownerOf = useMemo(() => {
     const groups = data.items.filter(it => it.is_group)
-    const byStt = new Map<string, string>()   // stt nhóm → id nhóm
-    for (const g of groups) { const s = String(g.stt).trim(); if (s) byStt.set(s, g.id) }
+    // Khoá theo "nhom|stt" — STT tự đánh lại từ "1" ở MỖI section (B, C đều có
+    // nhóm "8" riêng), nên khoá thuần theo STT sẽ bị đụng độ giữa các section,
+    // khiến "8.1" ở nhóm Thu bị gán nhầm sang nhóm "8" bên Chi (hoặc ngược lại).
+    const byStt = new Map<string, string>()   // "nhom|stt nhóm" → id nhóm
+    for (const g of groups) { const s = String(g.stt).trim(); if (s) byStt.set(`${g.nhom}|${s}`, g.id) }
     const groupIds = new Set(groups.map(g => g.id))
     const map = new Map<string, string | null>()
     let currentGroup: string | null = null
@@ -278,7 +281,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       const s = String(it.stt).trim()
       const dot = s.lastIndexOf('.')
       let gid: string | null = null
-      if (dot > 0) gid = byStt.get(s.slice(0, dot)) ?? null
+      if (dot > 0) gid = byStt.get(`${it.nhom}|${s.slice(0, dot)}`) ?? null
       if (!gid && it.parent_id && groupIds.has(it.parent_id)) gid = it.parent_id
       if (!gid) gid = currentGroup
       map.set(it.id, gid)
@@ -350,6 +353,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
   }
 
   // Đánh lại STT tự động theo thứ tự hiện tại
+  // Đánh lại STT dùng `ownerOf` (STT/parent_id/vị trí) để xác định nhóm cha THẬT,
+  // thay vì parent_id thô — nếu không, dòng có parent_id lệch sẽ bị gán STT "?.n"
+  // (không tìm thấy nhóm), rồi lỡ tay lưu lại làm hỏng STT vĩnh viễn. Đồng thời
+  // "chữa" luôn parent_id theo nhóm vừa xác định đúng, để lần renumber sau (và
+  // groupSum/moveItem) không còn phụ thuộc vào tín hiệu vị trí nữa.
   const renumberSTT = () => {
     const items = [...data.items]
     const counters: Record<string, number> = {}  // nhom → counter
@@ -368,18 +376,19 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
         return { ...it, stt }
       }
 
-      if (it.parent_id) {
-        // child của group
-        const parentStt = groupSttMap.get(it.parent_id) ?? '?'
-        const cnt = (groupCounters.get(it.parent_id) ?? 0) + 1
-        groupCounters.set(it.parent_id, cnt)
-        return { ...it, stt: `${parentStt}.${cnt}` }
+      const gid = ownerOf.get(it.id)
+      if (gid && groupSttMap.has(gid)) {
+        // dòng con — gán theo nhóm cha đã xác định đúng, đồng thời chữa parent_id
+        const parentStt = groupSttMap.get(gid)!
+        const cnt = (groupCounters.get(gid) ?? 0) + 1
+        groupCounters.set(gid, cnt)
+        return { ...it, stt: `${parentStt}.${cnt}`, parent_id: gid }
       }
 
-      // top-level item trong section
+      // top-level item trong section (không thuộc nhóm nào) — bỏ parent_id cũ nếu có
       if (!counters[it.nhom]) counters[it.nhom] = 0
       counters[it.nhom]++
-      return { ...it, stt: String(counters[it.nhom]) }
+      return { ...it, stt: String(counters[it.nhom]), parent_id: undefined }
     })
 
     onChange({ ...data, items: newItems })
