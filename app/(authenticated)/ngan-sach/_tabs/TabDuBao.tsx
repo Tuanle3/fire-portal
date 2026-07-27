@@ -161,12 +161,29 @@ export function TabDuBao({ month, localData }: Props) {
 
     const build = (want: 'B' | 'C'): Section => {
       const items = planItems.filter(it => it.nhom === want)
+      // Xác định nhóm sở hữu của 1 dòng con theo STT phân cấp ("11.1" → nhóm STT "11"),
+      // fallback parent_id. Bền với parent_id lệch sau import Excel / thêm dòng mới
+      // (cùng nguyên nhân đã sửa ở tab Data kế hoạch).
+      const groups = items.filter(g => g.is_group)
+      const byStt = new Map<string, string>()
+      for (const g of groups) { const s = String(g.stt).trim(); if (s) byStt.set(s, g.id) }
+      const ownerOf = (x: NganSachItem): string | null => {
+        const s = String(x.stt).trim(); const dot = s.lastIndexOf('.')
+        if (dot > 0) { const gid = byStt.get(s.slice(0, dot)); if (gid) return gid }
+        if (x.parent_id && groups.some(g => g.id === x.parent_id)) return x.parent_id
+        return null
+      }
       const kidsOf = new Map<string, NganSachItem[]>()
-      for (const it of items) if (it.parent_id) { const a = kidsOf.get(it.parent_id) ?? []; a.push(it); kidsOf.set(it.parent_id, a) }
+      for (const it of items) {
+        if (it.is_section || it.is_group) continue
+        const gid = ownerOf(it)
+        if (gid) { const a = kidsOf.get(gid) ?? []; a.push(it); kidsOf.set(gid, a) }
+      }
       // Giữ nguyên thứ tự như tab Kế hoạch (không sắp lại)
       const rowsArr: GroupAgg[] = []
       for (const it of items) {
-        if (it.is_section || it.parent_id) continue
+        if (it.is_section) continue
+        if (!it.is_group && ownerOf(it)) continue   // dòng con đã gộp vào nhóm cha, không hiện riêng
         const c: Record<string, number> = {}
         let units: UnitAgg[] = []
         const kids = kidsOf.get(it.id) ?? []
@@ -392,11 +409,6 @@ export function TabDuBao({ month, localData }: Props) {
             <button key={v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>{l}</button>
           ))}
         </div>
-        <div className="bc-switch" title="Chọn nội dung hiển thị: Kế hoạch / Thực hiện / So sánh">
-          {([['SO', 'TH vs KH'], ['KH', 'Kế hoạch'], ['TH', 'Thực hiện']] as [Mode, string][]).map(([m, l]) => (
-            <button key={m} className={mode === m ? 'active' : ''} onClick={() => setMode(m)}>{l}</button>
-          ))}
-        </div>
         <select className="bc-select" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
           {YEARS.map(y => <option key={y} value={y}>Năm {y}</option>)}
         </select>
@@ -416,6 +428,11 @@ export function TabDuBao({ month, localData }: Props) {
         )}
         <div style={{ flex: 1 }} />
         {loading && <span className="bc-loading">⏳ Đang tải…</span>}
+        <div className="bc-switch" title="Chọn nội dung hiển thị: Kế hoạch / Thực hiện / So sánh">
+          {([['SO', 'TH vs KH'], ['KH', 'Kế hoạch'], ['TH', 'Thực hiện']] as [Mode, string][]).map(([m, l]) => (
+            <button key={m} className={mode === m ? 'active' : ''} onClick={() => setMode(m)}>{l}</button>
+          ))}
+        </div>
         <button className="bc-print bc-print-ghost" onClick={() => exportReport('compact')} disabled={exporting !== null} title="Xuất Word — chỉ hiện các nhóm chính (không mở chi tiết đơn vị)">{exporting === 'compact' ? '⏳ Đang xuất…' : '⬇ Xuất Word (gọn)'}</button>
         <button className="bc-print" onClick={() => exportReport('full')} disabled={exporting !== null} title="Xuất Word — mở hết chi tiết từng đơn vị trong mọi nhóm">{exporting === 'full' ? '⏳ Đang xuất…' : '⬇ Xuất Word (đầy đủ)'}</button>
       </div>
