@@ -235,25 +235,33 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     }
   }
 
-  // Nhóm sở hữu của mỗi dòng chi tiết: ƯU TIÊN theo STT phân cấp ("1.1" → nhóm
-  // STT "1" — đúng như số đang hiển thị trước mắt người dùng), fallback parent_id.
+  // Nhóm sở hữu của mỗi dòng chi tiết — 3 tín hiệu theo thứ tự ưu tiên:
+  // (1) STT phân cấp ("1.1" → nhóm STT "1" — đúng như số đang hiển thị);
+  // (2) parent_id (nếu còn khớp id nhóm thật);
+  // (3) VỊ TRÍ trong mảng — dòng ngay sau 1 nhóm (trước nhóm/section kế tiếp)
+  //     luôn là con của nhóm đó, vì "+Dòng" trên 1 nhóm luôn chèn ngay sau nhóm
+  //     ấy. Vị trí không bao giờ lệch do import Excel hay tạo tháng mới, nên là
+  //     tín hiệu bền nhất khi cả STT lẫn parent_id đều bị hỏng.
   // Dùng CHUNG cho: tổng nhóm, ẩn/hiện khi thu gọn, và di chuyển lên/xuống — để
-  // parent_id bị lệch (thường gặp sau import Excel) không bao giờ làm dữ liệu
-  // biến mất khỏi màn hình hay lẫn sang nhóm khác. Không sửa parent_id đã lưu —
-  // đây chỉ là cách DIỄN GIẢI để hiển thị, dữ liệu gốc giữ nguyên.
+  // dữ liệu không bao giờ "biến mất" khỏi màn hình hay lẫn sang nhóm khác chỉ vì
+  // parent_id lệch. Không sửa parent_id đã lưu — đây chỉ là cách DIỄN GIẢI để
+  // hiển thị, dữ liệu gốc giữ nguyên.
   const ownerOf = useMemo(() => {
     const groups = data.items.filter(it => it.is_group)
     const byStt = new Map<string, string>()   // stt nhóm → id nhóm
     for (const g of groups) { const s = String(g.stt).trim(); if (s) byStt.set(s, g.id) }
     const groupIds = new Set(groups.map(g => g.id))
     const map = new Map<string, string | null>()
+    let currentGroup: string | null = null
     for (const it of data.items) {
-      if (it.is_section || it.is_group) { map.set(it.id, null); continue }
+      if (it.is_section) { map.set(it.id, null); currentGroup = null; continue }
+      if (it.is_group) { map.set(it.id, null); currentGroup = it.id; continue }
       const s = String(it.stt).trim()
       const dot = s.lastIndexOf('.')
       let gid: string | null = null
       if (dot > 0) gid = byStt.get(s.slice(0, dot)) ?? null
       if (!gid && it.parent_id && groupIds.has(it.parent_id)) gid = it.parent_id
+      if (!gid) gid = currentGroup
       map.set(it.id, gid)
     }
     return map

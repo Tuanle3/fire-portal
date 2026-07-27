@@ -161,18 +161,30 @@ export function TabDuBao({ month, localData }: Props) {
 
     const build = (want: 'B' | 'C'): Section => {
       const items = planItems.filter(it => it.nhom === want)
-      // Xác định nhóm sở hữu của 1 dòng con theo STT phân cấp ("11.1" → nhóm STT "11"),
-      // fallback parent_id. Bền với parent_id lệch sau import Excel / thêm dòng mới
-      // (cùng nguyên nhân đã sửa ở tab Data kế hoạch).
+      // Xác định nhóm sở hữu của 1 dòng con — 3 tín hiệu theo thứ tự ưu tiên:
+      // (1) STT phân cấp ("11.1" → nhóm STT "11"); (2) parent_id (nếu còn khớp id
+      // nhóm thật); (3) VỊ TRÍ trong mảng — dòng ngay sau 1 nhóm (trước nhóm/section
+      // kế tiếp) luôn là con của nhóm đó, vì "+Dòng" trên 1 nhóm luôn chèn ngay sau
+      // nhóm ấy. Vị trí không bao giờ bị lệch do import Excel hay tạo tháng mới
+      // (cloneStructure), nên đây là tín hiệu bền nhất — đảm bảo dòng con không bao
+      // giờ "rơi ra ngoài" thành dòng đứng riêng chỉ vì STT/parent_id bị lệch.
       const groups = items.filter(g => g.is_group)
       const byStt = new Map<string, string>()
       for (const g of groups) { const s = String(g.stt).trim(); if (s) byStt.set(s, g.id) }
-      const ownerOf = (x: NganSachItem): string | null => {
-        const s = String(x.stt).trim(); const dot = s.lastIndexOf('.')
-        if (dot > 0) { const gid = byStt.get(s.slice(0, dot)); if (gid) return gid }
-        if (x.parent_id && groups.some(g => g.id === x.parent_id)) return x.parent_id
-        return null
+      const groupIds = new Set(groups.map(g => g.id))
+      const ownerMap = new Map<string, string | null>()
+      let currentGroup: string | null = null
+      for (const it of items) {
+        if (it.is_section) { currentGroup = null; continue }
+        if (it.is_group) { ownerMap.set(it.id, null); currentGroup = it.id; continue }
+        const s = String(it.stt).trim(); const dot = s.lastIndexOf('.')
+        let gid: string | null = null
+        if (dot > 0) gid = byStt.get(s.slice(0, dot)) ?? null
+        if (!gid && it.parent_id && groupIds.has(it.parent_id)) gid = it.parent_id
+        if (!gid) gid = currentGroup
+        ownerMap.set(it.id, gid)
       }
+      const ownerOf = (x: NganSachItem): string | null => ownerMap.get(x.id) ?? null
       const kidsOf = new Map<string, NganSachItem[]>()
       for (const it of items) {
         if (it.is_section || it.is_group) continue
