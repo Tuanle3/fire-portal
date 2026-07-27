@@ -18,6 +18,7 @@ interface Props {
 
 type Row = Record<string, any>
 type View = 'year' | 'quarter' | 'month'
+type Mode = 'KH' | 'TH' | 'SO'   // KH=kế hoạch · TH=thực hiện · SO=thực hiện vs kế hoạch
 type ColDef = { key: string; label: string; months: number[]; loai: 'TH' | 'KH' }
 
 interface UnitAgg { unit: string; cols: Record<string, number>; total: number }
@@ -60,6 +61,7 @@ export function TabDuBao({ month, localData }: Props) {
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<View>('month')
+  const [mode, setMode] = useState<Mode>('SO')   // KH | TH | SO (so sánh)
   const [selectedYear, setSelectedYear] = useState(curYear)
   const [quarter, setQuarter] = useState(Math.ceil(curMon / 3))  // 1..4
   const [monthSel, setMonthSel] = useState(curMon)               // 1..12
@@ -89,21 +91,47 @@ export function TabDuBao({ month, localData }: Props) {
   }, [view, monthStr, month])
   const planDoc = monthStr === month ? localData : (fetchedDoc?.thang === monthStr ? fetchedDoc : null)
 
-  // ── Định nghĩa cột theo chế độ xem ─────────────────────────────────────────────
+  // ── Định nghĩa cột theo chế độ xem + chế độ hiển thị (KH/TH/SO) ─────────────────
   const cols: ColDef[] = useMemo(() => {
-    if (view === 'year')
-      return [1, 2, 3, 4].map(q => ({ key: 'Q' + q, label: 'Quý ' + q, months: [(q - 1) * 3, (q - 1) * 3 + 1, (q - 1) * 3 + 2], loai: 'TH' as const }))
-    if (view === 'quarter')
-      return [(quarter - 1) * 3, (quarter - 1) * 3 + 1, (quarter - 1) * 3 + 2].map(m => ({ key: 'M' + m, label: MONTH_SHORT[m], months: [m], loai: 'TH' as const }))
-    const mi = monthSel - 1
-    return [
-      { key: 'KH', label: 'Kế hoạch', months: [mi], loai: 'KH' },
-      { key: 'TH', label: 'Thực hiện', months: [mi], loai: 'TH' },
-    ]
-  }, [view, quarter, monthSel])
+    // Kỳ con: Năm → 4 quý, Quý → 3 tháng, Tháng → 1 tháng
+    const periods: { key: string; label: string; months: number[] }[] =
+      view === 'year'
+        ? [1, 2, 3, 4].map(q => ({ key: 'Q' + q, label: 'Quý ' + q, months: [(q - 1) * 3, (q - 1) * 3 + 1, (q - 1) * 3 + 2] }))
+        : view === 'quarter'
+          ? [(quarter - 1) * 3, (quarter - 1) * 3 + 1, (quarter - 1) * 3 + 2].map(m => ({ key: 'M' + m, label: MONTH_SHORT[m], months: [m] }))
+          : [{ key: 'M' + (monthSel - 1), label: MONTH_SHORT[monthSel - 1], months: [monthSel - 1] }]
+
+    // SO (so sánh): gộp cả kỳ thành 2 cột Kế hoạch | Thực hiện
+    if (mode === 'SO') {
+      const allMonths = [...new Set(periods.flatMap(p => p.months))].sort((a, b) => a - b)
+      return [
+        { key: 'KH', label: 'Kế hoạch', months: allMonths, loai: 'KH' as const },
+        { key: 'TH', label: 'Thực hiện', months: allMonths, loai: 'TH' as const },
+      ]
+    }
+    // KH hoặc TH: mỗi kỳ con 1 cột theo loại tương ứng
+    const loai: 'KH' | 'TH' = mode === 'KH' ? 'KH' : 'TH'
+    return periods.map(p => ({ key: p.key, label: p.label, months: p.months, loai }))
+  }, [view, mode, quarter, monthSel])
 
   const scopeMonths = useMemo(() => [...new Set(cols.flatMap(c => c.months))].sort((a, b) => a - b), [cols])
-  const totalKey = view === 'month' ? 'TH' : null   // month: total = TH; khác: cộng tất cả cột
+
+  // Kế hoạch theo từng tháng trong kỳ (gộp theo KMCP) — để hiện KH ở chế độ Quý/Năm.
+  // Tháng ở topbar dùng localData; tháng khác lấy từ scopeDocs (đã tải cho giải pháp).
+  const monthPlanKH = useMemo(() => {
+    const m = new Map<number, Record<string, number>>()
+    for (const mi of scopeMonths) {
+      const ms = `${selectedYear}-${pad2(mi + 1)}`
+      const doc = ms === month ? localData : scopeDocs.get(ms)
+      const map: Record<string, number> = {}
+      for (const it of doc?.items ?? []) {
+        if (it.is_section || it.is_group || !it.kmcp) continue
+        map[it.kmcp] = (map[it.kmcp] ?? 0) + (Number(it.ke_hoach) || 0)
+      }
+      m.set(mi, map)
+    }
+    return m
+  }, [scopeMonths, selectedYear, month, localData, scopeDocs])
 
   // ── Bảng theo cấu trúc khoản mục của tab Kế hoạch & Thực hiện (mọi chế độ) ──────
   // Cấu trúc dòng lấy từ doc ngân sách; TH khớp theo mã ngân sách theo từng kỳ;
@@ -118,10 +146,18 @@ export function TabDuBao({ month, localData }: Props) {
       for (const mi of months) s += Number(monthMaps.get(mi)?.[kmcp] ?? 0)
       return s
     }
-    const cellFor = (it: NganSachItem, col: ColDef) =>
-      col.loai === 'KH' ? (Number(it.ke_hoach) || 0) : thOver(it.kmcp, col.months)
+    const cellFor = (it: NganSachItem, col: ColDef) => {
+      if (col.loai === 'KH') {
+        if (view === 'month') return Number(it.ke_hoach) || 0
+        if (!it.kmcp) return 0
+        let s = 0; for (const mi of col.months) s += monthPlanKH.get(mi)?.[it.kmcp] ?? 0
+        return s
+      }
+      return thOver(it.kmcp, col.months)
+    }
+    // Tổng dòng (dùng cho tỷ trọng): SO → theo Thực hiện; KH/TH → cộng các cột.
     const totalOf = (c: Record<string, number>) =>
-      totalKey ? (c[totalKey] ?? 0) : cols.reduce((s, col) => s + (c[col.key] ?? 0), 0)
+      mode === 'SO' ? (c['TH'] ?? 0) : cols.reduce((s, col) => s + (c[col.key] ?? 0), 0)
 
     const build = (want: 'B' | 'C'): Section => {
       const items = planItems.filter(it => it.nhom === want)
@@ -151,7 +187,7 @@ export function TabDuBao({ month, localData }: Props) {
       return { rows: rowsArr, colTotals, grandTotal }
     }
     return { thu: build('B'), chi: build('C') }
-  }, [rows, cols, scopeMonths, selectedYear, totalKey, planDoc, localData])
+  }, [rows, cols, scopeMonths, selectedYear, planDoc, localData, monthPlanKH, mode, view])
 
   // ── Tóm tắt kỳ ─────────────────────────────────────────────────────────────────
   const summary = useMemo(() => {
@@ -249,14 +285,14 @@ export function TabDuBao({ month, localData }: Props) {
   // "gọn" = chỉ các nhóm chính; "đầy đủ" = mở hết chi tiết từng đơn vị.
   // Word tự phân trang → hiện đầy đủ mọi trang (khác với in PDF cũ chỉ ra 1 trang).
   const [exporting, setExporting] = useState<'compact' | 'full' | null>(null)
-  const exportReport = async (mode: 'compact' | 'full') => {
+  const exportReport = async (detail: 'compact' | 'full') => {
     if (exporting) return
-    setExporting(mode)
+    setExporting(detail)
     try {
       await exportBaoCaoWord({
-        scopeLabel, kyLabel, printDate, view,
+        scopeLabel, kyLabel, printDate, view, dispMode: mode,
         cols: cols.map(c => ({ key: c.key, label: c.label })),
-        thu, chi, summary, giaiPhap, mode,
+        thu, chi, summary, giaiPhap, mode: detail,
       })
     } catch (e) {
       console.error('Xuất Word thất bại:', e)
@@ -275,7 +311,7 @@ export function TabDuBao({ month, localData }: Props) {
       {cols.map(col => (
         <td key={col.key} className="bc-num">{fmt(c[col.key] ?? 0)}</td>
       ))}
-      {view === 'month' ? (
+      {mode === 'SO' ? (
         <td className="bc-num bc-strong">{fmt(conPhaiThucHien(c))}</td>
       ) : (
         <td className="bc-num bc-strong">{fmt(total)}</td>
@@ -300,7 +336,7 @@ export function TabDuBao({ month, localData }: Props) {
                 <th className="bc-idx">#</th>
                 <th className="bc-name">{nameHead}</th>
                 {cols.map(c => <th key={c.key} className="bc-num-h">{c.label}</th>)}
-                <th className="bc-num-h">{view === 'month' ? 'Còn phải thực hiện' : 'Tổng (đ)'}</th>
+                <th className="bc-num-h">{mode === 'SO' ? 'Còn phải thực hiện' : 'Tổng (đ)'}</th>
                 <th className="bc-pct-h">Tỷ trọng</th>
               </tr>
             </thead>
@@ -335,7 +371,7 @@ export function TabDuBao({ month, localData }: Props) {
                 <td className="bc-idx" />
                 <td className="bc-name">TỔNG {isThu ? 'THU' : 'CHI'}</td>
                 {cols.map(c => <td key={c.key} className="bc-num">{fmt(sec.colTotals[c.key] ?? 0)}</td>)}
-                <td className="bc-num">{view === 'month' ? fmt(sec.rows.reduce((s, g) => s + conPhaiThucHien(g.cols), 0)) : fmt(sec.grandTotal)}</td>
+                <td className="bc-num">{mode === 'SO' ? fmt(sec.rows.reduce((s, g) => s + conPhaiThucHien(g.cols), 0)) : fmt(sec.grandTotal)}</td>
                 <td className="bc-pct">100%</td>
               </tr>
             </tbody>
@@ -354,6 +390,11 @@ export function TabDuBao({ month, localData }: Props) {
         <div className="bc-switch">
           {([['year', 'Cả năm'], ['quarter', 'Theo Quý'], ['month', 'Theo Tháng']] as [View, string][]).map(([v, l]) => (
             <button key={v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>{l}</button>
+          ))}
+        </div>
+        <div className="bc-switch" title="Chọn nội dung hiển thị: Kế hoạch / Thực hiện / So sánh">
+          {([['SO', 'TH vs KH'], ['KH', 'Kế hoạch'], ['TH', 'Thực hiện']] as [Mode, string][]).map(([m, l]) => (
+            <button key={m} className={mode === m ? 'active' : ''} onClick={() => setMode(m)}>{l}</button>
           ))}
         </div>
         <select className="bc-select" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>

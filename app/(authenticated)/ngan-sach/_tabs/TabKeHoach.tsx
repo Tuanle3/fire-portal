@@ -286,21 +286,33 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     onChange(updateItem(data, id, { [field]: val }))
   }
 
-  // Di chuyển dòng lên/xuống trong cùng nhóm (section hoặc parent_id)
+  // Di chuyển dòng lên/xuống trong cùng nhóm.
+  // "Cùng cấp" xác định theo STT phân cấp ("11.1"/"11.3" cùng thuộc nhóm "11"),
+  // fallback parent_id — nên dòng mới thêm vẫn di chuyển được cạnh dòng import
+  // dù parent_id lệch nhau.
   const moveItem = (id: string, dir: -1 | 1) => {
     const items = [...data.items]
     const idx = items.findIndex(x => x.id === id)
     if (idx < 0) return
     const item = items[idx]
-    // Tìm các dòng cùng cấp (cùng parent_id và nhom, không phải section)
-    const siblings = items
-      .map((x, i) => ({ x, i }))
-      .filter(({ x }) =>
-        !x.is_section &&
-        x.nhom === item.nhom &&
-        x.parent_id === item.parent_id &&
-        x.is_group === item.is_group
-      )
+    if (item.is_section) return
+
+    const groups = items.filter(x => x.is_group)
+    const byStt = new Map<string, string>()
+    for (const g of groups) { const s = String(g.stt).trim(); if (s) byStt.set(s, g.id) }
+    // Nhóm sở hữu của 1 dòng chi tiết (null = dòng đứng riêng trong section)
+    const ownerOf = (x: NganSachItem): string | null => {
+      if (x.is_group || x.is_section) return null
+      const s = String(x.stt).trim(); const dot = s.lastIndexOf('.')
+      if (dot > 0) { const g = byStt.get(s.slice(0, dot)); if (g) return g }
+      if (x.parent_id && groups.some(g => g.id === x.parent_id)) return x.parent_id
+      return null
+    }
+
+    const siblings = item.is_group
+      ? items.map((x, i) => ({ x, i })).filter(({ x }) => x.is_group && x.nhom === item.nhom)
+      : items.map((x, i) => ({ x, i })).filter(({ x }) =>
+          !x.is_section && !x.is_group && x.nhom === item.nhom && ownerOf(x) === ownerOf(item))
     const posInSiblings = siblings.findIndex(s => s.i === idx)
     const targetSibling = siblings[posInSiblings + dir]
     if (!targetSibling) return
@@ -317,7 +329,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     const counters: Record<string, number> = {}  // nhom → counter
     const groupCounters = new Map<string, number>() // group_id → counter
     const groupSttMap = new Map<string, string>()   // group_id → stt string
-    let groupOrdinal: Record<string, number> = {}   // nhom → group ordinal
+    const groupOrdinal: Record<string, number> = {}   // nhom → group ordinal
 
     const newItems = items.map(it => {
       if (it.is_section) return { ...it, stt: it.nhom }
