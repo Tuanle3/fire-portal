@@ -10,7 +10,7 @@ export interface WordColDef { key: string; label: string }
 export interface WordUnit { unit: string; cols: Record<string, number>; total: number }
 export interface WordGroup { nhom: string; cols: Record<string, number>; total: number; units: WordUnit[] }
 export interface WordSection { rows: WordGroup[]; colTotals: Record<string, number>; grandTotal: number }
-export interface WordSummary { opening: number; thu: number; chi: number; net: number; flowClosing: number; closing: number; gap: number }
+export interface WordSummary { opening: number; closing: number; thu: number; chi: number; noiBoNet: number; xlNet: number; khacNet: number; residual: number }
 export interface WordGiaiPhap {
   items: { mo_ta: string; kh: number; th: number; trang_thai: string; thang: string }[]
   kh: number; th: number
@@ -219,11 +219,19 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
       children: [cell({ runs: [txt(`III. TÓM TẮT & CÂN ĐỐI KỲ · ${scopeLabel}`, { bold: true, color: 'FFFFFF', size: 17 })], width: SUMMARY_W, align: 'left', bg: NAVY, columnSpan: 2 })],
     }),
     sumRow(`Tồn quỹ đầu kỳ (${kyLabel.split(' – ')[0]} · sổ quỹ)`, fmt(summary.opening) + ' đ'),
-    sumRow('(+) Tổng thu trong kỳ (thực tế)', fmt(summary.thu) + ' đ', GREEN),
-    sumRow('(−) Tổng chi trong kỳ (thực tế)', fmt(summary.chi) + ' đ', RED),
-    sumRow('(±) Chênh lệch chưa phân loại (thu/chi ngoài Thực tế & lệch sổ quỹ)', fmtSigned(summary.gap) + ' đ', AMBER),
-    sumRow('(=) Số dư cuối kỳ thực tế (theo sổ quỹ · khớp Dashboard)', fmtSigned(summary.closing) + ' đ', summary.closing < 0 ? RED : NAVY, true, GROUP_BG),
+    sumRow('(+) Tổng thu trong kỳ (đã phân loại · Thực tế)', fmt(summary.thu) + ' đ', GREEN),
+    sumRow('(−) Tổng chi trong kỳ (đã phân loại · Thực tế)', fmt(summary.chi) + ' đ', RED),
   ]
+  if (summary.noiBoNet || summary.xlNet || summary.khacNet || summary.residual) {
+    sumRows.push(new TableRow({
+      children: [cell({ runs: [txt('Thuyết minh khoản chưa phân loại (đối chiếu về sổ quỹ)', { bold: true, color: MUTED, size: 15 })], width: SUMMARY_W, align: 'left', bg: HEAD_BG, columnSpan: 2 })],
+    }))
+    if (summary.noiBoNet) sumRows.push(sumRow('↳ Chuyển quỹ nội bộ (net) · không đổi tổng quỹ', fmtSigned(summary.noiBoNet) + ' đ', AMBER))
+    if (summary.xlNet) sumRows.push(sumRow('↳ Thu/chi xử lý – XL (net)', fmtSigned(summary.xlNet) + ' đ', AMBER))
+    if (summary.khacNet) sumRows.push(sumRow('↳ Thu/chi chưa gán loại (net)', fmtSigned(summary.khacNet) + ' đ', AMBER))
+    if (summary.residual) sumRows.push(sumRow('↳ Chênh lệch sổ quỹ chưa đối chiếu (thiếu bút toán thu/chi)', fmtSigned(summary.residual) + ' đ', AMBER))
+  }
+  sumRows.push(sumRow('(=) Số dư cuối kỳ thực tế (theo sổ quỹ · khớp Dashboard)', fmtSigned(summary.closing) + ' đ', summary.closing < 0 ? RED : NAVY, true, GROUP_BG))
   if (giaiPhap.items.length === 0) {
     sumRows.push(new TableRow({
       children: [cell({ runs: [txt('Giải pháp cân đối: chưa có (nhập ở tab Giải pháp cân đối)', { color: GREY })], width: SUMMARY_W, align: 'left', columnSpan: 2 })],

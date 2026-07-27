@@ -155,30 +155,38 @@ export function TabDuBao({ month, localData }: Props) {
 
   // ── Tóm tắt kỳ ─────────────────────────────────────────────────────────────────
   const summary = useMemo(() => {
-    // Số dư đầu/cuối kỳ lấy theo "Tồn" THỰC TẾ (sổ quỹ) — cùng thuật toán với
-    // Dashboard CEO, nên hai màn hình luôn khớp nhau. Thu/chi (Thực tế) chỉ mang
-    // tính diễn giải; phần lệch giữa (đầu kỳ + thu − chi) và số dư sổ quỹ được đưa
-    // vào dòng "Chênh lệch chưa phân loại" để bảng luôn cân và đối chiếu được.
+    // Số dư đầu/cuối kỳ theo "Tồn" THỰC TẾ (sổ quỹ) — cùng thuật toán Dashboard CEO,
+    // nên số dư cuối kỳ luôn khớp Dashboard. Thu/chi tách theo cột "Loại":
+    //   • "Thực tế"  → Tổng thu / Tổng chi (đã phân loại)
+    //   • "Nội bộ"   → chuyển quỹ nội bộ (không đổi tổng quỹ, chỉ dịch chuyển giữa TK)
+    //   • "XL"       → thu/chi xử lý
+    //   • còn lại/trống → chưa gán loại
+    // Phần Tồn dịch chuyển mà KHÔNG có bút toán PS tương ứng = "Chênh lệch sổ quỹ"
+    // (thiếu/nhập sai chứng từ). Bốn khoản này là THUYẾT MINH để bảng cân tuyệt đối:
+    //   opening + (thu − chi) + nội bộ + XL + khác + chênh lệch = closing.
     const yPrefix = String(selectedYear) + '-'
-    let thuReal = 0, chiReal = 0
+    let thuTT = 0, chiTT = 0, noiBoNet = 0, xlNet = 0, khacNet = 0
     for (const r of rows) {
       const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
       if (!ngay.startsWith(yPrefix)) continue
       const mi = parseInt(ngay.slice(5, 7)) - 1
       if (!scopeMonths.includes(mi)) continue
-      const loai = loaiKey ? String(r[loaiKey] ?? '').trim() : ''
-      if (loai && loai !== 'Thực tế') continue
       const t = rowType(r); if (!t) continue
       const amt = Math.abs(Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0))
-      if (t === 'thu') thuReal += amt; else chiReal += amt
+      const signed = t === 'thu' ? amt : -amt
+      const loai = loaiKey ? String(r[loaiKey] ?? '').trim() : ''
+      if (loai === 'Thực tế') { if (t === 'thu') thuTT += amt; else chiTT += amt }
+      else if (loai === 'Nội bộ') noiBoNet += signed
+      else if (loai === 'XL') xlNet += signed
+      else khacNet += signed   // trống + loại khác
     }
     const startMonth = scopeMonths.length ? scopeMonths[0] : (view === 'year' ? 0 : monthSel - 1)
     const endMonth   = scopeMonths.length ? scopeMonths[scopeMonths.length - 1] : startMonth
     const { opening, closing } = buildTonKy(rows, selectedYear, startMonth, endMonth)
-    const net = thuReal - chiReal
-    const flowClosing = opening + net          // dự tính theo dòng tiền
-    const gap = closing - flowClosing          // chênh lệch chưa phân loại (đối chiếu về sổ quỹ)
-    return { opening, thu: thuReal, chi: chiReal, net, flowClosing, closing, gap }
+    const netTT = thuTT - chiTT
+    // Chênh lệch sổ quỹ = phần biến động Tồn không giải thích được bằng bất kỳ bút toán PS nào
+    const residual = closing - opening - netTT - noiBoNet - xlNet - khacNet
+    return { opening, closing, thu: thuTT, chi: chiTT, netTT, noiBoNet, xlNet, khacNet, residual }
   }, [rows, scopeMonths, loaiKey, selectedYear, view, monthSel])
 
   // ── Giải pháp cân đối (chỉ Năm/Quý): gom từ các doc ngân sách trong kỳ ─────────
@@ -389,9 +397,18 @@ export function TabDuBao({ month, localData }: Props) {
         <div className="bc-sum-head">III. TÓM TẮT & CÂN ĐỐI KỲ · {scopeLabel}</div>
         <div className="bc-sum-body">
           <SumRow label="Tồn quỹ đầu kỳ" sub={`${kyLabel.split(' – ')[0]} · sổ quỹ`} value={fmt(summary.opening) + ' đ'} />
-          <SumRow label="(+) Tổng thu trong kỳ" sub="thực tế" value={fmt(summary.thu) + ' đ'} color="var(--bc-green)" />
-          <SumRow label="(−) Tổng chi trong kỳ" sub="thực tế" value={fmt(summary.chi) + ' đ'} color="var(--bc-red)" />
-          <SumRow label="(±) Chênh lệch chưa phân loại" sub="thu/chi ngoài loại Thực tế & lệch sổ quỹ" value={fmtSigned(summary.gap) + ' đ'} color="var(--bc-amber)" />
+          <SumRow label="(+) Tổng thu trong kỳ" sub="đã phân loại (Thực tế)" value={fmt(summary.thu) + ' đ'} color="var(--bc-green)" />
+          <SumRow label="(−) Tổng chi trong kỳ" sub="đã phân loại (Thực tế)" value={fmt(summary.chi) + ' đ'} color="var(--bc-red)" />
+
+          {/* Thuyết minh khoản chưa phân loại — làm rõ vì sao (đầu kỳ + thu − chi) ≠ sổ quỹ */}
+          {(summary.noiBoNet || summary.xlNet || summary.khacNet || summary.residual) ? (
+            <div className="bc-sum-note-head">Thuyết minh khoản chưa phân loại (đối chiếu về sổ quỹ)</div>
+          ) : null}
+          {summary.noiBoNet ? <NoteRow label="Chuyển quỹ nội bộ (net)" sub="dịch chuyển giữa TK, không đổi tổng quỹ" value={summary.noiBoNet} /> : null}
+          {summary.xlNet ? <NoteRow label="Thu/chi xử lý – XL (net)" value={summary.xlNet} /> : null}
+          {summary.khacNet ? <NoteRow label="Thu/chi chưa gán loại (net)" sub="dòng chưa điền cột Loại" value={summary.khacNet} /> : null}
+          {summary.residual ? <NoteRow label="Chênh lệch sổ quỹ chưa đối chiếu" sub="Tồn biến động nhưng thiếu bút toán thu/chi" value={summary.residual} /> : null}
+
           <SumRow label="(=) Số dư cuối kỳ thực tế" sub="theo sổ quỹ · khớp Dashboard" value={fmtSigned(summary.closing) + ' đ'} color={summary.closing < 0 ? 'var(--bc-red)' : 'var(--bc-navy)'} strong highlight />
 
           {/* Giải pháp cân đối */}
@@ -419,6 +436,19 @@ export function TabDuBao({ month, localData }: Props) {
         </div>
       </div>
       </div>
+    </div>
+  )
+}
+
+// Dòng thuyết minh (thụt lề, giá trị có dấu, màu hổ phách) cho các khoản chưa phân loại.
+function NoteRow({ label, sub, value }: { label: string; sub?: string; value: number }) {
+  return (
+    <div className="bc-sum-row bc-sum-note">
+      <span className="bc-sum-label">
+        <span style={{ color: '#9ca3af', marginRight: 6 }}>↳</span>
+        {label}{sub && <span className="bc-sum-sub"> · {sub}</span>}
+      </span>
+      <span className="bc-sum-val" style={{ color: 'var(--bc-amber)', fontWeight: 600 }}>{fmtSigned(value)} đ</span>
     </div>
   )
 }
@@ -504,6 +534,9 @@ const CSS = `
 .bc-sum-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--bc-line);font-size:13px;}
 .bc-sum-row:last-child{border-bottom:none;}
 .bc-sum-row.hl{background:var(--bc-blue);border-top:2px solid var(--bc-navy);}
+.bc-sum-note-head{padding:9px 18px 5px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--bc-muted);background:#FAFBFD;border-bottom:1px solid var(--bc-line);}
+.bc-sum-note{background:#FAFBFD;padding-top:7px;padding-bottom:7px;}
+.bc-sum-note .bc-sum-label{font-size:12px;color:#6b7280;}
 .bc-sum-label{color:#374151;}
 .bc-sum-sub{color:var(--bc-grey);font-size:11px;}
 .bc-sum-val{font-family:var(--bc-mono);font-weight:700;white-space:nowrap;}
