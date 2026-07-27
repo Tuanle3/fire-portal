@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { NganSachThang, NganSachItem, GiaiPhap, DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
 import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup } from '@/lib/ngan-sach-store'
@@ -235,40 +235,52 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     }
   }
 
-  // Sum ke_hoach / thuc_hien of all direct children of a group
-  const groupSum = (groupId: string) => {
+  // Xác định nhóm sở hữu của mỗi dòng chi tiết: ưu tiên theo STT phân cấp
+  // ("1.1" → nhóm có STT "1"), fallback theo parent_id. Nhờ vậy tổng nhóm vẫn
+  // đúng ngay cả khi parent_id bị lệch (thường gặp sau khi import Excel), miễn là
+  // STT phân cấp đúng như đang hiển thị. Mỗi dòng chỉ được cộng vào 1 nhóm.
+  const groupSums = useMemo(() => {
+    const groups = data.items.filter(it => it.is_group)
+    const byStt = new Map<string, string>()   // stt nhóm → id nhóm
+    for (const g of groups) { const s = String(g.stt).trim(); if (s) byStt.set(s, g.id) }
+    const sums = new Map<string, { kh: number; th: number }>()
+    for (const g of groups) sums.set(g.id, { kh: 0, th: 0 })
+    for (const it of data.items) {
+      if (it.is_section || it.is_group) continue
+      let gid: string | undefined
+      const s = String(it.stt).trim()
+      const dot = s.lastIndexOf('.')
+      if (dot > 0) gid = byStt.get(s.slice(0, dot))            // theo STT ("1.1" → "1")
+      if (!gid && it.parent_id && sums.has(it.parent_id)) gid = it.parent_id  // fallback parent_id
+      if (!gid) continue
+      const acc = sums.get(gid)!
+      acc.kh += it.ke_hoach
+      const autoVal = it.kmcp ? kmcpActual[it.kmcp] : undefined
+      acc.th += autoVal !== undefined ? autoVal : it.thuc_hien
+    }
+    return sums
+  }, [data.items, kmcpActual])
+  const groupSum = (groupId: string) => groupSums.get(groupId) ?? { kh: 0, th: 0 }
+
+  // Tổng chi tiết theo section (mỗi dòng chi tiết đếm đúng 1 lần: standalone + con nhóm)
+  const nhomDetailSum = useCallback((nhom: string) => {
     let kh = 0, th = 0
     for (const it of data.items) {
-      if (it.parent_id === groupId) {
-        kh += it.ke_hoach
-        // use auto value if available
-        const autoVal = it.kmcp ? kmcpActual[it.kmcp] : undefined
-        th += autoVal !== undefined ? autoVal : it.thuc_hien
-      }
+      if (it.is_section || it.is_group || it.nhom !== nhom) continue
+      kh += it.ke_hoach
+      const autoVal = it.kmcp ? kmcpActual[it.kmcp] : undefined
+      th += autoVal !== undefined ? autoVal : it.thuc_hien
     }
     return { kh, th }
-  }
+  }, [data.items, kmcpActual])
 
   // B/C totals for computing D = A+B-C
   const sectionTotals = useMemo(() => {
-    let B_kh = 0, B_th = 0, C_kh = 0, C_th = 0
-    for (const it of data.items) {
-      if (it.is_section || it.is_group || it.parent_id) continue
-      const auto = it.kmcp ? kmcpActual[it.kmcp] : undefined
-      const th = auto !== undefined ? auto : it.thuc_hien
-      if (it.nhom === 'B') { B_kh += it.ke_hoach; B_th += th }
-      if (it.nhom === 'C') { C_kh += it.ke_hoach; C_th += th }
-    }
-    for (const it of data.items) {
-      if (!it.is_group) continue
-      const gs = groupSum(it.id)
-      if (it.nhom === 'B') { B_kh += gs.kh; B_th += gs.th }
-      if (it.nhom === 'C') { C_kh += gs.kh; C_th += gs.th }
-    }
-    const D_kh = tonQuySoDu + B_kh - C_kh
+    const B = nhomDetailSum('B'), C = nhomDetailSum('C')
+    const D_kh = tonQuySoDu + B.kh - C.kh
     const D_th = tonQuyRealtime  // actual ending balance = A_th + B_th - C_th from Firebase
-    return { B_kh, B_th, C_kh, C_th, D_kh, D_th }
-  }, [data.items, kmcpActual, tonQuySoDu, tonQuyRealtime])
+    return { B_kh: B.kh, B_th: B.th, C_kh: C.kh, C_th: C.th, D_kh, D_th }
+  }, [nhomDetailSum, tonQuySoDu, tonQuyRealtime])
 
   const upd = (id: string, field: keyof NganSachItem, val: string | number | boolean) => {
     onChange(updateItem(data, id, { [field]: val }))
@@ -438,15 +450,9 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                 const bg = SECTION_COLORS[it.nhom] ?? '#F9FAFB'
                 // Tồn quỹ (nhóm A): lấy trực tiếp từ tonQuySoDu
                 const isA = it.nhom === 'A'
-                // Sum standalone items (no parent_id) + group subtotals for this nhom
-                const standaloneKh = data.items
-                  .filter(x => x.nhom === it.nhom && !x.is_section && !x.is_group && !x.parent_id)
-                  .reduce((s, x) => s + x.ke_hoach, 0)
-                const groupsKh = data.items
-                  .filter(x => x.nhom === it.nhom && x.is_group)
-                  .reduce((s, g) => s + groupSum(g.id).kh, 0)
                 const isD = it.nhom === 'D'
-                const secKh = isA ? tonQuySoDu : isD ? sectionTotals.D_kh : standaloneKh + groupsKh
+                // Tổng section = mọi dòng chi tiết trong nhom (đếm 1 lần), trừ A (tồn quỹ) và D (công thức)
+                const secKh = isA ? tonQuySoDu : isD ? sectionTotals.D_kh : nhomDetailSum(it.nhom).kh
                 const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
                 return (
                   <>
