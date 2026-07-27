@@ -10,7 +10,7 @@ export interface WordColDef { key: string; label: string }
 export interface WordUnit { unit: string; cols: Record<string, number>; total: number }
 export interface WordGroup { nhom: string; cols: Record<string, number>; total: number; units: WordUnit[] }
 export interface WordSection { rows: WordGroup[]; colTotals: Record<string, number>; grandTotal: number }
-export interface WordSummary { opening: number; thu: number; chi: number; net: number; closing: number }
+export interface WordSummary { opening: number; thu: number; chi: number; net: number; flowClosing: number; closing: number; gap: number }
 export interface WordGiaiPhap {
   items: { mo_ta: string; kh: number; th: number; trang_thai: string; thang: string }[]
   kh: number; th: number
@@ -37,6 +37,7 @@ const HEAD_BG = 'F5F8FC'
 const GROUP_BG = 'EEF3FA'
 const MUTED = '4B6A8A'
 const GREY = '9CA3AF'
+const AMBER = 'B45309'
 const INK = '1F2430'
 const FONT = 'Arial'
 
@@ -217,10 +218,11 @@ export function buildBaoCaoDoc(input: BaoCaoWordInput): Document {
     new TableRow({
       children: [cell({ runs: [txt(`III. TÓM TẮT & CÂN ĐỐI KỲ · ${scopeLabel}`, { bold: true, color: 'FFFFFF', size: 17 })], width: SUMMARY_W, align: 'left', bg: NAVY, columnSpan: 2 })],
     }),
-    sumRow(`Tồn quỹ đầu kỳ (${kyLabel.split(' – ')[0]})`, fmt(summary.opening) + ' đ'),
-    sumRow('(+) Tổng thu trong kỳ', fmt(summary.thu) + ' đ', GREEN),
-    sumRow('(−) Tổng chi trong kỳ', fmt(summary.chi) + ' đ', RED),
-    sumRow('(=) Thừa/thiếu tiền', fmtSigned(summary.closing) + ' đ', summary.closing < 0 ? RED : NAVY, true, GROUP_BG),
+    sumRow(`Tồn quỹ đầu kỳ (${kyLabel.split(' – ')[0]} · sổ quỹ)`, fmt(summary.opening) + ' đ'),
+    sumRow('(+) Tổng thu trong kỳ (thực tế)', fmt(summary.thu) + ' đ', GREEN),
+    sumRow('(−) Tổng chi trong kỳ (thực tế)', fmt(summary.chi) + ' đ', RED),
+    sumRow('(±) Chênh lệch chưa phân loại (thu/chi ngoài Thực tế & lệch sổ quỹ)', fmtSigned(summary.gap) + ' đ', AMBER),
+    sumRow('(=) Số dư cuối kỳ thực tế (theo sổ quỹ · khớp Dashboard)', fmtSigned(summary.closing) + ' đ', summary.closing < 0 ? RED : NAVY, true, GROUP_BG),
   ]
   if (giaiPhap.items.length === 0) {
     sumRows.push(new TableRow({

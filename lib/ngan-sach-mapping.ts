@@ -110,9 +110,13 @@ export function buildTonDauKy(rows: any[], month: string): number {
   if (byAccount.size > 0) {
     let total = 0; byAccount.forEach(v => { total += v }); return total
   }
-  // Method 2: fallback — last known Tồn per account strictly before this month
+  // Method 2: fallback — last known Tồn per account strictly before this month.
+  // Phải sort theo ngày trước, vì "last row per account" theo thứ tự mảng gốc
+  // có thể lấy nhầm số Tồn cũ (không phải mới nhất).
+  const sorted = [...rows].sort((a, b) =>
+    String(a['Ngày'] ?? a['Ngay'] ?? '').localeCompare(String(b['Ngày'] ?? b['Ngay'] ?? '')))
   const fallback = new Map<string, number>()
-  for (const r of rows) {
+  for (const r of sorted) {
     const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
     if (!ngay || ngay >= month) continue  // skip current month and future
     const stk = String(r['Số_tài_khoản'] ?? r['So_tai_khoan'] ?? '')
@@ -120,6 +124,46 @@ export function buildTonDauKy(rows: any[], month: string): number {
     if (stk) fallback.set(stk, ton)  // keep overwriting → last row per account = latest balance
   }
   let total = 0; fallback.forEach(v => { total += v }); return total
+}
+
+// Số dư quỹ theo Tồn THỰC TẾ cho khoảng tháng [startMi..endMi] (0-based) trong 1 năm.
+// Dùng ĐÚNG thuật toán số dư của Dashboard CEO (sort theo ngày → chạy running "Tồn"
+// theo từng tài khoản) để hai màn hình luôn đối chiếu khớp nhau.
+//   opening = tổng Tồn cuối tháng (startMi − 1) = số dư đầu kỳ.
+//   closing = tổng Tồn cuối tháng endMi        = số dư cuối kỳ thực tế (sổ quỹ).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function buildTonKy(rows: any[], year: number, startMi: number, endMi: number): { opening: number; closing: number } {
+  const yPrefix = `${year}-`
+  const dateOf = (r: any) => String(r['Ngày'] ?? r['Ngay'] ?? '')  // eslint-disable-line @typescript-eslint/no-explicit-any
+  const stkOf  = (r: any) => String(r['Số_tài_khoản'] ?? r['So_tai_khoan'] ?? '')  // eslint-disable-line @typescript-eslint/no-explicit-any
+  const tonOf  = (r: any) => Number(r['Tồn'] ?? r['Ton'] ?? 0)  // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  const sorted = [...rows].sort((a, b) => dateOf(a).localeCompare(dateOf(b)))
+
+  // Đầu năm: Tồn cuối cùng của mỗi TK trước năm `year`
+  const openAcc = new Map<string, number>()
+  for (const r of sorted) {
+    if (dateOf(r) >= yPrefix) break
+    const stk = stkOf(r)
+    if (stk) openAcc.set(stk, tonOf(r))
+  }
+  const yearRows = sorted.filter(r => dateOf(r).startsWith(yPrefix))
+  const sumTon = (m: Map<string, number>) => { let s = 0; m.forEach(v => { s += v }); return s }
+
+  // Tổng Tồn tới hết tháng `targetMi` (0-based). targetMi < 0 → số dư đầu năm.
+  const tonThrough = (targetMi: number) => {
+    if (targetMi < 0) return sumTon(openAcc)
+    const t = new Map(openAcc)
+    for (const r of yearRows) {
+      const mi = parseInt(dateOf(r).slice(5, 7)) - 1
+      if (mi > targetMi) break  // yearRows đã sort tăng dần → tháng không giảm
+      const stk = stkOf(r)
+      if (stk) t.set(stk, tonOf(r))
+    }
+    return sumTon(t)
+  }
+
+  return { opening: tonThrough(startMi - 1), closing: tonThrough(endMi) }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

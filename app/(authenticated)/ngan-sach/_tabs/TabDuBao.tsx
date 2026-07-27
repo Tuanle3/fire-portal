@@ -5,7 +5,7 @@ import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 import { NganSachThang, NganSachItem } from '@/lib/ngan-sach-types'
 import { getNganSach } from '@/lib/ngan-sach-store'
-import { findKey, buildTonDauKy, buildKmcpActual } from '@/lib/ngan-sach-mapping'
+import { findKey, buildTonKy, buildKmcpActual } from '@/lib/ngan-sach-mapping'
 import { exportBaoCaoWord } from '@/lib/ngan-sach-baocao-word'
 
 interface Props {
@@ -155,8 +155,10 @@ export function TabDuBao({ month, localData }: Props) {
 
   // ── Tóm tắt kỳ ─────────────────────────────────────────────────────────────────
   const summary = useMemo(() => {
-    // Tóm tắt luôn theo dòng tiền THỰC TẾ (data_quy) để phản ánh đúng số dư quỹ,
-    // độc lập với bảng khoản mục ở chế độ Tháng.
+    // Số dư đầu/cuối kỳ lấy theo "Tồn" THỰC TẾ (sổ quỹ) — cùng thuật toán với
+    // Dashboard CEO, nên hai màn hình luôn khớp nhau. Thu/chi (Thực tế) chỉ mang
+    // tính diễn giải; phần lệch giữa (đầu kỳ + thu − chi) và số dư sổ quỹ được đưa
+    // vào dòng "Chênh lệch chưa phân loại" để bảng luôn cân và đối chiếu được.
     const yPrefix = String(selectedYear) + '-'
     let thuReal = 0, chiReal = 0
     for (const r of rows) {
@@ -171,9 +173,12 @@ export function TabDuBao({ month, localData }: Props) {
       if (t === 'thu') thuReal += amt; else chiReal += amt
     }
     const startMonth = scopeMonths.length ? scopeMonths[0] : (view === 'year' ? 0 : monthSel - 1)
-    const opening = buildTonDauKy(rows, `${selectedYear}-${pad2(startMonth + 1)}`)
+    const endMonth   = scopeMonths.length ? scopeMonths[scopeMonths.length - 1] : startMonth
+    const { opening, closing } = buildTonKy(rows, selectedYear, startMonth, endMonth)
     const net = thuReal - chiReal
-    return { opening, thu: thuReal, chi: chiReal, net, closing: opening + net }
+    const flowClosing = opening + net          // dự tính theo dòng tiền
+    const gap = closing - flowClosing          // chênh lệch chưa phân loại (đối chiếu về sổ quỹ)
+    return { opening, thu: thuReal, chi: chiReal, net, flowClosing, closing, gap }
   }, [rows, scopeMonths, loaiKey, selectedYear, view, monthSel])
 
   // ── Giải pháp cân đối (chỉ Năm/Quý): gom từ các doc ngân sách trong kỳ ─────────
@@ -383,10 +388,11 @@ export function TabDuBao({ month, localData }: Props) {
       <div className="bc-summary" style={{ maxWidth: 'none' }}>
         <div className="bc-sum-head">III. TÓM TẮT & CÂN ĐỐI KỲ · {scopeLabel}</div>
         <div className="bc-sum-body">
-          <SumRow label="Tồn quỹ đầu kỳ" sub={kyLabel.split(' – ')[0]} value={fmt(summary.opening) + ' đ'} />
-          <SumRow label="(+) Tổng thu trong kỳ" value={fmt(summary.thu) + ' đ'} color="var(--bc-green)" />
-          <SumRow label="(−) Tổng chi trong kỳ" value={fmt(summary.chi) + ' đ'} color="var(--bc-red)" />
-          <SumRow label="(=) Thừa/thiếu tiền" value={fmtSigned(summary.closing) + ' đ'} color={summary.closing < 0 ? 'var(--bc-red)' : 'var(--bc-navy)'} strong highlight />
+          <SumRow label="Tồn quỹ đầu kỳ" sub={`${kyLabel.split(' – ')[0]} · sổ quỹ`} value={fmt(summary.opening) + ' đ'} />
+          <SumRow label="(+) Tổng thu trong kỳ" sub="thực tế" value={fmt(summary.thu) + ' đ'} color="var(--bc-green)" />
+          <SumRow label="(−) Tổng chi trong kỳ" sub="thực tế" value={fmt(summary.chi) + ' đ'} color="var(--bc-red)" />
+          <SumRow label="(±) Chênh lệch chưa phân loại" sub="thu/chi ngoài loại Thực tế & lệch sổ quỹ" value={fmtSigned(summary.gap) + ' đ'} color="var(--bc-amber)" />
+          <SumRow label="(=) Số dư cuối kỳ thực tế" sub="theo sổ quỹ · khớp Dashboard" value={fmtSigned(summary.closing) + ' đ'} color={summary.closing < 0 ? 'var(--bc-red)' : 'var(--bc-navy)'} strong highlight />
 
           {/* Giải pháp cân đối */}
           {giaiPhap.items.length === 0 ? (
@@ -431,7 +437,7 @@ function SumRow({ label, sub, value, color, strong, highlight }: { label: string
 const CSS = `
 .baocao{
   --bc-navy:#1C3557; --bc-navy-deep:#0D1F33; --bc-ink:#1F2430; --bc-line:#D0DCE8;
-  --bc-green:#15803d; --bc-red:#dc2626; --bc-grey:#9ca3af; --bc-muted:#4B6A8A;
+  --bc-green:#15803d; --bc-red:#dc2626; --bc-grey:#9ca3af; --bc-muted:#4B6A8A; --bc-amber:#B45309;
   --bc-blue:#EEF3FA; --bc-blue2:#E3EBF6; --bc-head:#F5F8FC;
   --bc-mono:'Roboto Mono',ui-monospace,'Cascadia Code',Consolas,monospace;
   color:var(--bc-ink);font-size:13px;
