@@ -235,23 +235,35 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     }
   }
 
-  // Xác định nhóm sở hữu của mỗi dòng chi tiết: ưu tiên theo STT phân cấp
-  // ("1.1" → nhóm có STT "1"), fallback theo parent_id. Nhờ vậy tổng nhóm vẫn
-  // đúng ngay cả khi parent_id bị lệch (thường gặp sau khi import Excel), miễn là
-  // STT phân cấp đúng như đang hiển thị. Mỗi dòng chỉ được cộng vào 1 nhóm.
-  const groupSums = useMemo(() => {
+  // Nhóm sở hữu của mỗi dòng chi tiết: ƯU TIÊN theo STT phân cấp ("1.1" → nhóm
+  // STT "1" — đúng như số đang hiển thị trước mắt người dùng), fallback parent_id.
+  // Dùng CHUNG cho: tổng nhóm, ẩn/hiện khi thu gọn, và di chuyển lên/xuống — để
+  // parent_id bị lệch (thường gặp sau import Excel) không bao giờ làm dữ liệu
+  // biến mất khỏi màn hình hay lẫn sang nhóm khác. Không sửa parent_id đã lưu —
+  // đây chỉ là cách DIỄN GIẢI để hiển thị, dữ liệu gốc giữ nguyên.
+  const ownerOf = useMemo(() => {
     const groups = data.items.filter(it => it.is_group)
     const byStt = new Map<string, string>()   // stt nhóm → id nhóm
     for (const g of groups) { const s = String(g.stt).trim(); if (s) byStt.set(s, g.id) }
-    const sums = new Map<string, { kh: number; th: number }>()
-    for (const g of groups) sums.set(g.id, { kh: 0, th: 0 })
+    const groupIds = new Set(groups.map(g => g.id))
+    const map = new Map<string, string | null>()
     for (const it of data.items) {
-      if (it.is_section || it.is_group) continue
-      let gid: string | undefined
+      if (it.is_section || it.is_group) { map.set(it.id, null); continue }
       const s = String(it.stt).trim()
       const dot = s.lastIndexOf('.')
-      if (dot > 0) gid = byStt.get(s.slice(0, dot))            // theo STT ("1.1" → "1")
-      if (!gid && it.parent_id && sums.has(it.parent_id)) gid = it.parent_id  // fallback parent_id
+      let gid: string | null = null
+      if (dot > 0) gid = byStt.get(s.slice(0, dot)) ?? null
+      if (!gid && it.parent_id && groupIds.has(it.parent_id)) gid = it.parent_id
+      map.set(it.id, gid)
+    }
+    return map
+  }, [data.items])
+
+  const groupSums = useMemo(() => {
+    const sums = new Map<string, { kh: number; th: number }>()
+    for (const g of data.items) if (g.is_group) sums.set(g.id, { kh: 0, th: 0 })
+    for (const it of data.items) {
+      const gid = ownerOf.get(it.id)
       if (!gid) continue
       const acc = sums.get(gid)!
       acc.kh += it.ke_hoach
@@ -259,7 +271,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       acc.th += autoVal !== undefined ? autoVal : it.thuc_hien
     }
     return sums
-  }, [data.items, kmcpActual])
+  }, [data.items, ownerOf, kmcpActual])
   const groupSum = (groupId: string) => groupSums.get(groupId) ?? { kh: 0, th: 0 }
 
   // Tổng chi tiết theo section (mỗi dòng chi tiết đếm đúng 1 lần: standalone + con nhóm)
@@ -286,10 +298,9 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     onChange(updateItem(data, id, { [field]: val }))
   }
 
-  // Di chuyển dòng lên/xuống trong cùng nhóm.
-  // "Cùng cấp" xác định theo STT phân cấp ("11.1"/"11.3" cùng thuộc nhóm "11"),
-  // fallback parent_id — nên dòng mới thêm vẫn di chuyển được cạnh dòng import
-  // dù parent_id lệch nhau.
+  // Di chuyển dòng lên/xuống trong cùng nhóm. "Cùng cấp" xác định theo `ownerOf`
+  // (STT phân cấp, fallback parent_id) — nên dòng mới thêm vẫn di chuyển được
+  // cạnh dòng import dù parent_id lệch nhau.
   const moveItem = (id: string, dir: -1 | 1) => {
     const items = [...data.items]
     const idx = items.findIndex(x => x.id === id)
@@ -297,22 +308,10 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     const item = items[idx]
     if (item.is_section) return
 
-    const groups = items.filter(x => x.is_group)
-    const byStt = new Map<string, string>()
-    for (const g of groups) { const s = String(g.stt).trim(); if (s) byStt.set(s, g.id) }
-    // Nhóm sở hữu của 1 dòng chi tiết (null = dòng đứng riêng trong section)
-    const ownerOf = (x: NganSachItem): string | null => {
-      if (x.is_group || x.is_section) return null
-      const s = String(x.stt).trim(); const dot = s.lastIndexOf('.')
-      if (dot > 0) { const g = byStt.get(s.slice(0, dot)); if (g) return g }
-      if (x.parent_id && groups.some(g => g.id === x.parent_id)) return x.parent_id
-      return null
-    }
-
     const siblings = item.is_group
       ? items.map((x, i) => ({ x, i })).filter(({ x }) => x.is_group && x.nhom === item.nhom)
       : items.map((x, i) => ({ x, i })).filter(({ x }) =>
-          !x.is_section && !x.is_group && x.nhom === item.nhom && ownerOf(x) === ownerOf(item))
+          !x.is_section && !x.is_group && x.nhom === item.nhom && ownerOf.get(x.id) === ownerOf.get(item.id))
     const posInSiblings = siblings.findIndex(s => s.i === idx)
     const targetSibling = siblings[posInSiblings + dir]
     if (!targetSibling) return
@@ -455,8 +454,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
           </thead>
           <tbody>
             {data.items.map(it => {
-              // Hide child rows when parent group is collapsed
-              if (it.parent_id && collapsed.has(it.parent_id)) return null
+              // Ẩn dòng con khi nhóm cha (xác định qua ownerOf, không phải parent_id thô) đang thu gọn.
+              // Nếu parent_id lệch nhưng STT vẫn đúng, dòng luôn hiển thị đúng nhóm — không bao giờ
+              // "biến mất" chỉ vì trỏ nhầm sang id một nhóm khác đang bị thu gọn.
+              const owner = ownerOf.get(it.id)
+              if (owner && collapsed.has(owner)) return null
               // ── MAJOR SECTION ───────────────────────────────────────────────
               if (it.is_section) {
                 const bg = SECTION_COLORS[it.nhom] ?? '#F9FAFB'
@@ -589,7 +591,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
               const isAutoTonQuy = it.nhom === 'A' && !it.is_section
               const autoVal = it.kmcp ? kmcpActual[it.kmcp] : undefined
               const hasAuto = isAutoTonQuy || autoVal !== undefined
-              const isChild = !!it.parent_id
+              const isChild = !!owner
 
               const isActive = activeId === it.id
               return (

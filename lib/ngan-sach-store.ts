@@ -10,15 +10,21 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
-// Copy cấu trúc tháng cũ, reset số về 0 để dùng làm template tháng mới
+// Copy cấu trúc tháng cũ, reset số về 0 để dùng làm template tháng mới.
+// Mỗi item được cấp id mới — phải remap `parent_id` theo id mới tương ứng của
+// nhóm cha, nếu không mọi liên kết cha-con sẽ đứt ngay từ tháng đầu tiên được
+// tạo tự động (id cũ trong parent_id không còn khớp id mới nào cả).
 function cloneStructure(prev: NganSachThang, thang: string): NganSachThang {
+  const idMap = new Map<string, string>()
+  for (const it of prev.items) idMap.set(it.id, makeId())
   return {
     thang,
     ngay_cap_nhat: new Date().toLocaleDateString('vi-VN'),
     giai_phap: [],
     items: prev.items.map(it => ({
       ...it,
-      id: makeId(),
+      id: idMap.get(it.id)!,
+      ...(it.parent_id ? { parent_id: idMap.get(it.parent_id) ?? it.parent_id } : {}),
       ke_hoach: 0,
       thuc_hien: 0,
       thuc_hien_manual: true,
