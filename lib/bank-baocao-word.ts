@@ -1,7 +1,7 @@
 import {
   Document, Packer, Paragraph, TextRun,
   Table, TableRow, TableCell, WidthType, AlignmentType,
-  ShadingType, VerticalAlign, BorderStyle, TableLayoutType,
+  ShadingType, VerticalAlign, BorderStyle, TableLayoutType, PageOrientation,
   Footer, PageNumber,
 } from 'docx'
 import {
@@ -26,6 +26,14 @@ const pct = (n: number) => (n === 0 ? '—' : n.toFixed(1) + '%')
 
 function txt(text: string, o: { size?: number; bold?: boolean; color?: string } = {}) {
   return new TextRun({ text, font: FONT, size: o.size ?? 18, bold: o.bold, color: o.color ?? INK })
+}
+
+// Tách nội dung nhiều dòng (do người dùng xuống dòng khi nhập) thành các TextRun
+// có ngắt dòng thật trong Word — nếu không, \n trong 1 TextRun sẽ bị bỏ qua và
+// toàn bộ nội dung dồn lại thành 1 dòng liền.
+function multilineRuns(text: string, o: { size?: number; bold?: boolean; color?: string } = {}): TextRun[] {
+  const lines = (text || '—').split('\n')
+  return lines.map((line, i) => new TextRun({ text: line, font: FONT, size: o.size ?? 18, bold: o.bold, color: o.color ?? INK, break: i > 0 ? 1 : 0 }))
 }
 
 function cell(opts: {
@@ -69,7 +77,7 @@ export interface BankWordInput {
 export function buildBankDoc(input: BankWordInput): Document {
   const { printDate, relations, proposals, notes, deXuat, mode } = input
   const showFull = mode === 'full'
-  const PAGE_W = 11050 // A4 dọc, trừ lề (twip)
+  const PAGE_W = 15398 // A4 ngang, trừ lề (twip)
 
   const children: (Paragraph | Table)[] = [
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [txt('SƠN AN GROUP', { bold: true, size: 16, color: GREY })] }),
@@ -208,8 +216,8 @@ export function buildBankDoc(input: BankWordInput): Document {
         children: [
           cell({ runs: [txt(n.ngay)], width: W[0] }),
           cell({ runs: [txt(n.tenNganHang, { bold: true, color: NAVY })], width: W[1] }),
-          cell({ runs: [txt(n.noiDung || '—')], width: W[2] }),
-          cell({ runs: [txt([n.viecCanLam, n.hanXuLy && `(hạn ${n.hanXuLy})`].filter(Boolean).join(' ') || '—')], width: W[3] }),
+          cell({ runs: multilineRuns(n.noiDung), width: W[2] }),
+          cell({ runs: multilineRuns([n.viecCanLam, n.hanXuLy && `Hạn: ${n.hanXuLy}`].filter(Boolean).join('\n')), width: W[3] }),
         ],
       }))
       const border = { style: BorderStyle.SINGLE, size: 2, color: 'D0DCE8' }
@@ -254,7 +262,12 @@ export function buildBankDoc(input: BankWordInput): Document {
   return new Document({
     styles: { default: { document: { run: { font: FONT, size: 18, color: INK } } } },
     sections: [{
-      properties: { page: { margin: { top: 720, bottom: 720, left: 900, right: 900 } } },
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.LANDSCAPE },
+          margin: { top: 720, bottom: 720, left: 720, right: 720 },
+        },
+      },
       footers: { default: footer },
       children,
     }],
@@ -288,7 +301,7 @@ export interface HoSoVayVonInput {
 
 export function buildHoSoVayVonDoc(input: HoSoVayVonInput): Document {
   const { printDate, relations, proposals, notes } = input
-  const PAGE_W = 11050 // A4 dọc, trừ lề (twip)
+  const PAGE_W = 15398 // A4 ngang, trừ lề (twip)
   const dangXuLy = proposals.filter(p => isHoSoDangXuLy(p.trangThai))
 
   const children: (Paragraph | Table)[] = [
@@ -355,7 +368,8 @@ export function buildHoSoVayVonDoc(input: HoSoVayVonInput): Document {
           spacing: { before: 60, after: 40 },
           children: [
             txt('Cập nhật gần nhất: ', { bold: true, size: 15, color: MUTED }),
-            txt(`[${latestNote.ngay}] ${latestNote.noiDung}`, { size: 15, color: INK }),
+            txt(`[${latestNote.ngay}] `, { size: 15, color: INK }),
+            ...multilineRuns(latestNote.noiDung, { size: 15 }),
           ],
         }))
       }
@@ -372,7 +386,12 @@ export function buildHoSoVayVonDoc(input: HoSoVayVonInput): Document {
   return new Document({
     styles: { default: { document: { run: { font: FONT, size: 18, color: INK } } } },
     sections: [{
-      properties: { page: { margin: { top: 720, bottom: 720, left: 900, right: 900 } } },
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.LANDSCAPE },
+          margin: { top: 720, bottom: 720, left: 720, right: 720 },
+        },
+      },
       footers: { default: footer },
       children,
     }],

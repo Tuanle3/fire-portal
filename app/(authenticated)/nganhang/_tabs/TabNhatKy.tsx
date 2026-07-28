@@ -138,8 +138,9 @@ function NoteForm({ initial, relations, onCancel, onSave }: {
         </div>
       </div>
       <div style={{ marginBottom: 8 }}>
-        <label className="nh-label">Nội dung trao đổi</label>
-        <textarea className="nh-textarea" rows={2} value={form.noiDung} onChange={e => setForm({ ...form, noiDung: e.target.value })} />
+        <label className="nh-label">Nội dung trao đổi (mỗi dòng 1 ý — sẽ tách dòng riêng khi xuất Word)</label>
+        <textarea className="nh-textarea" rows={5} value={form.noiDung} onChange={e => setForm({ ...form, noiDung: e.target.value })}
+          placeholder={'VD:\n1. Đang thẩm định năng lực tài chính\n2. Yêu cầu giải trình công nợ phải thu/phải trả\n3. Phí tạm ứng thẩm định: 1.650.000 đồng'} />
       </div>
       <div style={{ marginBottom: 10 }}>
         <label className="nh-label">Việc cần làm tiếp theo</label>
