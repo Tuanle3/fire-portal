@@ -1,13 +1,21 @@
 'use client'
 import { useState } from 'react'
 import {
-  BankRelation, BankProposal, BankContact,
-  DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL,
-  EMPTY_BANK, EMPTY_PROPOSAL,
+  BankRelation, BankProposal, BankContact, CustomRow,
+  DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_HINH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL,
+  EMPTY_BANK, EMPTY_PROPOSAL, minLaiSuat, mucTaiTroDisplay,
 } from '@/lib/bank-types'
 
 function fmtN(v: number): string { return v.toLocaleString('vi-VN') }
 function newId(prefix: string): string { return `${prefix}${Date.now()}` }
+
+function trangThaiPACls(t: BankProposal['trangThai']): string {
+  if (t === 'da_giai_ngan') return 'nh-b-green'
+  if (t === 'tu_choi') return 'nh-b-red'
+  if (t === 'het_han') return 'nh-b-grey'
+  if (t === 'da_duyet') return 'nh-b-blue'
+  return 'nh-b-amber' // soan_ho_so, da_nop, dang_tham_dinh, cho_phe_duyet — đang xử lý
+}
 
 interface Props {
   relations: BankRelation[]
@@ -52,6 +60,7 @@ export function TabNganHang({ relations, proposals, onSaveRelation, onDeleteRela
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 700, color: '#1C3557' }}>{open ? '▾' : '▸'} {r.tenNganHang}</span>
                       {r.chiNhanh && <span style={{ fontSize: 11, color: '#6B7280' }}>{r.chiNhanh}</span>}
+                      <span className="nh-badge nh-b-grey">{LOAI_HINH_LABEL[r.loaiHinh]}</span>
                       <span className={`nh-badge ${r.trangThai === 'dang_hop_tac' ? 'nh-b-green' : r.trangThai === 'tiem_nang' ? 'nh-b-blue' : 'nh-b-grey'}`}>{TRANG_THAI_NH_LABEL[r.trangThai]}</span>
                       <span className={`nh-badge ${r.danhGia === 'tot' ? 'nh-b-green' : r.danhGia === 'can_cai_thien' ? 'nh-b-red' : 'nh-b-amber'}`}>{DANH_GIA_LABEL[r.danhGia]}</span>
                       <span style={{ fontSize: 11, color: '#6B7280' }}>{rProposals.length} phương án</span>
@@ -101,8 +110,8 @@ export function TabNganHang({ relations, proposals, onSaveRelation, onDeleteRela
                             <tr>
                               <th>TÊN PHƯƠNG ÁN</th>
                               <th>LOẠI VAY</th>
-                              <th className="r">LÃI SUẤT</th>
-                              <th className="r">HẠN MỨC (đ)</th>
+                              <th className="r">LÃI SUẤT (ưu đãi thấp nhất)</th>
+                              <th className="r">MỨC TÀI TRỢ</th>
                               <th>TRẠNG THÁI</th>
                               <th style={{ width: 110 }}></th>
                             </tr>
@@ -112,9 +121,9 @@ export function TabNganHang({ relations, proposals, onSaveRelation, onDeleteRela
                               <tr key={p.id}>
                                 <td style={{ fontWeight: 600 }}>{p.tenPhuongAn}</td>
                                 <td><span className={`nh-badge ${p.loaiVay === 'ngan_han' ? 'nh-b-blue' : p.loaiVay === 'bao_lanh' ? 'nh-b-amber' : 'nh-b-purple'}`}>{LOAI_VAY_LABEL[p.loaiVay]}</span></td>
-                                <td className="r">{p.laiSuat ? p.laiSuat.toFixed(2) + '%' : '—'}</td>
-                                <td className="r">{p.hanMucDeXuat ? fmtN(p.hanMucDeXuat) : '—'}</td>
-                                <td style={{ fontSize: 11 }}>{TRANG_THAI_PA_LABEL[p.trangThai]}</td>
+                                <td className="r">{minLaiSuat(p) ? minLaiSuat(p).toFixed(2) + '%' : '—'}</td>
+                                <td className="r" style={{ fontSize: 11.5 }}>{mucTaiTroDisplay(p, fmtN)}</td>
+                                <td><span className={`nh-badge ${trangThaiPACls(p.trangThai)}`}>{TRANG_THAI_PA_LABEL[p.trangThai]}</span></td>
                                 <td>
                                   <div style={{ display: 'flex', gap: 6 }}>
                                     <button className="btn-ghost" onClick={() => setEditingProposal({ bankId: r.id, proposal: p })}>Sửa</button>
@@ -159,6 +168,12 @@ function BankForm({ initial, onCancel, onSave }: { initial: BankRelation | null;
         <div>
           <label className="nh-label">Chi nhánh</label>
           <input className="nh-input" value={form.chiNhanh} onChange={e => setForm({ ...form, chiNhanh: e.target.value })} />
+        </div>
+        <div>
+          <label className="nh-label">Loại hình</label>
+          <select className="nh-select" value={form.loaiHinh} onChange={e => setForm({ ...form, loaiHinh: e.target.value as BankRelation['loaiHinh'] })}>
+            {Object.entries(LOAI_HINH_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
         </div>
         <div>
           <label className="nh-label">Trạng thái</label>
@@ -215,14 +230,30 @@ function BankForm({ initial, onCancel, onSave }: { initial: BankRelation | null;
 }
 
 // ── Form: Phương án vay ──────────────────────────────────────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 10.5, fontWeight: 700, color: '#1C3557', textTransform: 'uppercase', letterSpacing: '.05em', margin: '14px 0 8px', borderTop: '1px dashed #D0DCE8', paddingTop: 10 }}>{children}</div>
+}
+
 function ProposalForm({ initial, onCancel, onSave }: { initial: BankProposal | null; onCancel: () => void; onSave: (p: Omit<BankProposal, 'nganHangId'>) => Promise<void> }) {
   const [form, setForm] = useState<Omit<BankProposal, 'id' | 'nganHangId' | 'ngayCapNhat'>>(initial ?? EMPTY_PROPOSAL)
   const [uuDiemStr, setUuDiemStr] = useState((initial?.uuDiem ?? []).join('\n'))
   const [nhuocDiemStr, setNhuocDiemStr] = useState((initial?.nhuocDiem ?? []).join('\n'))
   const [saving, setSaving] = useState(false)
 
+  const setBac = (i: number, patch: Partial<{ kyHan: string; laiSuat: number }>) => {
+    const list = [...form.laiSuatBacThang]
+    list[i] = { ...list[i], ...patch }
+    setForm({ ...form, laiSuatBacThang: list })
+  }
+  const setCustom = (i: number, patch: Partial<CustomRow>) => {
+    const list = [...form.customRows]
+    list[i] = { ...list[i], ...patch }
+    setForm({ ...form, customRows: list })
+  }
+
   return (
     <div style={{ border: '1px solid #D0DCE8', borderRadius: 10, padding: 14, marginBottom: 14, background: '#F8FAFC' }}>
+      {/* Thông tin chung */}
       <div className="nh-form-grid">
         <div>
           <label className="nh-label">Tên phương án *</label>
@@ -241,33 +272,79 @@ function ProposalForm({ initial, onCancel, onSave }: { initial: BankProposal | n
           </select>
         </div>
         <div>
-          <label className="nh-label">Lãi suất (%/năm)</label>
-          <input className="nh-input" type="number" step="0.01" value={form.laiSuat || ''} onChange={e => setForm({ ...form, laiSuat: Number(e.target.value) })} />
-        </div>
-        <div>
-          <label className="nh-label">Hạn mức đề xuất (đ)</label>
-          <input className="nh-input" type="number" value={form.hanMucDeXuat || ''} onChange={e => setForm({ ...form, hanMucDeXuat: Number(e.target.value) })} />
-        </div>
-        <div>
-          <label className="nh-label">Tỷ lệ TSĐB (%)</label>
-          <input className="nh-input" type="number" step="0.01" value={form.tyLeTSDB || ''} onChange={e => setForm({ ...form, tyLeTSDB: Number(e.target.value) })} />
-        </div>
-        <div>
-          <label className="nh-label">Thời hạn</label>
-          <input className="nh-input" value={form.thoiHan} onChange={e => setForm({ ...form, thoiHan: e.target.value })} placeholder="VD: 12 tháng" />
-        </div>
-        <div>
-          <label className="nh-label">Phí dịch vụ</label>
-          <input className="nh-input" value={form.phiDichVu} onChange={e => setForm({ ...form, phiDichVu: e.target.value })} />
+          <label className="nh-label">Ẩn hạn / Kỳ hạn vay</label>
+          <input className="nh-input" value={form.thoiHan} onChange={e => setForm({ ...form, thoiHan: e.target.value })} placeholder="VD: 2-5 năm tùy nhu cầu KH" />
         </div>
         <div>
           <label className="nh-label">Người phụ trách</label>
           <input className="nh-input" value={form.nguoiPhuTrach} onChange={e => setForm({ ...form, nguoiPhuTrach: e.target.value })} />
         </div>
+        <div>
+          <label className="nh-label">Ngày nộp hồ sơ</label>
+          <input className="nh-input" type="date" value={form.ngayNopHoSo} onChange={e => setForm({ ...form, ngayNopHoSo: e.target.value })} />
+        </div>
       </div>
 
+      {/* Lãi suất */}
+      <SectionLabel>Lãi suất</SectionLabel>
+      {form.laiSuatBacThang.map((b, i) => (
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 6 }}>
+          <input className="nh-input" placeholder="Kỳ hạn (VD: 12 tháng)" value={b.kyHan} onChange={e => setBac(i, { kyHan: e.target.value })} />
+          <input className="nh-input" type="number" step="0.01" placeholder="Lãi suất %/năm" value={b.laiSuat || ''} onChange={e => setBac(i, { laiSuat: Number(e.target.value) })} />
+          <button className="btn-danger" onClick={() => setForm({ ...form, laiSuatBacThang: form.laiSuatBacThang.filter((_, j) => j !== i) })}>×</button>
+        </div>
+      ))}
+      <button className="btn-ghost" style={{ marginBottom: 10 }} onClick={() => setForm({ ...form, laiSuatBacThang: [...form.laiSuatBacThang, { kyHan: '', laiSuat: 0 }] })}>+ Thêm bậc lãi suất</button>
+      <div style={{ marginBottom: 4 }}>
+        <label className="nh-label">Lãi suất thả nổi sau ưu đãi</label>
+        <input className="nh-input" value={form.laiSuatThaNoi} onChange={e => setForm({ ...form, laiSuatThaNoi: e.target.value })} placeholder="VD: LS huy động + 1,5%" />
+      </div>
+
+      {/* Hạn mức & Tài sản đảm bảo */}
+      <SectionLabel>Hạn mức &amp; Tài sản đảm bảo</SectionLabel>
+      <div className="nh-form-grid">
+        <div>
+          <label className="nh-label">Hạn mức/mức tài trợ (đ)</label>
+          <input className="nh-input" type="number" value={form.hanMucDeXuat || ''} onChange={e => setForm({ ...form, hanMucDeXuat: Number(e.target.value) })} />
+        </div>
+        <div>
+          <label className="nh-label">Mức tài trợ (mô tả khác, vd %)</label>
+          <input className="nh-input" value={form.mucTaiTroMoTa} onChange={e => setForm({ ...form, mucTaiTroMoTa: e.target.value })} placeholder="VD: 80-100% giá trị mua bán" />
+        </div>
+        <div>
+          <label className="nh-label">Tỷ lệ TSĐB (%)</label>
+          <input className="nh-input" type="number" step="0.01" value={form.tyLeTSDB || ''} onChange={e => setForm({ ...form, tyLeTSDB: Number(e.target.value) })} />
+        </div>
+      </div>
+      <div className="nh-form-grid">
+        <div>
+          <label className="nh-label">TSĐB yêu cầu / chấp nhận</label>
+          <textarea className="nh-textarea" rows={2} value={form.tsdbDieuKien} onChange={e => setForm({ ...form, tsdbDieuKien: e.target.value })} />
+        </div>
+        <div>
+          <label className="nh-label">TSĐB từ chối / loại trừ</label>
+          <textarea className="nh-textarea" rows={2} value={form.tsdbTuChoi} onChange={e => setForm({ ...form, tsdbTuChoi: e.target.value })} placeholder="VD: gần nghĩa trang, không có đường vào, đường vào < 2m" />
+        </div>
+      </div>
+
+      {/* Điều kiện & Hỗ trợ */}
+      <SectionLabel>Điều kiện &amp; Hỗ trợ</SectionLabel>
+      <div className="nh-form-grid">
+        <div>
+          <label className="nh-label">Phí dịch vụ</label>
+          <input className="nh-input" value={form.phiDichVu} onChange={e => setForm({ ...form, phiDichVu: e.target.value })} />
+        </div>
+        <div>
+          <label className="nh-label">Phương thức thanh toán/trả nợ</label>
+          <input className="nh-input" value={form.phuongThucTT} onChange={e => setForm({ ...form, phuongThucTT: e.target.value })} placeholder="VD: Trả gốc + lãi hàng tháng, dư nợ giảm dần" />
+        </div>
+      </div>
       <div style={{ marginBottom: 10 }}>
-        <label className="nh-label">Điều kiện kèm theo</label>
+        <label className="nh-label">Hỗ trợ đặc biệt</label>
+        <input className="nh-input" value={form.hoTroDacBiet} onChange={e => setForm({ ...form, hoTroDacBiet: e.target.value })} placeholder="VD: hỗ trợ mượn tách sổ, hỗ trợ chuyển đổi chủ vay" />
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label className="nh-label">Điều kiện khác</label>
         <textarea className="nh-textarea" rows={2} value={form.dieuKien} onChange={e => setForm({ ...form, dieuKien: e.target.value })} />
       </div>
       <div className="nh-form-grid">
@@ -281,7 +358,18 @@ function ProposalForm({ initial, onCancel, onSave }: { initial: BankProposal | n
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      {/* Tiêu chí tuỳ chỉnh */}
+      <SectionLabel>Tiêu chí tuỳ chỉnh (cho đặc thù riêng, vd đối tác cho thuê tài chính)</SectionLabel>
+      {form.customRows.map((cr, i) => (
+        <div key={cr.id} style={{ display: 'grid', gridTemplateColumns: '200px 1fr auto', gap: 8, marginBottom: 6 }}>
+          <input className="nh-input" placeholder="Tên tiêu chí" value={cr.label} onChange={e => setCustom(i, { label: e.target.value })} />
+          <input className="nh-input" placeholder="Nội dung" value={cr.noiDung} onChange={e => setCustom(i, { noiDung: e.target.value })} />
+          <button className="btn-danger" onClick={() => setForm({ ...form, customRows: form.customRows.filter((_, j) => j !== i) })}>×</button>
+        </div>
+      ))}
+      <button className="btn-ghost" style={{ marginBottom: 10 }} onClick={() => setForm({ ...form, customRows: [...form.customRows, { id: newId('cr'), label: '', noiDung: '' }] })}>+ Thêm tiêu chí tuỳ chỉnh</button>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
         <button className="btn-primary" disabled={!form.tenPhuongAn.trim() || saving}
           onClick={async () => {
             setSaving(true)
@@ -291,6 +379,7 @@ function ProposalForm({ initial, onCancel, onSave }: { initial: BankProposal | n
               ngayCapNhat: initial?.ngayCapNhat ?? '',
               uuDiem: uuDiemStr.split('\n').map(s => s.trim()).filter(Boolean),
               nhuocDiem: nhuocDiemStr.split('\n').map(s => s.trim()).filter(Boolean),
+              customRows: form.customRows.filter(cr => cr.label.trim()),
             })
             setSaving(false)
           }}>

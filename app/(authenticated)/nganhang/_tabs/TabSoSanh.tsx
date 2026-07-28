@@ -1,6 +1,9 @@
 'use client'
 import { useMemo, useState } from 'react'
-import { BankRelation, BankProposal, BankNote, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL } from '@/lib/bank-types'
+import {
+  BankRelation, BankProposal, BankNote, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL,
+  minLaiSuat, laiSuatDisplay, mucTaiTroDisplay, customRowLabels, customRowValue,
+} from '@/lib/bank-types'
 import { exportBankWord } from '@/lib/bank-baocao-word'
 
 function fmtN(v: number): string { return v.toLocaleString('vi-VN') }
@@ -11,15 +14,26 @@ interface Props {
   notes: BankNote[]
 }
 
-const ROWS: { label: string; get: (p: BankProposal, bankName: string) => string; bestOf?: (p: BankProposal) => number; better?: 'min' | 'max' }[] = [
+interface RowDef {
+  label: string
+  get: (p: BankProposal, bankName: string) => string
+  bestOf?: (p: BankProposal) => number
+  better?: 'min' | 'max'
+}
+
+const STATIC_ROWS: RowDef[] = [
   { label: 'Ngân hàng', get: (_p, bankName) => bankName },
   { label: 'Loại vay', get: p => LOAI_VAY_LABEL[p.loaiVay] },
-  { label: 'Lãi suất (%/năm)', get: p => (p.laiSuat ? p.laiSuat.toFixed(2) + '%' : '—'), bestOf: p => p.laiSuat, better: 'min' },
-  { label: 'Hạn mức đề xuất (đ)', get: p => (p.hanMucDeXuat ? fmtN(p.hanMucDeXuat) : '—'), bestOf: p => p.hanMucDeXuat, better: 'max' },
+  { label: 'Ẩn hạn / Kỳ hạn', get: p => p.thoiHan || '—' },
+  { label: 'Lãi suất', get: p => laiSuatDisplay(p), bestOf: minLaiSuat, better: 'min' },
+  { label: 'Mức tài trợ', get: p => mucTaiTroDisplay(p, fmtN), bestOf: p => p.hanMucDeXuat, better: 'max' },
   { label: 'Tỷ lệ TSĐB', get: p => (p.tyLeTSDB ? p.tyLeTSDB.toFixed(1) + '%' : '—') },
-  { label: 'Thời hạn', get: p => p.thoiHan || '—' },
+  { label: 'TSĐB yêu cầu / chấp nhận', get: p => p.tsdbDieuKien || '—' },
+  { label: 'TSĐB từ chối / loại trừ', get: p => p.tsdbTuChoi || '—' },
+  { label: 'Hỗ trợ đặc biệt', get: p => p.hoTroDacBiet || '—' },
+  { label: 'Phương thức thanh toán', get: p => p.phuongThucTT || '—' },
   { label: 'Phí dịch vụ', get: p => p.phiDichVu || '—' },
-  { label: 'Điều kiện kèm theo', get: p => p.dieuKien || '—' },
+  { label: 'Điều kiện khác', get: p => p.dieuKien || '—' },
   { label: 'Ưu điểm', get: p => p.uuDiem.length ? p.uuDiem.map(s => '+ ' + s).join('\n') : '—' },
   { label: 'Nhược điểm', get: p => p.nhuocDiem.length ? p.nhuocDiem.map(s => '− ' + s).join('\n') : '—' },
   { label: 'Trạng thái', get: p => TRANG_THAI_PA_LABEL[p.trangThai] },
@@ -32,6 +46,11 @@ export function TabSoSanh({ relations, proposals, notes }: Props) {
 
   const bankName = (id: string) => relations.find(r => r.id === id)?.tenNganHang ?? '—'
   const chosen = useMemo(() => proposals.filter(p => selected.has(p.id)), [proposals, selected])
+
+  const rows = useMemo<RowDef[]>(() => {
+    const custom: RowDef[] = customRowLabels(chosen).map(label => ({ label, get: (p: BankProposal) => customRowValue(p, label) }))
+    return [...STATIC_ROWS, ...custom]
+  }, [chosen])
 
   const toggle = (id: string) => {
     const next = new Set(selected)
@@ -71,7 +90,7 @@ export function TabSoSanh({ relations, proposals, notes }: Props) {
                 <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
                   <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggle(p.id)} />
                   <span style={{ fontWeight: 600 }}>{p.tenPhuongAn}</span>
-                  <span style={{ color: '#6B7280' }}>— {bankName(p.nganHangId)} · {LOAI_VAY_LABEL[p.loaiVay]}{p.laiSuat ? ` · ${p.laiSuat.toFixed(2)}%` : ''}</span>
+                  <span style={{ color: '#6B7280' }}>— {bankName(p.nganHangId)} · {LOAI_VAY_LABEL[p.loaiVay]}{minLaiSuat(p) ? ` · ${minLaiSuat(p).toFixed(2)}%` : ''}</span>
                 </label>
               ))}
             </div>
@@ -88,12 +107,12 @@ export function TabSoSanh({ relations, proposals, notes }: Props) {
             <table className="nh-tbl">
               <thead>
                 <tr>
-                  <th style={{ minWidth: 150 }}>CHỈ TIÊU</th>
-                  {chosen.map(p => <th key={p.id} style={{ minWidth: 160 }}>{p.tenPhuongAn}</th>)}
+                  <th style={{ minWidth: 170 }}>CHỈ TIÊU</th>
+                  {chosen.map(p => <th key={p.id} style={{ minWidth: 180 }}>{p.tenPhuongAn}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {ROWS.map(rd => {
+                {rows.map(rd => {
                   let bestVal: number | null = null
                   if (rd.bestOf) {
                     const vals = chosen.map(rd.bestOf).filter(v => v !== 0)

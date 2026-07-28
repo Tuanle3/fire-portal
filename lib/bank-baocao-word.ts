@@ -4,7 +4,11 @@ import {
   ShadingType, VerticalAlign, BorderStyle, TableLayoutType,
   Footer, PageNumber,
 } from 'docx'
-import { BankRelation, BankProposal, BankNote, DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL } from './bank-types'
+import {
+  BankRelation, BankProposal, BankNote,
+  DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_HINH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL,
+  minLaiSuat, laiSuatDisplay, mucTaiTroDisplay, customRowLabels, customRowValue, isHoSoDangXuLy,
+} from './bank-types'
 
 // ── Màu & font (khớp bảng trên màn hình) ─────────────────────────────────────────
 const NAVY = '1C3557'
@@ -97,7 +101,13 @@ export function buildBankDoc(input: BankWordInput): Document {
       ? [new TableRow({ children: [cell({ runs: [txt('Chưa có ngân hàng nào.', { color: GREY })], width: PAGE_W, align: 'center', columnSpan: 6 })] })]
       : relations.map(r => new TableRow({
         children: [
-          cell({ runs: [txt(r.tenNganHang + (r.chiNhanh ? ' — ' + r.chiNhanh : ''), { bold: true, color: NAVY })], width: W[0] }),
+          cell({
+            runs: [
+              new TextRun({ text: r.tenNganHang, font: FONT, size: 18, bold: true, color: NAVY }),
+              new TextRun({ text: [r.chiNhanh, LOAI_HINH_LABEL[r.loaiHinh]].filter(Boolean).join(' · '), font: FONT, size: 15, color: MUTED, break: 1 }),
+            ],
+            width: W[0],
+          }),
           cell({ runs: [txt(TRANG_THAI_NH_LABEL[r.trangThai])], width: W[1] }),
           cell({ runs: [txt(fmt(r.hanMucHienTai))], width: W[2], align: 'right' }),
           cell({ runs: [txt(fmt(r.duNoHienTai), { color: r.duNoHienTai > 0 ? RED : undefined })], width: W[3], align: 'right' }),
@@ -127,15 +137,20 @@ export function buildBankDoc(input: BankWordInput): Document {
     const rowsDef: { label: string; get: (p: ProposalRow) => string; bestOf?: (p: ProposalRow) => number; better?: 'min' | 'max' }[] = [
       { label: 'Ngân hàng', get: p => p.tenNganHang },
       { label: 'Loại vay', get: p => LOAI_VAY_LABEL[p.loaiVay] },
-      { label: 'Lãi suất (%/năm)', get: p => pct(p.laiSuat), bestOf: p => p.laiSuat, better: 'min' },
-      { label: 'Hạn mức đề xuất (đ)', get: p => fmt(p.hanMucDeXuat), bestOf: p => p.hanMucDeXuat, better: 'max' },
+      { label: 'Ẩn hạn / Kỳ hạn', get: p => p.thoiHan || '—' },
+      { label: 'Lãi suất', get: p => laiSuatDisplay(p), bestOf: minLaiSuat, better: 'min' },
+      { label: 'Mức tài trợ', get: p => mucTaiTroDisplay(p, fmt), bestOf: p => p.hanMucDeXuat, better: 'max' },
       { label: 'Tỷ lệ TSĐB', get: p => pct(p.tyLeTSDB) },
-      { label: 'Thời hạn', get: p => p.thoiHan || '—' },
+      { label: 'TSĐB yêu cầu / chấp nhận', get: p => p.tsdbDieuKien || '—' },
+      { label: 'TSĐB từ chối / loại trừ', get: p => p.tsdbTuChoi || '—' },
+      { label: 'Hỗ trợ đặc biệt', get: p => p.hoTroDacBiet || '—' },
+      { label: 'Phương thức thanh toán', get: p => p.phuongThucTT || '—' },
       { label: 'Phí dịch vụ', get: p => p.phiDichVu || '—' },
-      { label: 'Điều kiện kèm theo', get: p => p.dieuKien || '—' },
+      { label: 'Điều kiện khác', get: p => p.dieuKien || '—' },
       { label: 'Ưu điểm', get: p => p.uuDiem.length ? p.uuDiem.map(s => '+ ' + s).join('\n') : '—' },
       { label: 'Nhược điểm', get: p => p.nhuocDiem.length ? p.nhuocDiem.map(s => '− ' + s).join('\n') : '—' },
       { label: 'Trạng thái', get: p => TRANG_THAI_PA_LABEL[p.trangThai] },
+      ...customRowLabels(proposals).map(label => ({ label, get: (p: ProposalRow) => customRowValue(p, label) })),
     ]
     const head = new TableRow({
       tableHeader: true,
@@ -254,6 +269,124 @@ export async function exportBankWord(input: BankWordInput): Promise<void> {
   const a = document.createElement('a')
   a.href = url
   a.download = fname
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// ── Báo cáo hồ sơ vay vốn hằng ngày (16h) ────────────────────────────────────
+// Liệt kê mọi hồ sơ đang xử lý (chưa giải ngân/từ chối/hết hạn), nhóm theo ngân hàng,
+// kèm cập nhật gần nhất từ nhật ký làm việc — dùng để báo cáo nhanh cho thư ký/Ban Giám đốc.
+
+export interface HoSoVayVonInput {
+  printDate: string
+  relations: BankRelation[]
+  proposals: BankProposal[]
+  notes: BankNote[]
+}
+
+export function buildHoSoVayVonDoc(input: HoSoVayVonInput): Document {
+  const { printDate, relations, proposals, notes } = input
+  const PAGE_W = 11050 // A4 dọc, trừ lề (twip)
+  const dangXuLy = proposals.filter(p => isHoSoDangXuLy(p.trangThai))
+
+  const children: (Paragraph | Table)[] = [
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [txt('SƠN AN GROUP', { bold: true, size: 16, color: GREY })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [txt('BÁO CÁO HỒ SƠ VAY VỐN HẰNG NGÀY', { bold: true, size: 28, color: NAVY })] }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 160 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 18, color: NAVY, space: 6 } },
+      children: [txt(`Chốt số liệu 16:00 · Ngày ${printDate}`, { size: 15, color: GREY })],
+    }),
+  ]
+
+  if (dangXuLy.length === 0) {
+    children.push(new Paragraph({ spacing: { after: 120 }, children: [txt('Không có hồ sơ nào đang xử lý.', { color: GREY })] }))
+  } else {
+    const W = [PAGE_W * .24, PAGE_W * .12, PAGE_W * .18, PAGE_W * .16, PAGE_W * .12, PAGE_W * .18]
+    const border = { style: BorderStyle.SINGLE, size: 2, color: 'D0DCE8' }
+
+    for (const r of relations) {
+      const rHoSo = dangXuLy.filter(p => p.nganHangId === r.id)
+      if (rHoSo.length === 0) continue
+
+      children.push(new Paragraph({
+        spacing: { before: 220, after: 80 },
+        children: [
+          txt(r.tenNganHang, { bold: true, size: 21, color: NAVY }),
+          txt(`  ${[r.chiNhanh, LOAI_HINH_LABEL[r.loaiHinh]].filter(Boolean).join(' · ')} · ${rHoSo.length} hồ sơ đang xử lý`, { size: 15, color: MUTED }),
+        ],
+      }))
+
+      const head = new TableRow({
+        tableHeader: true,
+        children: [
+          cell({ runs: [txt('Hồ sơ / Phương án', { bold: true, color: MUTED, size: 15 })], width: W[0], bg: HEAD_BG }),
+          cell({ runs: [txt('Loại vay', { bold: true, color: MUTED, size: 15 })], width: W[1], bg: HEAD_BG }),
+          cell({ runs: [txt('Mức tài trợ', { bold: true, color: MUTED, size: 15 })], width: W[2], align: 'right', bg: HEAD_BG }),
+          cell({ runs: [txt('Trạng thái hồ sơ', { bold: true, color: MUTED, size: 15 })], width: W[3], bg: HEAD_BG }),
+          cell({ runs: [txt('Ngày nộp', { bold: true, color: MUTED, size: 15 })], width: W[4], bg: HEAD_BG }),
+          cell({ runs: [txt('Người phụ trách', { bold: true, color: MUTED, size: 15 })], width: W[5], bg: HEAD_BG }),
+        ],
+      })
+      const rows = rHoSo.map(p => new TableRow({
+        children: [
+          cell({ runs: [txt(p.tenPhuongAn, { bold: true })], width: W[0] }),
+          cell({ runs: [txt(LOAI_VAY_LABEL[p.loaiVay])], width: W[1] }),
+          cell({ runs: [txt(mucTaiTroDisplay(p, fmt))], width: W[2], align: 'right' }),
+          cell({ runs: [txt(TRANG_THAI_PA_LABEL[p.trangThai], { color: p.trangThai === 'da_duyet' ? GREEN : INK, bold: p.trangThai === 'da_duyet' })], width: W[3] }),
+          cell({ runs: [txt(p.ngayNopHoSo || '—')], width: W[4] }),
+          cell({ runs: [txt(p.nguoiPhuTrach || '—')], width: W[5] }),
+        ],
+      }))
+      children.push(new Table({
+        width: { size: PAGE_W, type: WidthType.DXA },
+        columnWidths: W,
+        layout: TableLayoutType.FIXED,
+        borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
+        rows: [head, ...rows],
+      }))
+
+      const latestNote = [...notes].filter(n => n.nganHangId === r.id).sort((a, b) => b.ngay.localeCompare(a.ngay))[0]
+      if (latestNote) {
+        children.push(new Paragraph({
+          spacing: { before: 60, after: 40 },
+          children: [
+            txt('Cập nhật gần nhất: ', { bold: true, size: 15, color: MUTED }),
+            txt(`[${latestNote.ngay}] ${latestNote.noiDung}`, { size: 15, color: INK }),
+          ],
+        }))
+      }
+    }
+  }
+
+  const footer = new Footer({
+    children: [new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ children: ['Trang ', PageNumber.CURRENT, '/', PageNumber.TOTAL_PAGES], font: FONT, size: 16, color: GREY })],
+    })],
+  })
+
+  return new Document({
+    styles: { default: { document: { run: { font: FONT, size: 18, color: INK } } } },
+    sections: [{
+      properties: { page: { margin: { top: 720, bottom: 720, left: 900, right: 900 } } },
+      footers: { default: footer },
+      children,
+    }],
+  })
+}
+
+export async function exportHoSoVayVonWord(input: HoSoVayVonInput): Promise<void> {
+  const doc = buildHoSoVayVonDoc(input)
+  const blob = await Packer.toBlob(doc)
+  const safeDate = input.printDate.replace(/\//g, '-')
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `Bao cao ho so vay von - ${safeDate}.docx`
   document.body.appendChild(a)
   a.click()
   a.remove()

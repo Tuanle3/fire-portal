@@ -1,6 +1,7 @@
 'use client'
-import { useMemo } from 'react'
-import { BankRelation, BankProposal, DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, TRANG_THAI_PA_LABEL } from '@/lib/bank-types'
+import { useMemo, useState } from 'react'
+import { BankRelation, BankProposal, BankNote, DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, TRANG_THAI_PA_LABEL, isHoSoDangXuLy } from '@/lib/bank-types'
+import { exportHoSoVayVonWord } from '@/lib/bank-baocao-word'
 
 function fmtN(v: number): string { return v.toLocaleString('vi-VN') }
 
@@ -16,7 +17,9 @@ function danhGiaCls(d: BankRelation['danhGia']): string {
   return 'nh-b-amber'
 }
 
-export function TabTongQuan({ relations, proposals }: { relations: BankRelation[]; proposals: BankProposal[] }) {
+export function TabTongQuan({ relations, proposals, notes }: { relations: BankRelation[]; proposals: BankProposal[]; notes: BankNote[] }) {
+  const [exporting, setExporting] = useState(false)
+
   const kpi = useMemo(() => {
     const dangHopTac = relations.filter(r => r.trangThai === 'dang_hop_tac')
     const tongHanMuc = dangHopTac.reduce((s, r) => s + r.hanMucHienTai, 0)
@@ -24,17 +27,32 @@ export function TabTongQuan({ relations, proposals }: { relations: BankRelation[
     const laiSuatBq  = dangHopTac.length
       ? dangHopTac.reduce((s, r) => s + r.laiSuatBinhQuan, 0) / dangHopTac.length
       : 0
-    const dangDamPhan = proposals.filter(p => p.trangThai === 'dang_dam_phan').length
-    return { soLuong: dangHopTac.length, tongHanMuc, tongDuNo, laiSuatBq, dangDamPhan }
+    const dangXuLy = proposals.filter(p => isHoSoDangXuLy(p.trangThai)).length
+    return { soLuong: dangHopTac.length, tongHanMuc, tongDuNo, laiSuatBq, dangXuLy }
   }, [relations, proposals])
+
+  const doExportHoSo = async () => {
+    setExporting(true)
+    try {
+      await exportHoSoVayVonWord({ printDate: new Date().toLocaleDateString('vi-VN'), relations, proposals, notes })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <button className="btn-primary" disabled={exporting} onClick={doExportHoSo}>
+          {exporting ? 'Đang xuất...' : '⬇ Xuất báo cáo hồ sơ vay vốn hôm nay'}
+        </button>
+      </div>
+
       <div className="nh-kpi-row">
         <div className="nh-kpi">
           <span className="nh-kpi-label">Ngân hàng đang hợp tác</span>
           <span className="nh-kpi-val">{kpi.soLuong}</span>
-          <span className="nh-kpi-sub">{kpi.dangDamPhan} phương án đang đàm phán</span>
+          <span className="nh-kpi-sub">{kpi.dangXuLy} hồ sơ/phương án đang xử lý</span>
         </div>
         <div className="nh-kpi">
           <span className="nh-kpi-label">Tổng hạn mức hiện tại</span>

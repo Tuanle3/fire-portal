@@ -34,8 +34,8 @@ export default function NganHangPage() {
   useEffect(() => {
     setLeft(
       <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', lineHeight: 1.15 }}>
-        <div style={{ fontSize: 11, color: '#6B7280' }}>Module › Ngân hàng</div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#1C3557' }}>🏦 Ngân hàng</div>
+        <div style={{ fontSize: 11, color: '#6B7280' }}>Module › List ngân hàng</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1C3557' }}>🏦 List ngân hàng</div>
       </div>
     )
     setRight(null)
@@ -141,7 +141,7 @@ export default function NganHangPage() {
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--nh-muted)' }}>Đang tải dữ liệu...</div>
             ) : (
               <>
-                {activeTab === 'tong-quan' && <TabTongQuan relations={relations} proposals={proposals} />}
+                {activeTab === 'tong-quan' && <TabTongQuan relations={relations} proposals={proposals} notes={notes} />}
                 {activeTab === 'ngan-hang' && (
                   <TabNganHang
                     relations={relations} proposals={proposals}
