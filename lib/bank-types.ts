@@ -74,17 +74,24 @@ export interface BankProposal {
   ngayCapNhat: string
 }
 
-export type TrangThaiGhiChu = 'chua_xu_ly' | 'dang_xu_ly' | 'hoan_tat'
+// Tiến độ từng hạng mục trong checklist của 1 ghi chú — vd "đã cung cấp giải trình công nợ" hay chưa.
+export type TienDoHangMuc = 'da_cung_cap' | 'chua_thuc_hien' | 'chua_xac_nhan'
+
+export interface HangMuc {
+  id: string
+  noiDung: string
+  tienDo: TienDoHangMuc
+}
 
 export interface BankNote {
   id: string
   nganHangId: string
   ngay: string
   nguoiLienHe: string
-  noiDung: string
+  hangMuc: HangMuc[]       // checklist các yêu cầu/hạng mục ngân hàng đưa ra, mỗi dòng tự có tiến độ riêng
+  danhGiaChung: string     // đánh giá chung / ghi chú tổng cho lần cập nhật này
   viecCanLam: string
   hanXuLy: string
-  trangThai: TrangThaiGhiChu
   nguoiPhuTrach: string
 }
 
@@ -127,10 +134,10 @@ export const TRANG_THAI_PA_LABEL: Record<TrangThaiPhuongAn, string> = {
   het_han: 'Hết hạn',
 }
 
-export const TRANG_THAI_GC_LABEL: Record<TrangThaiGhiChu, string> = {
-  chua_xu_ly: 'Chưa xử lý',
-  dang_xu_ly: 'Đang xử lý',
-  hoan_tat: 'Hoàn tất',
+export const TIEN_DO_HM_LABEL: Record<TienDoHangMuc, string> = {
+  da_cung_cap: 'Đã cung cấp',
+  chua_thuc_hien: 'Chưa thực hiện',
+  chua_xac_nhan: 'Chưa xác nhận',
 }
 
 export const EMPTY_BANK: Omit<BankRelation, 'id' | 'updatedAt'> = {
@@ -148,8 +155,8 @@ export const EMPTY_PROPOSAL: Omit<BankProposal, 'id' | 'nganHangId' | 'ngayCapNh
 }
 
 export const EMPTY_NOTE: Omit<BankNote, 'id' | 'nganHangId'> = {
-  ngay: new Date().toISOString().slice(0, 10), nguoiLienHe: '', noiDung: '',
-  viecCanLam: '', hanXuLy: '', trangThai: 'chua_xu_ly', nguoiPhuTrach: '',
+  ngay: new Date().toISOString().slice(0, 10), nguoiLienHe: '', hangMuc: [], danhGiaChung: '',
+  viecCanLam: '', hanXuLy: '', nguoiPhuTrach: '',
 }
 
 // ── Helpers dùng chung cho so sánh (UI + xuất Word) ──────────────────────────

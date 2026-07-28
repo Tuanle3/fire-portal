@@ -97,10 +97,10 @@ function fromFirestoreGC(id: string, data: Record<string, unknown>): BankNote {
     nganHangId:    (data.nganHangId as string) ?? '',
     ngay:          (data.ngay as string) ?? '',
     nguoiLienHe:   (data.nguoiLienHe as string) ?? '',
-    noiDung:       (data.noiDung as string) ?? '',
+    hangMuc:       (data.hangMuc as BankNote['hangMuc']) ?? [],
+    danhGiaChung:  (data.danhGiaChung as string) ?? '',
     viecCanLam:    (data.viecCanLam as string) ?? '',
     hanXuLy:       (data.hanXuLy as string) ?? '',
-    trangThai:     (data.trangThai as BankNote['trangThai']) ?? 'chua_xu_ly',
     nguoiPhuTrach: (data.nguoiPhuTrach as string) ?? '',
   }
 }

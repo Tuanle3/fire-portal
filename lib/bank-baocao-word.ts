@@ -1,12 +1,12 @@
 import {
   Document, Packer, Paragraph, TextRun,
   Table, TableRow, TableCell, WidthType, AlignmentType,
-  ShadingType, VerticalAlign, BorderStyle, TableLayoutType, PageOrientation,
+  ShadingType, VerticalAlign, VerticalMergeType, BorderStyle, TableLayoutType, PageOrientation,
   Footer, PageNumber,
 } from 'docx'
 import {
-  BankRelation, BankProposal, BankNote,
-  DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_HINH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL,
+  BankRelation, BankProposal, BankNote, TienDoHangMuc,
+  DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_HINH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL, TIEN_DO_HM_LABEL,
   minLaiSuat, laiSuatDisplay, mucTaiTroDisplay, customRowLabels, customRowValue, isHoSoDangXuLy,
 } from './bank-types'
 
@@ -42,6 +42,7 @@ function cell(opts: {
   align?: 'left' | 'right' | 'center'
   bg?: string
   columnSpan?: number
+  verticalMerge?: 'restart' | 'continue'
 }) {
   const align =
     opts.align === 'right' ? AlignmentType.RIGHT
@@ -50,6 +51,7 @@ function cell(opts: {
   return new TableCell({
     width: { size: opts.width, type: WidthType.DXA },
     columnSpan: opts.columnSpan,
+    verticalMerge: opts.verticalMerge === 'restart' ? VerticalMergeType.RESTART : opts.verticalMerge === 'continue' ? VerticalMergeType.CONTINUE : undefined,
     shading: opts.bg ? { type: ShadingType.CLEAR, color: 'auto', fill: opts.bg } : undefined,
     verticalAlign: VerticalAlign.CENTER,
     margins: { top: 40, bottom: 40, left: 90, right: 90 },
@@ -197,30 +199,54 @@ export function buildBankDoc(input: BankWordInput): Document {
   }
 
   // ── III. Nhật ký làm việc gần đây (chỉ ở bản đầy đủ) ──────────────────────
+  // Mỗi ngân hàng chỉ lấy ghi chú MỚI NHẤT (đầu vào đã sắp giảm dần theo ngày) — hiển thị
+  // dạng checklist: từng hạng mục 1 dòng riêng kèm tiến độ, ngân hàng & ghi chú gộp ô dọc.
   if (showFull) {
     children.push(sectionHead('III', 'NHẬT KÝ LÀM VIỆC GẦN ĐÂY'))
-    if (notes.length === 0) {
+    const seenBank = new Set<string>()
+    const latestPerBank = notes.filter(n => {
+      if (seenBank.has(n.nganHangId)) return false
+      seenBank.add(n.nganHangId)
+      return true
+    })
+    if (latestPerBank.length === 0) {
       children.push(new Paragraph({ spacing: { after: 120 }, children: [txt('Chưa có ghi chú nào.', { color: GREY })] }))
     } else {
-      const W = [PAGE_W * .10, PAGE_W * .18, PAGE_W * .42, PAGE_W * .30]
+      const W = [PAGE_W * .14, PAGE_W * .46, PAGE_W * .13, PAGE_W * .27]
+      const border = { style: BorderStyle.SINGLE, size: 2, color: 'D0DCE8' }
       const head = new TableRow({
         tableHeader: true,
         children: [
-          cell({ runs: [txt('Ngày', { bold: true, color: MUTED, size: 15 })], width: W[0], bg: HEAD_BG }),
-          cell({ runs: [txt('Ngân hàng', { bold: true, color: MUTED, size: 15 })], width: W[1], bg: HEAD_BG }),
-          cell({ runs: [txt('Nội dung', { bold: true, color: MUTED, size: 15 })], width: W[2], bg: HEAD_BG }),
-          cell({ runs: [txt('Việc cần làm / Hạn xử lý', { bold: true, color: MUTED, size: 15 })], width: W[3], bg: HEAD_BG }),
+          cell({ runs: [txt('Ngân hàng', { bold: true, color: MUTED, size: 15 })], width: W[0], bg: HEAD_BG }),
+          cell({ runs: [txt('Tình trạng hồ sơ', { bold: true, color: MUTED, size: 15 })], width: W[1], bg: HEAD_BG }),
+          cell({ runs: [txt('Tiến độ', { bold: true, color: MUTED, size: 15 })], width: W[2], bg: HEAD_BG }),
+          cell({ runs: [txt('Ghi chú', { bold: true, color: MUTED, size: 15 })], width: W[3], bg: HEAD_BG }),
         ],
       })
-      const rows = notes.map(n => new TableRow({
-        children: [
-          cell({ runs: [txt(n.ngay)], width: W[0] }),
-          cell({ runs: [txt(n.tenNganHang, { bold: true, color: NAVY })], width: W[1] }),
-          cell({ runs: multilineRuns(n.noiDung), width: W[2] }),
-          cell({ runs: multilineRuns([n.viecCanLam, n.hanXuLy && `Hạn: ${n.hanXuLy}`].filter(Boolean).join('\n')), width: W[3] }),
-        ],
-      }))
-      const border = { style: BorderStyle.SINGLE, size: 2, color: 'D0DCE8' }
+      const rows: TableRow[] = []
+      for (const n of latestPerBank) {
+        const items: { id: string; noiDung: string; tienDo?: TienDoHangMuc }[] =
+          n.hangMuc.length > 0 ? n.hangMuc : [{ id: 'x', noiDung: '—' }]
+        const ghiChu = [
+          n.danhGiaChung,
+          [n.viecCanLam, n.hanXuLy && `Hạn: ${n.hanXuLy}`].filter(Boolean).join(' · '),
+        ].filter(Boolean).join('\n')
+        items.forEach((h, i) => {
+          rows.push(new TableRow({
+            children: [
+              cell({ runs: i === 0 ? [txt(n.tenNganHang, { bold: true, color: NAVY })] : [], width: W[0], verticalMerge: i === 0 ? 'restart' : 'continue' }),
+              cell({ runs: multilineRuns(h.noiDung), width: W[1] }),
+              cell({
+                runs: h.tienDo
+                  ? [txt(TIEN_DO_HM_LABEL[h.tienDo], { color: h.tienDo === 'da_cung_cap' ? GREEN : h.tienDo === 'chua_thuc_hien' ? RED : undefined, bold: h.tienDo !== 'chua_xac_nhan' })]
+                  : [txt('—', { color: GREY })],
+                width: W[2],
+              }),
+              cell({ runs: i === 0 ? multilineRuns(ghiChu || '—') : [], width: W[3], verticalMerge: i === 0 ? 'restart' : 'continue' }),
+            ],
+          }))
+        })
+      }
       children.push(new Table({
         width: { size: PAGE_W, type: WidthType.DXA },
         columnWidths: W,
@@ -364,12 +390,16 @@ export function buildHoSoVayVonDoc(input: HoSoVayVonInput): Document {
 
       const latestNote = [...notes].filter(n => n.nganHangId === r.id).sort((a, b) => b.ngay.localeCompare(a.ngay))[0]
       if (latestNote) {
+        const summary = [
+          ...latestNote.hangMuc.map(h => `${h.noiDung} (${TIEN_DO_HM_LABEL[h.tienDo]})`),
+          latestNote.danhGiaChung,
+        ].filter(Boolean).join('\n')
         children.push(new Paragraph({
           spacing: { before: 60, after: 40 },
           children: [
             txt('Cập nhật gần nhất: ', { bold: true, size: 15, color: MUTED }),
             txt(`[${latestNote.ngay}] `, { size: 15, color: INK }),
-            ...multilineRuns(latestNote.noiDung, { size: 15 }),
+            ...multilineRuns(summary || '—', { size: 15 }),
           ],
         }))
       }

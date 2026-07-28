@@ -1,8 +1,8 @@
 'use client'
 import { useMemo, useState } from 'react'
 import {
-  BankRelation, BankProposal, BankNote, BankContact, CustomRow,
-  DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_HINH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL, TRANG_THAI_GC_LABEL,
+  BankRelation, BankProposal, BankNote, BankContact, CustomRow, HangMuc, TienDoHangMuc,
+  DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_HINH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL, TIEN_DO_HM_LABEL,
   EMPTY_BANK, EMPTY_PROPOSAL, EMPTY_NOTE, minLaiSuat, mucTaiTroDisplay, isHoSoDangXuLy,
 } from '@/lib/bank-types'
 import { exportHoSoVayVonWord } from '@/lib/bank-baocao-word'
@@ -35,10 +35,10 @@ function danhGiaCls(d: BankRelation['danhGia']): string {
   if (d === 'can_cai_thien') return 'nh-b-red'
   return 'nh-b-amber'
 }
-function trangThaiGCCls(t: BankNote['trangThai']): string {
-  if (t === 'hoan_tat') return 'nh-b-green'
-  if (t === 'dang_xu_ly') return 'nh-b-blue'
-  return 'nh-b-amber'
+function tienDoCls(t: TienDoHangMuc): string {
+  if (t === 'da_cung_cap') return 'nh-b-green'
+  if (t === 'chua_thuc_hien') return 'nh-b-red'
+  return 'nh-b-amber' // chua_xac_nhan
 }
 
 // Tiến trình xử lý hồ sơ theo đúng thứ tự thực tế — dùng để vẽ thanh tiến độ.
@@ -253,14 +253,27 @@ export function TabNganHang({
                           {rNotes.map(n => (
                             <div key={n.id} style={{ border: '1px solid #E5E0D8', borderRadius: 10, padding: 10, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                               <div style={{ flex: 1, minWidth: 200 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                                   <span style={{ fontSize: 11, color: '#9CA3AF' }}>{n.ngay}</span>
                                   {n.nguoiLienHe && <span style={{ fontSize: 11, color: '#9CA3AF' }}>· LH: {n.nguoiLienHe}</span>}
-                                  <span className={`nh-badge ${trangThaiGCCls(n.trangThai)}`}>{TRANG_THAI_GC_LABEL[n.trangThai]}</span>
                                 </div>
-                                <div style={{ fontSize: 12.5, color: '#374151', whiteSpace: 'pre-wrap' }}>{n.noiDung}</div>
+                                {n.hangMuc.length > 0 && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 6 }}>
+                                    {n.hangMuc.map(h => (
+                                      <div key={h.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12.5, color: '#374151' }}>
+                                        <span className={`nh-badge ${tienDoCls(h.tienDo)}`} style={{ flexShrink: 0 }}>{TIEN_DO_HM_LABEL[h.tienDo]}</span>
+                                        <span style={{ whiteSpace: 'pre-wrap' }}>{h.noiDung}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {n.danhGiaChung && (
+                                  <div style={{ fontSize: 12, color: '#374151', whiteSpace: 'pre-wrap', marginBottom: 4 }}>
+                                    <span style={{ fontWeight: 700, color: '#1C3557' }}>Đánh giá chung: </span>{n.danhGiaChung}
+                                  </div>
+                                )}
                                 {(n.viecCanLam || n.hanXuLy) && (
-                                  <div style={{ fontSize: 11.5, color: '#8A5A12', marginTop: 4 }}>
+                                  <div style={{ fontSize: 11.5, color: '#8A5A12' }}>
                                     → {n.viecCanLam}{n.hanXuLy ? ` (hạn ${n.hanXuLy})` : ''}
                                   </div>
                                 )}
@@ -547,6 +560,12 @@ function NoteForm({ initial, onCancel, onSave }: {
   const [form, setForm] = useState<Omit<BankNote, 'id' | 'nganHangId'>>(initial ?? EMPTY_NOTE)
   const [saving, setSaving] = useState(false)
 
+  const setHangMuc = (i: number, patch: Partial<HangMuc>) => {
+    const list = [...form.hangMuc]
+    list[i] = { ...list[i], ...patch }
+    setForm({ ...form, hangMuc: list })
+  }
+
   return (
     <div style={{ border: '1px solid #D0DCE8', borderRadius: 10, padding: 14, marginBottom: 14, background: '#F8FAFC' }}>
       <div className="nh-form-grid">
@@ -559,12 +578,6 @@ function NoteForm({ initial, onCancel, onSave }: {
           <input className="nh-input" value={form.nguoiLienHe} onChange={e => setForm({ ...form, nguoiLienHe: e.target.value })} />
         </div>
         <div>
-          <label className="nh-label">Trạng thái</label>
-          <select className="nh-select" value={form.trangThai} onChange={e => setForm({ ...form, trangThai: e.target.value as BankNote['trangThai'] })}>
-            {Object.entries(TRANG_THAI_GC_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </div>
-        <div>
           <label className="nh-label">Hạn xử lý</label>
           <input className="nh-input" type="date" value={form.hanXuLy} onChange={e => setForm({ ...form, hanXuLy: e.target.value })} />
         </div>
@@ -573,18 +586,38 @@ function NoteForm({ initial, onCancel, onSave }: {
           <input className="nh-input" value={form.nguoiPhuTrach} onChange={e => setForm({ ...form, nguoiPhuTrach: e.target.value })} />
         </div>
       </div>
-      <div style={{ marginBottom: 8 }}>
-        <label className="nh-label">Nội dung trao đổi (mỗi dòng 1 ý — sẽ tách dòng riêng khi xuất Word)</label>
-        <textarea className="nh-textarea" rows={4} value={form.noiDung} onChange={e => setForm({ ...form, noiDung: e.target.value })}
-          placeholder={'VD:\n1. Đang thẩm định năng lực tài chính\n2. Yêu cầu giải trình công nợ phải thu/phải trả\n3. Phí tạm ứng thẩm định: 1.650.000 đồng'} />
+
+      <label className="nh-label">Tình trạng hồ sơ (mỗi hạng mục 1 dòng, kèm tiến độ riêng)</label>
+      {form.hangMuc.map((h, i) => (
+        <div key={h.id} style={{ display: 'grid', gridTemplateColumns: '1fr 170px auto', gap: 8, marginBottom: 6 }}>
+          <input className="nh-input" placeholder="VD: Giải trình công nợ phải thu, phải trả" value={h.noiDung} onChange={e => setHangMuc(i, { noiDung: e.target.value })} />
+          <select className="nh-select" value={h.tienDo} onChange={e => setHangMuc(i, { tienDo: e.target.value as TienDoHangMuc })}>
+            {Object.entries(TIEN_DO_HM_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <button className="btn-danger" onClick={() => setForm({ ...form, hangMuc: form.hangMuc.filter((_, j) => j !== i) })}>×</button>
+        </div>
+      ))}
+      <button className="btn-ghost" style={{ marginBottom: 10 }}
+        onClick={() => setForm({ ...form, hangMuc: [...form.hangMuc, { id: newId('hm'), noiDung: '', tienDo: 'chua_xac_nhan' }] })}>
+        + Thêm hạng mục
+      </button>
+
+      <div style={{ marginBottom: 10 }}>
+        <label className="nh-label">Đánh giá chung</label>
+        <textarea className="nh-textarea" rows={3} value={form.danhGiaChung} onChange={e => setForm({ ...form, danhGiaChung: e.target.value })}
+          placeholder={'VD:\n- Bạn phụ trách rất kỹ tính, làm việc đúng quy trình.\n- Hồ sơ yêu cầu cung cấp chi tiết mới đi bước tiếp theo'} />
       </div>
       <div style={{ marginBottom: 10 }}>
         <label className="nh-label">Việc cần làm tiếp theo</label>
         <input className="nh-input" value={form.viecCanLam} onChange={e => setForm({ ...form, viecCanLam: e.target.value })} />
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn-primary" disabled={!form.noiDung.trim() || saving}
-          onClick={async () => { setSaving(true); await onSave({ ...form, id: initial?.id ?? newId('gc') }); setSaving(false) }}>
+        <button className="btn-primary" disabled={(form.hangMuc.length === 0 && !form.danhGiaChung.trim()) || saving}
+          onClick={async () => {
+            setSaving(true)
+            await onSave({ ...form, id: initial?.id ?? newId('gc'), hangMuc: form.hangMuc.filter(h => h.noiDung.trim()) })
+            setSaving(false)
+          }}>
           {saving ? 'Đang lưu...' : 'Lưu'}
         </button>
         <button className="btn-ghost" onClick={onCancel}>Huỷ</button>
