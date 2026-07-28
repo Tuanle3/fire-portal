@@ -50,6 +50,14 @@ function getBadge(row: TSRow) {
   return { label: raw, cls: 'bdg-chua' }
 }
 
+function htCls(ht: string): string {
+  const l = ht.toLowerCase()
+  if (l.includes('bảo lãnh'))                 return 'bdg-bl'
+  if (l.includes('ngắn') || l.includes('ngan')) return 'bdg-ngan'
+  if (l.includes('dài')  || l.includes('dai'))  return 'bdg-dai'
+  return 'bdg-chua'
+}
+
 function ltvCls(ltv: number | null): string {
   if (ltv === null || ltv <= 0) return 'ltv-zero'
   if (ltv <= 0.7)  return 'ltv-ok'
@@ -181,6 +189,9 @@ export default function AssetsPage() {
         .bdg-chua{background:#FEF3CD;color:#92600A;border-color:#F59E0B;}
         .bdg-dh{background:#EEF3FA;color:#1C3557;border-color:#93B4D8;}
         .bdg-ng{background:#FEE2E2;color:#DC2626;border-color:#FCA5A5;}
+        .bdg-ngan{background:#EFF6FF;color:#1D4ED8;border-color:#93C5FD;}
+        .bdg-dai{background:#F3E8FF;color:#7C3AED;border-color:#D8B4FE;}
+        .bdg-bl{background:#FFFBEB;color:#B45309;border-color:#FCD34D;}
 
         /* LTV chips */
         .ltv-chip{display:inline-block;padding:2px 7px;border-radius:5px;font-size:10.5px;font-weight:700;font-family:'Roboto Mono',monospace;}
@@ -279,6 +290,7 @@ export default function AssetsPage() {
                     <th style={{ minWidth:130 }}>CHỦ SỞ HỮU</th>
                     <th style={{ minWidth:110 }}>NGÂN HÀNG</th>
                     <th style={{ minWidth:110 }}>ĐẠI DIỆN</th>
+                    <th style={{ minWidth:110 }}>HÌNH THỨC VAY</th>
                     <th className="r" style={{ minWidth:120 }}>ĐỊNH GIÁ (đ)</th>
                     <th className="r" style={{ minWidth:120 }}>HẠN MỨC (đ)</th>
                     <th className="r" style={{ minWidth:120 }}>DƯ NỢ (đ)</th>
@@ -288,9 +300,10 @@ export default function AssetsPage() {
                 </thead>
                 <tbody>
                   {pageRows.length === 0 ? (
-                    <tr><td colSpan={10} style={{ textAlign:'center', padding:32, color:'#9CA3AF' }}>Không có dữ liệu phù hợp</td></tr>
+                    <tr><td colSpan={11} style={{ textAlign:'center', padding:32, color:'#9CA3AF' }}>Không có dữ liệu phù hợp</td></tr>
                   ) : pageRows.map((r, i) => {
                     const bdg     = getBadge(r)
+                    const ht      = String(f(r,'Hình thức vay') ?? '')
                     const duNo    = n(f(r,'Dư nợ phân bổ theo TSĐB'))
                     const hanMuc  = n(f(r,'Hạn mức cho vay'))
                     const dinhGia = n(f(r,'Định giá'))
@@ -308,6 +321,9 @@ export default function AssetsPage() {
                           {String(f(r,'Ngân hàng vay') ?? '') || <span style={{ color:'#9CA3AF' }}>Chưa vay</span>}
                         </td>
                         <td style={{ fontSize:11, color:'#6B7280' }}>{String(f(r,'Đại diện vay') ?? '') || '—'}</td>
+                        <td style={{ fontSize:11 }}>
+                          {ht ? <span className={`bdg ${htCls(ht)}`}>{ht}</span> : <span style={{ color:'#9CA3AF' }}>—</span>}
+                        </td>
                         <td className="r">{dinhGia ? fmtU(dinhGia) : '—'}</td>
                         <td className="r">{hanMuc  ? fmtU(hanMuc)  : '—'}</td>
                         <td className="r" style={{ color: duNo > 0 ? '#8C1F1F' : '#9CA3AF' }}>{duNo ? fmtU(duNo) : '–'}</td>
@@ -324,7 +340,7 @@ export default function AssetsPage() {
                   })}
                   {/* Total row */}
                   <tr className="tot">
-                    <td colSpan={5} style={{ textAlign:'right', paddingRight:10, fontSize:11 }}>Tổng ({filtered.length} tài sản)</td>
+                    <td colSpan={6} style={{ textAlign:'right', paddingRight:10, fontSize:11 }}>Tổng ({filtered.length} tài sản)</td>
                     <td className="r">{fmtU(totals.dinhGia)}</td>
                     <td className="r">{fmtU(totals.hanMuc)}</td>
                     <td className="r" style={{ color:'#8C1F1F' }}>{fmtU(totals.duNo)}</td>
