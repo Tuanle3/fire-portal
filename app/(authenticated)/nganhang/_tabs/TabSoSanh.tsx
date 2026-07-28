@@ -64,6 +64,7 @@ export function TabSoSanh({ relations, proposals, notes }: Props) {
       await exportBankWord({
         printDate: new Date().toLocaleDateString('vi-VN'),
         relations,
+        allProposals: proposals,
         proposals: chosen.map(p => ({ ...p, tenNganHang: bankName(p.nganHangId) })),
         notes: [...notes].sort((a, b) => b.ngay.localeCompare(a.ngay)).slice(0, 10).map(n => ({ ...n, tenNganHang: bankName(n.nganHangId) })),
         deXuat,

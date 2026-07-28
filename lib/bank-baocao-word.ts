@@ -70,14 +70,15 @@ function sectionHead(roman: string, title: string) {
 export interface BankWordInput {
   printDate: string
   relations: BankRelation[]
-  proposals: (BankProposal & { tenNganHang: string })[]
+  allProposals: BankProposal[]                          // toàn bộ phương án (mọi ngân hàng) — dùng cho mục I. Tổng quan
+  proposals: (BankProposal & { tenNganHang: string })[]  // phương án ĐÃ CHỌN để so sánh — dùng cho mục II
   notes: (BankNote & { tenNganHang: string })[]
   deXuat: string
   mode: 'compact' | 'full'
 }
 
 export function buildBankDoc(input: BankWordInput): Document {
-  const { printDate, relations, proposals, notes, deXuat, mode } = input
+  const { printDate, relations, allProposals, proposals, notes, deXuat, mode } = input
   const showFull = mode === 'full'
   const PAGE_W = 15398 // A4 ngang, trừ lề (twip)
 
@@ -95,7 +96,7 @@ export function buildBankDoc(input: BankWordInput): Document {
   // ── I. Tổng quan quan hệ ngân hàng (chỉ ở bản đầy đủ) ─────────────────────
   if (showFull) {
     children.push(sectionHead('I', 'TỔNG QUAN QUAN HỆ NGÂN HÀNG'))
-    const W = [PAGE_W * .22, PAGE_W * .13, PAGE_W * .16, PAGE_W * .16, PAGE_W * .13, PAGE_W * .20]
+    const W = [PAGE_W * .17, PAGE_W * .10, PAGE_W * .12, PAGE_W * .12, PAGE_W * .09, PAGE_W * .10, PAGE_W * .30]
     const head = new TableRow({
       tableHeader: true,
       children: [
@@ -105,26 +106,34 @@ export function buildBankDoc(input: BankWordInput): Document {
         cell({ runs: [txt('Dư nợ (đ)', { bold: true, color: MUTED, size: 15 })], width: W[3], align: 'right', bg: HEAD_BG }),
         cell({ runs: [txt('Lãi suất bq', { bold: true, color: MUTED, size: 15 })], width: W[4], align: 'right', bg: HEAD_BG }),
         cell({ runs: [txt('Đánh giá', { bold: true, color: MUTED, size: 15 })], width: W[5], bg: HEAD_BG }),
+        cell({ runs: [txt('Phương án tài trợ / Tình trạng', { bold: true, color: MUTED, size: 15 })], width: W[6], bg: HEAD_BG }),
       ],
     })
     const rows = relations.length === 0
-      ? [new TableRow({ children: [cell({ runs: [txt('Chưa có ngân hàng nào.', { color: GREY })], width: PAGE_W, align: 'center', columnSpan: 6 })] })]
-      : relations.map(r => new TableRow({
-        children: [
-          cell({
-            runs: [
-              new TextRun({ text: r.tenNganHang, font: FONT, size: 18, bold: true, color: NAVY }),
-              new TextRun({ text: [r.chiNhanh, LOAI_HINH_LABEL[r.loaiHinh]].filter(Boolean).join(' · '), font: FONT, size: 15, color: MUTED, break: 1 }),
-            ],
-            width: W[0],
-          }),
-          cell({ runs: [txt(TRANG_THAI_NH_LABEL[r.trangThai])], width: W[1] }),
-          cell({ runs: [txt(fmt(r.hanMucHienTai))], width: W[2], align: 'right' }),
-          cell({ runs: [txt(fmt(r.duNoHienTai), { color: r.duNoHienTai > 0 ? RED : undefined })], width: W[3], align: 'right' }),
-          cell({ runs: [txt(pct(r.laiSuatBinhQuan))], width: W[4], align: 'right' }),
-          cell({ runs: [txt(DANH_GIA_LABEL[r.danhGia])], width: W[5] }),
-        ],
-      }))
+      ? [new TableRow({ children: [cell({ runs: [txt('Chưa có ngân hàng nào.', { color: GREY })], width: PAGE_W, align: 'center', columnSpan: 7 })] })]
+      : relations.map(r => {
+        const rProposals = allProposals.filter(p => p.nganHangId === r.id)
+        const paLines = rProposals.length
+          ? rProposals.map(p => `${p.tenPhuongAn}: ${TRANG_THAI_PA_LABEL[p.trangThai]}`).join('\n')
+          : '—'
+        return new TableRow({
+          children: [
+            cell({
+              runs: [
+                new TextRun({ text: r.tenNganHang, font: FONT, size: 18, bold: true, color: NAVY }),
+                new TextRun({ text: [r.chiNhanh, LOAI_HINH_LABEL[r.loaiHinh]].filter(Boolean).join(' · '), font: FONT, size: 15, color: MUTED, break: 1 }),
+              ],
+              width: W[0],
+            }),
+            cell({ runs: [txt(TRANG_THAI_NH_LABEL[r.trangThai])], width: W[1] }),
+            cell({ runs: [txt(fmt(r.hanMucHienTai))], width: W[2], align: 'right' }),
+            cell({ runs: [txt(fmt(r.duNoHienTai), { color: r.duNoHienTai > 0 ? RED : undefined })], width: W[3], align: 'right' }),
+            cell({ runs: [txt(pct(r.laiSuatBinhQuan))], width: W[4], align: 'right' }),
+            cell({ runs: [txt(DANH_GIA_LABEL[r.danhGia])], width: W[5] }),
+            cell({ runs: multilineRuns(paLines, { size: 16 }), width: W[6] }),
+          ],
+        })
+      })
     const border = { style: BorderStyle.SINGLE, size: 2, color: 'D0DCE8' }
     children.push(new Table({
       width: { size: PAGE_W, type: WidthType.DXA },
