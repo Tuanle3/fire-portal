@@ -7,23 +7,19 @@ import {
   saveBankRelation, deleteBankRelation, saveBankProposal, deleteBankProposal, saveBankNote, deleteBankNote,
 } from '@/lib/bank-store'
 import { BankRelation, BankProposal, BankNote } from '@/lib/bank-types'
-import { TabTongQuan } from './_tabs/TabTongQuan'
 import { TabNganHang } from './_tabs/TabNganHang'
-import { TabNhatKy } from './_tabs/TabNhatKy'
 import { TabSoSanh } from './_tabs/TabSoSanh'
 
-type TabId = 'tong-quan' | 'ngan-hang' | 'nhat-ky' | 'so-sanh'
+type TabId = 'ngan-hang' | 'so-sanh'
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'tong-quan', label: 'Tổng quan' },
-  { id: 'ngan-hang', label: 'Ngân hàng & Phương án' },
-  { id: 'nhat-ky',   label: 'Nhật ký làm việc' },
+  { id: 'ngan-hang', label: 'Ngân hàng' },
   { id: 'so-sanh',   label: 'So sánh' },
 ]
 
 export default function NganHangPage() {
   const { loading: sessLoading, can } = useUserSession()
-  const [activeTab, setActiveTab] = useState<TabId>('tong-quan')
+  const [activeTab, setActiveTab] = useState<TabId>('ngan-hang')
 
   const [relations, setRelations] = useState<BankRelation[]>([])
   const [proposals, setProposals] = useState<BankProposal[]>([])
@@ -122,6 +118,20 @@ export default function NganHangPage() {
         .nh-label { font-size:11px; font-weight:700; color:var(--nh-muted); letter-spacing:.03em; text-transform:uppercase; display:block; margin-bottom:4px; }
         .nh-form-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-bottom:10px; }
 
+        /* Thẻ phương án vay + thanh tiến độ xử lý hồ sơ */
+        .nh-proposal-card { border:1px solid #E5E0D8; border-radius:10px; padding:12px 14px; margin-bottom:8px; background:#fff; }
+        .nh-pc-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
+        .nh-pc-title { font-weight:700; color:#1F2430; font-size:13px; }
+        .nh-pc-meta { font-size:11.5px; color:#6B7280; margin-bottom:10px; }
+        .nh-stepper { display:flex; align-items:center; flex-wrap:wrap; gap:0; row-gap:6px; }
+        .nh-step { display:flex; align-items:center; }
+        .nh-step-dot { width:18px; height:18px; border-radius:50%; background:#E5E7EB; color:#9CA3AF; display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:700; flex-shrink:0; }
+        .nh-step-dot.done { background:var(--nh-green); color:#fff; }
+        .nh-step-dot.current { background:var(--nh-navy); color:#fff; box-shadow:0 0 0 3px #EEF3FA; }
+        .nh-step-label { font-size:9.5px; color:#9CA3AF; white-space:nowrap; }
+        .nh-step-label.current { color:var(--nh-navy); font-weight:700; }
+        .nh-step-line { width:16px; height:2px; margin:0 5px; }
+
         @media (max-width:1024px) { .nh-kpi-row { grid-template-columns:1fr 1fr } }
         @media (max-width:600px)  { .nh-content { padding:12px } .nh-kpi-row { grid-template-columns:1fr 1fr } }
       `}</style>
@@ -141,17 +151,11 @@ export default function NganHangPage() {
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--nh-muted)' }}>Đang tải dữ liệu...</div>
             ) : (
               <>
-                {activeTab === 'tong-quan' && <TabTongQuan relations={relations} proposals={proposals} notes={notes} />}
                 {activeTab === 'ngan-hang' && (
                   <TabNganHang
-                    relations={relations} proposals={proposals}
+                    relations={relations} proposals={proposals} notes={notes}
                     onSaveRelation={saveBankRelation} onDeleteRelation={deleteBankRelation}
                     onSaveProposal={saveBankProposal} onDeleteProposal={deleteBankProposal}
-                  />
-                )}
-                {activeTab === 'nhat-ky' && (
-                  <TabNhatKy
-                    relations={relations} notes={notes}
                     onSaveNote={saveBankNote} onDeleteNote={deleteBankNote}
                   />
                 )}

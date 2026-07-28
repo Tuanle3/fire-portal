@@ -1,41 +1,129 @@
 'use client'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  BankRelation, BankProposal, BankContact, CustomRow,
-  DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_HINH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL,
-  EMPTY_BANK, EMPTY_PROPOSAL, minLaiSuat, mucTaiTroDisplay,
+  BankRelation, BankProposal, BankNote, BankContact, CustomRow,
+  DANH_GIA_LABEL, TRANG_THAI_NH_LABEL, LOAI_HINH_LABEL, LOAI_VAY_LABEL, TRANG_THAI_PA_LABEL, TRANG_THAI_GC_LABEL,
+  EMPTY_BANK, EMPTY_PROPOSAL, EMPTY_NOTE, minLaiSuat, mucTaiTroDisplay, isHoSoDangXuLy,
 } from '@/lib/bank-types'
+import { exportHoSoVayVonWord } from '@/lib/bank-baocao-word'
 
 function fmtN(v: number): string { return v.toLocaleString('vi-VN') }
 function newId(prefix: string): string { return `${prefix}${Date.now()}` }
 
-function trangThaiPACls(t: BankProposal['trangThai']): string {
-  if (t === 'da_giai_ngan') return 'nh-b-green'
-  if (t === 'tu_choi') return 'nh-b-red'
-  if (t === 'het_han') return 'nh-b-grey'
-  if (t === 'da_duyet') return 'nh-b-blue'
-  return 'nh-b-amber' // soan_ho_so, da_nop, dang_tham_dinh, cho_phe_duyet — đang xử lý
+function trangThaiCls(t: BankRelation['trangThai']): string {
+  if (t === 'dang_hop_tac') return 'nh-b-green'
+  if (t === 'tiem_nang') return 'nh-b-blue'
+  return 'nh-b-grey'
+}
+function danhGiaCls(d: BankRelation['danhGia']): string {
+  if (d === 'tot') return 'nh-b-green'
+  if (d === 'can_cai_thien') return 'nh-b-red'
+  return 'nh-b-amber'
+}
+function trangThaiGCCls(t: BankNote['trangThai']): string {
+  if (t === 'hoan_tat') return 'nh-b-green'
+  if (t === 'dang_xu_ly') return 'nh-b-blue'
+  return 'nh-b-amber'
+}
+
+// Tiến trình xử lý hồ sơ theo đúng thứ tự thực tế — dùng để vẽ thanh tiến độ.
+const STAGE_ORDER: BankProposal['trangThai'][] = ['soan_ho_so', 'da_nop', 'dang_tham_dinh', 'cho_phe_duyet', 'da_duyet', 'da_giai_ngan']
+
+function StageStepper({ current }: { current: BankProposal['trangThai'] }) {
+  if (current === 'tu_choi' || current === 'het_han') {
+    return <span className={`nh-badge ${current === 'tu_choi' ? 'nh-b-red' : 'nh-b-grey'}`}>{TRANG_THAI_PA_LABEL[current]}</span>
+  }
+  const idx = STAGE_ORDER.indexOf(current)
+  return (
+    <div className="nh-stepper">
+      {STAGE_ORDER.map((s, i) => (
+        <div key={s} className="nh-step">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span className={`nh-step-dot${i < idx ? ' done' : i === idx ? ' current' : ''}`}>{i < idx ? '✓' : i + 1}</span>
+            <span className={`nh-step-label${i === idx ? ' current' : ''}`}>{TRANG_THAI_PA_LABEL[s]}</span>
+          </div>
+          {i < STAGE_ORDER.length - 1 && <span className="nh-step-line" style={{ background: i < idx ? '#1F6B3D' : '#E5E7EB' }} />}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 interface Props {
   relations: BankRelation[]
   proposals: BankProposal[]
+  notes: BankNote[]
   onSaveRelation: (r: BankRelation) => Promise<void>
   onDeleteRelation: (id: string) => Promise<void>
   onSaveProposal: (p: BankProposal) => Promise<void>
   onDeleteProposal: (id: string) => Promise<void>
+  onSaveNote: (n: BankNote) => Promise<void>
+  onDeleteNote: (id: string) => Promise<void>
 }
 
-export function TabNganHang({ relations, proposals, onSaveRelation, onDeleteRelation, onSaveProposal, onDeleteProposal }: Props) {
+export function TabNganHang({
+  relations, proposals, notes,
+  onSaveRelation, onDeleteRelation, onSaveProposal, onDeleteProposal, onSaveNote, onDeleteNote,
+}: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingBank, setEditingBank] = useState<BankRelation | 'new' | null>(null)
   const [editingProposal, setEditingProposal] = useState<{ bankId: string; proposal: BankProposal | 'new' } | null>(null)
+  const [editingNote, setEditingNote] = useState<{ bankId: string; note: BankNote | 'new' } | null>(null)
+  const [notesExpanded, setNotesExpanded] = useState<Set<string>>(new Set())
+  const [exporting, setExporting] = useState(false)
+
+  const kpi = useMemo(() => {
+    const dangHopTac = relations.filter(r => r.trangThai === 'dang_hop_tac')
+    const tongHanMuc = dangHopTac.reduce((s, r) => s + r.hanMucHienTai, 0)
+    const tongDuNo   = dangHopTac.reduce((s, r) => s + r.duNoHienTai, 0)
+    const laiSuatBq  = dangHopTac.length ? dangHopTac.reduce((s, r) => s + r.laiSuatBinhQuan, 0) / dangHopTac.length : 0
+    const dangXuLy   = proposals.filter(p => isHoSoDangXuLy(p.trangThai)).length
+    return { soLuong: dangHopTac.length, tongHanMuc, tongDuNo, laiSuatBq, dangXuLy }
+  }, [relations, proposals])
+
+  const doExportHoSo = async () => {
+    setExporting(true)
+    try {
+      await exportHoSoVayVonWord({ printDate: new Date().toLocaleDateString('vi-VN'), relations, proposals, notes })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <button className="btn-primary" disabled={exporting} onClick={doExportHoSo}>
+          {exporting ? 'Đang xuất...' : '⬇ Xuất báo cáo hồ sơ vay vốn hôm nay'}
+        </button>
+      </div>
+
+      <div className="nh-kpi-row">
+        <div className="nh-kpi">
+          <span className="nh-kpi-label">Ngân hàng đang hợp tác</span>
+          <span className="nh-kpi-val">{kpi.soLuong}</span>
+          <span className="nh-kpi-sub">{kpi.dangXuLy} hồ sơ/phương án đang xử lý</span>
+        </div>
+        <div className="nh-kpi">
+          <span className="nh-kpi-label">Tổng hạn mức hiện tại</span>
+          <span className="nh-kpi-val">{fmtN(kpi.tongHanMuc)}<span style={{ fontSize: 11, marginLeft: 2 }}>đ</span></span>
+          <span className="nh-kpi-sub">Trên các NH đang hợp tác</span>
+        </div>
+        <div className="nh-kpi">
+          <span className="nh-kpi-label">Tổng dư nợ hiện tại</span>
+          <span className="nh-kpi-val" style={{ color: kpi.tongDuNo > 0 ? '#8C1F1F' : undefined }}>{fmtN(kpi.tongDuNo)}<span style={{ fontSize: 11, marginLeft: 2 }}>đ</span></span>
+          <span className="nh-kpi-sub">{kpi.tongHanMuc > 0 ? (kpi.tongDuNo / kpi.tongHanMuc * 100).toFixed(1) : '0.0'}% hạn mức đã dùng</span>
+        </div>
+        <div className="nh-kpi">
+          <span className="nh-kpi-label">Lãi suất bình quân</span>
+          <span className="nh-kpi-val">{kpi.laiSuatBq.toFixed(2)}<span style={{ fontSize: 11, marginLeft: 2 }}>%/năm</span></span>
+          <span className="nh-kpi-sub">Trung bình các NH đang hợp tác</span>
+        </div>
+      </div>
+
       <div className="nh-card">
         <div className="nh-card-head">
-          <span className="nh-card-title">Ngân hàng &amp; phương án vay</span>
+          <span className="nh-card-title">Danh sách ngân hàng</span>
           <button className="btn-primary" onClick={() => setEditingBank('new')}>+ Thêm ngân hàng</button>
         </div>
         <div className="nh-card-body">
@@ -52,6 +140,9 @@ export function TabNganHang({ relations, proposals, onSaveRelation, onDeleteRela
           ) : (
             relations.map(r => {
               const rProposals = proposals.filter(p => p.nganHangId === r.id)
+              const rNotesAll = notes.filter(n => n.nganHangId === r.id).sort((a, b) => b.ngay.localeCompare(a.ngay))
+              const showAllNotes = notesExpanded.has(r.id)
+              const rNotes = showAllNotes ? rNotesAll : rNotesAll.slice(0, 3)
               const open = expandedId === r.id
               return (
                 <div key={r.id} style={{ border: '1px solid #E5E0D8', borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
@@ -61,9 +152,9 @@ export function TabNganHang({ relations, proposals, onSaveRelation, onDeleteRela
                       <span style={{ fontWeight: 700, color: '#1C3557' }}>{open ? '▾' : '▸'} {r.tenNganHang}</span>
                       {r.chiNhanh && <span style={{ fontSize: 11, color: '#6B7280' }}>{r.chiNhanh}</span>}
                       <span className="nh-badge nh-b-grey">{LOAI_HINH_LABEL[r.loaiHinh]}</span>
-                      <span className={`nh-badge ${r.trangThai === 'dang_hop_tac' ? 'nh-b-green' : r.trangThai === 'tiem_nang' ? 'nh-b-blue' : 'nh-b-grey'}`}>{TRANG_THAI_NH_LABEL[r.trangThai]}</span>
-                      <span className={`nh-badge ${r.danhGia === 'tot' ? 'nh-b-green' : r.danhGia === 'can_cai_thien' ? 'nh-b-red' : 'nh-b-amber'}`}>{DANH_GIA_LABEL[r.danhGia]}</span>
-                      <span style={{ fontSize: 11, color: '#6B7280' }}>{rProposals.length} phương án</span>
+                      <span className={`nh-badge ${trangThaiCls(r.trangThai)}`}>{TRANG_THAI_NH_LABEL[r.trangThai]}</span>
+                      <span className={`nh-badge ${danhGiaCls(r.danhGia)}`}>{DANH_GIA_LABEL[r.danhGia]}</span>
+                      <span style={{ fontSize: 11, color: '#6B7280' }}>{rProposals.length} phương án · {rNotesAll.length} ghi chú</span>
                     </div>
                     <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
                       <button className="btn-ghost" onClick={() => setEditingBank(r)}>Sửa</button>
@@ -89,8 +180,9 @@ export function TabNganHang({ relations, proposals, onSaveRelation, onDeleteRela
                         </div>
                       )}
 
+                      {/* Phương án vay — thẻ + thanh tiến độ */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <span className="nh-label" style={{ margin: 0 }}>Phương án vay</span>
+                        <span className="nh-label" style={{ margin: 0 }}>Phương án vay — tiến độ hồ sơ</span>
                         <button className="btn-ghost" onClick={() => setEditingProposal({ bankId: r.id, proposal: 'new' })}>+ Thêm phương án</button>
                       </div>
 
@@ -103,37 +195,77 @@ export function TabNganHang({ relations, proposals, onSaveRelation, onDeleteRela
                       )}
 
                       {rProposals.length === 0 ? (
-                        <div style={{ padding: 12, textAlign: 'center', color: '#9CA3AF', fontSize: 12 }}>Chưa có phương án nào.</div>
+                        <div style={{ padding: 12, textAlign: 'center', color: '#9CA3AF', fontSize: 12, marginBottom: 8 }}>Chưa có phương án nào.</div>
                       ) : (
-                        <table className="nh-tbl">
-                          <thead>
-                            <tr>
-                              <th>TÊN PHƯƠNG ÁN</th>
-                              <th>LOẠI VAY</th>
-                              <th className="r">LÃI SUẤT (ưu đãi thấp nhất)</th>
-                              <th className="r">MỨC TÀI TRỢ</th>
-                              <th>TRẠNG THÁI</th>
-                              <th style={{ width: 110 }}></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rProposals.map(p => (
-                              <tr key={p.id}>
-                                <td style={{ fontWeight: 600 }}>{p.tenPhuongAn}</td>
-                                <td><span className={`nh-badge ${p.loaiVay === 'ngan_han' ? 'nh-b-blue' : p.loaiVay === 'bao_lanh' ? 'nh-b-amber' : 'nh-b-purple'}`}>{LOAI_VAY_LABEL[p.loaiVay]}</span></td>
-                                <td className="r">{minLaiSuat(p) ? minLaiSuat(p).toFixed(2) + '%' : '—'}</td>
-                                <td className="r" style={{ fontSize: 11.5 }}>{mucTaiTroDisplay(p, fmtN)}</td>
-                                <td><span className={`nh-badge ${trangThaiPACls(p.trangThai)}`}>{TRANG_THAI_PA_LABEL[p.trangThai]}</span></td>
-                                <td>
-                                  <div style={{ display: 'flex', gap: 6 }}>
-                                    <button className="btn-ghost" onClick={() => setEditingProposal({ bankId: r.id, proposal: p })}>Sửa</button>
-                                    <button className="btn-danger" onClick={() => { if (confirm(`Xoá phương án "${p.tenPhuongAn}"?`)) onDeleteProposal(p.id) }}>×</button>
+                        <div style={{ marginBottom: 16 }}>
+                          {rProposals.map(p => (
+                            <div key={p.id} className="nh-proposal-card">
+                              <div className="nh-pc-head">
+                                <span className="nh-pc-title">{p.tenPhuongAn}</span>
+                                <span className={`nh-badge ${p.loaiVay === 'ngan_han' ? 'nh-b-blue' : p.loaiVay === 'bao_lanh' ? 'nh-b-amber' : 'nh-b-purple'}`}>{LOAI_VAY_LABEL[p.loaiVay]}</span>
+                                <span style={{ flex: 1 }} />
+                                <button className="btn-ghost" onClick={() => setEditingProposal({ bankId: r.id, proposal: p })}>Sửa</button>
+                                <button className="btn-danger" onClick={() => { if (confirm(`Xoá phương án "${p.tenPhuongAn}"?`)) onDeleteProposal(p.id) }}>×</button>
+                              </div>
+                              <div className="nh-pc-meta">
+                                {minLaiSuat(p) ? `Lãi suất ưu đãi thấp nhất: ${minLaiSuat(p).toFixed(2)}%` : 'Chưa có lãi suất'} · Mức tài trợ: {mucTaiTroDisplay(p, fmtN)}
+                                {p.ngayNopHoSo && ` · Nộp hồ sơ: ${p.ngayNopHoSo}`}
+                              </div>
+                              <StageStepper current={p.trangThai} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Nhật ký làm việc — gộp vào ngay trong thẻ ngân hàng */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <span className="nh-label" style={{ margin: 0 }}>Nhật ký làm việc</span>
+                        <button className="btn-ghost" onClick={() => setEditingNote({ bankId: r.id, note: 'new' })}>+ Ghi chú</button>
+                      </div>
+
+                      {editingNote?.bankId === r.id && (
+                        <NoteForm
+                          initial={editingNote.note === 'new' ? null : editingNote.note}
+                          onCancel={() => setEditingNote(null)}
+                          onSave={async n => { await onSaveNote({ ...n, nganHangId: r.id }); setEditingNote(null) }}
+                        />
+                      )}
+
+                      {rNotesAll.length === 0 ? (
+                        <div style={{ padding: 12, textAlign: 'center', color: '#9CA3AF', fontSize: 12 }}>Chưa có ghi chú nào.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {rNotes.map(n => (
+                            <div key={n.id} style={{ border: '1px solid #E5E0D8', borderRadius: 10, padding: 10, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                              <div style={{ flex: 1, minWidth: 200 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: 11, color: '#9CA3AF' }}>{n.ngay}</span>
+                                  {n.nguoiLienHe && <span style={{ fontSize: 11, color: '#9CA3AF' }}>· LH: {n.nguoiLienHe}</span>}
+                                  <span className={`nh-badge ${trangThaiGCCls(n.trangThai)}`}>{TRANG_THAI_GC_LABEL[n.trangThai]}</span>
+                                </div>
+                                <div style={{ fontSize: 12.5, color: '#374151', whiteSpace: 'pre-wrap' }}>{n.noiDung}</div>
+                                {(n.viecCanLam || n.hanXuLy) && (
+                                  <div style={{ fontSize: 11.5, color: '#8A5A12', marginTop: 4 }}>
+                                    → {n.viecCanLam}{n.hanXuLy ? ` (hạn ${n.hanXuLy})` : ''}
                                   </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', gap: 6, alignSelf: 'flex-start' }}>
+                                <button className="btn-ghost" onClick={() => setEditingNote({ bankId: r.id, note: n })}>Sửa</button>
+                                <button className="btn-danger" onClick={() => { if (confirm('Xoá ghi chú này?')) onDeleteNote(n.id) }}>Xoá</button>
+                              </div>
+                            </div>
+                          ))}
+                          {rNotesAll.length > 3 && (
+                            <button className="btn-ghost" onClick={() => {
+                              const next = new Set(notesExpanded)
+                              if (showAllNotes) next.delete(r.id); else next.add(r.id)
+                              setNotesExpanded(next)
+                            }}>
+                              {showAllNotes ? 'Thu gọn' : `Xem tất cả ${rNotesAll.length} ghi chú`}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -266,7 +398,7 @@ function ProposalForm({ initial, onCancel, onSave }: { initial: BankProposal | n
           </select>
         </div>
         <div>
-          <label className="nh-label">Trạng thái</label>
+          <label className="nh-label">Trạng thái xử lý hồ sơ</label>
           <select className="nh-select" value={form.trangThai} onChange={e => setForm({ ...form, trangThai: e.target.value as BankProposal['trangThai'] })}>
             {Object.entries(TRANG_THAI_PA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
@@ -383,6 +515,61 @@ function ProposalForm({ initial, onCancel, onSave }: { initial: BankProposal | n
             })
             setSaving(false)
           }}>
+          {saving ? 'Đang lưu...' : 'Lưu'}
+        </button>
+        <button className="btn-ghost" onClick={onCancel}>Huỷ</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Form: Ghi chú / nhật ký làm việc ─────────────────────────────────────────
+function NoteForm({ initial, onCancel, onSave }: {
+  initial: BankNote | null
+  onCancel: () => void
+  onSave: (n: Omit<BankNote, 'nganHangId'>) => Promise<void>
+}) {
+  const [form, setForm] = useState<Omit<BankNote, 'id' | 'nganHangId'>>(initial ?? EMPTY_NOTE)
+  const [saving, setSaving] = useState(false)
+
+  return (
+    <div style={{ border: '1px solid #D0DCE8', borderRadius: 10, padding: 14, marginBottom: 14, background: '#F8FAFC' }}>
+      <div className="nh-form-grid">
+        <div>
+          <label className="nh-label">Ngày</label>
+          <input className="nh-input" type="date" value={form.ngay} onChange={e => setForm({ ...form, ngay: e.target.value })} />
+        </div>
+        <div>
+          <label className="nh-label">Người liên hệ</label>
+          <input className="nh-input" value={form.nguoiLienHe} onChange={e => setForm({ ...form, nguoiLienHe: e.target.value })} />
+        </div>
+        <div>
+          <label className="nh-label">Trạng thái</label>
+          <select className="nh-select" value={form.trangThai} onChange={e => setForm({ ...form, trangThai: e.target.value as BankNote['trangThai'] })}>
+            {Object.entries(TRANG_THAI_GC_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="nh-label">Hạn xử lý</label>
+          <input className="nh-input" type="date" value={form.hanXuLy} onChange={e => setForm({ ...form, hanXuLy: e.target.value })} />
+        </div>
+        <div>
+          <label className="nh-label">Người phụ trách</label>
+          <input className="nh-input" value={form.nguoiPhuTrach} onChange={e => setForm({ ...form, nguoiPhuTrach: e.target.value })} />
+        </div>
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <label className="nh-label">Nội dung trao đổi (mỗi dòng 1 ý — sẽ tách dòng riêng khi xuất Word)</label>
+        <textarea className="nh-textarea" rows={4} value={form.noiDung} onChange={e => setForm({ ...form, noiDung: e.target.value })}
+          placeholder={'VD:\n1. Đang thẩm định năng lực tài chính\n2. Yêu cầu giải trình công nợ phải thu/phải trả\n3. Phí tạm ứng thẩm định: 1.650.000 đồng'} />
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label className="nh-label">Việc cần làm tiếp theo</label>
+        <input className="nh-input" value={form.viecCanLam} onChange={e => setForm({ ...form, viecCanLam: e.target.value })} />
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn-primary" disabled={!form.noiDung.trim() || saving}
+          onClick={async () => { setSaving(true); await onSave({ ...form, id: initial?.id ?? newId('gc') }); setSaving(false) }}>
           {saving ? 'Đang lưu...' : 'Lưu'}
         </button>
         <button className="btn-ghost" onClick={onCancel}>Huỷ</button>
