@@ -10,6 +10,21 @@ import { exportHoSoVayVonWord } from '@/lib/bank-baocao-word'
 function fmtN(v: number): string { return v.toLocaleString('vi-VN') }
 function newId(prefix: string): string { return `${prefix}${Date.now()}` }
 
+// Ô nhập số tiền — hiện dấu chấm phân cách hàng nghìn khi gõ (8.000.000.000) để dễ đọc,
+// nhưng vẫn lưu/trả về number thuần cho state.
+function MoneyInput({ value, onChange, placeholder }: { value: number; onChange: (n: number) => void; placeholder?: string }) {
+  return (
+    <input
+      className="nh-input"
+      type="text"
+      inputMode="numeric"
+      placeholder={placeholder}
+      value={value ? fmtN(value) : ''}
+      onChange={e => onChange(Number(e.target.value.replace(/\D/g, '')) || 0)}
+    />
+  )
+}
+
 function trangThaiCls(t: BankRelation['trangThai']): string {
   if (t === 'dang_hop_tac') return 'nh-b-green'
   if (t === 'tiem_nang') return 'nh-b-blue'
@@ -321,11 +336,11 @@ function BankForm({ initial, onCancel, onSave }: { initial: BankRelation | null;
         </div>
         <div>
           <label className="nh-label">Hạn mức hiện tại (đ)</label>
-          <input className="nh-input" type="number" value={form.hanMucHienTai || ''} onChange={e => setForm({ ...form, hanMucHienTai: Number(e.target.value) })} />
+          <MoneyInput value={form.hanMucHienTai} onChange={v => setForm({ ...form, hanMucHienTai: v })} />
         </div>
         <div>
           <label className="nh-label">Dư nợ hiện tại (đ)</label>
-          <input className="nh-input" type="number" value={form.duNoHienTai || ''} onChange={e => setForm({ ...form, duNoHienTai: Number(e.target.value) })} />
+          <MoneyInput value={form.duNoHienTai} onChange={v => setForm({ ...form, duNoHienTai: v })} />
         </div>
         <div>
           <label className="nh-label">Lãi suất bình quân (%/năm)</label>
@@ -437,7 +452,7 @@ function ProposalForm({ initial, onCancel, onSave }: { initial: BankProposal | n
       <div className="nh-form-grid">
         <div>
           <label className="nh-label">Hạn mức/mức tài trợ (đ)</label>
-          <input className="nh-input" type="number" value={form.hanMucDeXuat || ''} onChange={e => setForm({ ...form, hanMucDeXuat: Number(e.target.value) })} />
+          <MoneyInput value={form.hanMucDeXuat} onChange={v => setForm({ ...form, hanMucDeXuat: v })} />
         </div>
         <div>
           <label className="nh-label">Mức tài trợ (mô tả khác, vd %)</label>
