@@ -1,0 +1,111 @@
+import {
+  collection, doc, setDoc, deleteDoc, onSnapshot, Unsubscribe,
+} from 'firebase/firestore'
+import { tasksDb } from './firebase-tasks'
+import { BankRelation, BankProposal, BankNote } from './bank-types'
+
+const COL_NH = 'bank_relations'
+const COL_PA = 'bank_proposals'
+const COL_GC = 'bank_notes'
+
+// Firestore không chấp nhận giá trị undefined
+function clean<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(obj)) out[k] = v ?? null
+  return out
+}
+
+// ── Ngân hàng ────────────────────────────────────────────────────────────
+function fromFirestoreNH(id: string, data: Record<string, unknown>): BankRelation {
+  return {
+    id,
+    tenNganHang:    (data.tenNganHang as string) ?? '',
+    chiNhanh:       (data.chiNhanh as string) ?? '',
+    nguoiLienHe:    (data.nguoiLienHe as BankRelation['nguoiLienHe']) ?? [],
+    danhGia:        (data.danhGia as BankRelation['danhGia']) ?? 'binh_thuong',
+    trangThai:      (data.trangThai as BankRelation['trangThai']) ?? 'dang_hop_tac',
+    hanMucHienTai:  Number(data.hanMucHienTai ?? 0),
+    duNoHienTai:    Number(data.duNoHienTai ?? 0),
+    laiSuatBinhQuan: Number(data.laiSuatBinhQuan ?? 0),
+    ghiChuChung:    (data.ghiChuChung as string) ?? '',
+    updatedAt:      (data.updatedAt as string) ?? '',
+  }
+}
+
+export async function saveBankRelation(r: BankRelation): Promise<void> {
+  await setDoc(doc(tasksDb, COL_NH, r.id), clean({ ...r, updatedAt: new Date().toISOString().slice(0, 10) }))
+}
+
+export async function deleteBankRelation(id: string): Promise<void> {
+  await deleteDoc(doc(tasksDb, COL_NH, id))
+}
+
+export function subscribeBankRelations(cb: (rows: BankRelation[]) => void): Unsubscribe {
+  return onSnapshot(collection(tasksDb, COL_NH), snap => {
+    cb(snap.docs.map(d => fromFirestoreNH(d.id, d.data() as Record<string, unknown>)))
+  })
+}
+
+// ── Phương án vay ────────────────────────────────────────────────────────
+function fromFirestorePA(id: string, data: Record<string, unknown>): BankProposal {
+  return {
+    id,
+    nganHangId:    (data.nganHangId as string) ?? '',
+    tenPhuongAn:   (data.tenPhuongAn as string) ?? '',
+    loaiVay:       (data.loaiVay as BankProposal['loaiVay']) ?? 'ngan_han',
+    laiSuat:       Number(data.laiSuat ?? 0),
+    hanMucDeXuat:  Number(data.hanMucDeXuat ?? 0),
+    tyLeTSDB:      Number(data.tyLeTSDB ?? 0),
+    thoiHan:       (data.thoiHan as string) ?? '',
+    phiDichVu:     (data.phiDichVu as string) ?? '',
+    dieuKien:      (data.dieuKien as string) ?? '',
+    uuDiem:        (data.uuDiem as string[]) ?? [],
+    nhuocDiem:     (data.nhuocDiem as string[]) ?? [],
+    trangThai:     (data.trangThai as BankProposal['trangThai']) ?? 'dang_dam_phan',
+    nguoiPhuTrach: (data.nguoiPhuTrach as string) ?? '',
+    ngayCapNhat:   (data.ngayCapNhat as string) ?? '',
+  }
+}
+
+export async function saveBankProposal(p: BankProposal): Promise<void> {
+  await setDoc(doc(tasksDb, COL_PA, p.id), clean({ ...p, ngayCapNhat: new Date().toISOString().slice(0, 10) }))
+}
+
+export async function deleteBankProposal(id: string): Promise<void> {
+  await deleteDoc(doc(tasksDb, COL_PA, id))
+}
+
+export function subscribeBankProposals(cb: (rows: BankProposal[]) => void): Unsubscribe {
+  return onSnapshot(collection(tasksDb, COL_PA), snap => {
+    cb(snap.docs.map(d => fromFirestorePA(d.id, d.data() as Record<string, unknown>)))
+  })
+}
+
+// ── Ghi chú / nhật ký làm việc ───────────────────────────────────────────
+function fromFirestoreGC(id: string, data: Record<string, unknown>): BankNote {
+  return {
+    id,
+    nganHangId:    (data.nganHangId as string) ?? '',
+    ngay:          (data.ngay as string) ?? '',
+    nguoiLienHe:   (data.nguoiLienHe as string) ?? '',
+    noiDung:       (data.noiDung as string) ?? '',
+    viecCanLam:    (data.viecCanLam as string) ?? '',
+    hanXuLy:       (data.hanXuLy as string) ?? '',
+    trangThai:     (data.trangThai as BankNote['trangThai']) ?? 'chua_xu_ly',
+    nguoiPhuTrach: (data.nguoiPhuTrach as string) ?? '',
+  }
+}
+
+export async function saveBankNote(n: BankNote): Promise<void> {
+  await setDoc(doc(tasksDb, COL_GC, n.id), clean({ ...n }))
+}
+
+export async function deleteBankNote(id: string): Promise<void> {
+  await deleteDoc(doc(tasksDb, COL_GC, id))
+}
+
+export function subscribeBankNotes(cb: (rows: BankNote[]) => void): Unsubscribe {
+  return onSnapshot(collection(tasksDb, COL_GC), snap => {
+    cb(snap.docs.map(d => fromFirestoreGC(d.id, d.data() as Record<string, unknown>)))
+  })
+}
