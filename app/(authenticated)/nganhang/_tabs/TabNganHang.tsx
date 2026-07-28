@@ -557,9 +557,12 @@ function NoteForm({ initial, onCancel, onSave }: {
   onCancel: () => void
   onSave: (n: Omit<BankNote, 'nganHangId'>) => Promise<void>
 }) {
-  const [form, setForm] = useState<Omit<BankNote, 'id' | 'nganHangId'>>(
-    initial ?? { ...EMPTY_NOTE, hangMuc: [{ id: newId('hm'), noiDung: '', tienDo: 'chua_xac_nhan' }] }
-  )
+  // Luôn hiện sẵn ít nhất 1 dòng để nhập/sửa — kể cả khi sửa ghi chú cũ chưa có hạng mục nào
+  // (vd ghi chú được chuyển từ dữ liệu cũ, dồn hết vào "Ghi chú" chứ chưa tách dòng).
+  const [form, setForm] = useState<Omit<BankNote, 'id' | 'nganHangId'>>(() => {
+    const base = initial ?? EMPTY_NOTE
+    return base.hangMuc.length > 0 ? base : { ...base, hangMuc: [{ id: newId('hm'), noiDung: '', tienDo: 'chua_xac_nhan' }] }
+  })
   const [saving, setSaving] = useState(false)
 
   const setHangMuc = (i: number, patch: Partial<HangMuc>) => {
