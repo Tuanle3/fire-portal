@@ -557,7 +557,9 @@ function NoteForm({ initial, onCancel, onSave }: {
   onCancel: () => void
   onSave: (n: Omit<BankNote, 'nganHangId'>) => Promise<void>
 }) {
-  const [form, setForm] = useState<Omit<BankNote, 'id' | 'nganHangId'>>(initial ?? EMPTY_NOTE)
+  const [form, setForm] = useState<Omit<BankNote, 'id' | 'nganHangId'>>(
+    initial ?? { ...EMPTY_NOTE, hangMuc: [{ id: newId('hm'), noiDung: '', tienDo: 'chua_xac_nhan' }] }
+  )
   const [saving, setSaving] = useState(false)
 
   const setHangMuc = (i: number, patch: Partial<HangMuc>) => {
@@ -587,23 +589,30 @@ function NoteForm({ initial, onCancel, onSave }: {
         </div>
       </div>
 
-      <label className="nh-label">Tình trạng hồ sơ (mỗi hạng mục 1 dòng, kèm tiến độ riêng)</label>
-      {form.hangMuc.map((h, i) => (
-        <div key={h.id} style={{ display: 'grid', gridTemplateColumns: '1fr 170px auto', gap: 8, marginBottom: 6 }}>
-          <input className="nh-input" placeholder="VD: Giải trình công nợ phải thu, phải trả" value={h.noiDung} onChange={e => setHangMuc(i, { noiDung: e.target.value })} />
-          <select className="nh-select" value={h.tienDo} onChange={e => setHangMuc(i, { tienDo: e.target.value as TienDoHangMuc })}>
-            {Object.entries(TIEN_DO_HM_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-          <button className="btn-danger" onClick={() => setForm({ ...form, hangMuc: form.hangMuc.filter((_, j) => j !== i) })}>×</button>
+      {/* Khớp đúng 2 cột "Tình trạng hồ sơ" + "Tiến độ" trong báo cáo Word */}
+      <div style={{ border: '1px solid #D0DCE8', borderRadius: 8, padding: 10, marginBottom: 12, background: '#fff' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 170px 26px', gap: 8, marginBottom: 6 }}>
+          <span className="nh-label" style={{ margin: 0 }}>Tình trạng hồ sơ</span>
+          <span className="nh-label" style={{ margin: 0 }}>Tiến độ</span>
+          <span />
         </div>
-      ))}
-      <button className="btn-ghost" style={{ marginBottom: 10 }}
-        onClick={() => setForm({ ...form, hangMuc: [...form.hangMuc, { id: newId('hm'), noiDung: '', tienDo: 'chua_xac_nhan' }] })}>
-        + Thêm hạng mục
-      </button>
+        {form.hangMuc.map((h, i) => (
+          <div key={h.id} style={{ display: 'grid', gridTemplateColumns: '1fr 170px 26px', gap: 8, marginBottom: 6 }}>
+            <input className="nh-input" placeholder="VD: Giải trình công nợ phải thu, phải trả" value={h.noiDung} onChange={e => setHangMuc(i, { noiDung: e.target.value })} />
+            <select className="nh-select" value={h.tienDo} onChange={e => setHangMuc(i, { tienDo: e.target.value as TienDoHangMuc })}>
+              {Object.entries(TIEN_DO_HM_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <button className="btn-danger" onClick={() => setForm({ ...form, hangMuc: form.hangMuc.filter((_, j) => j !== i) })}>×</button>
+          </div>
+        ))}
+        <button className="btn-ghost"
+          onClick={() => setForm({ ...form, hangMuc: [...form.hangMuc, { id: newId('hm'), noiDung: '', tienDo: 'chua_xac_nhan' }] })}>
+          + Thêm dòng tình trạng hồ sơ
+        </button>
+      </div>
 
       <div style={{ marginBottom: 10 }}>
-        <label className="nh-label">Đánh giá chung</label>
+        <label className="nh-label">Ghi chú (đánh giá chung, hiện ở cột &quot;Ghi chú&quot; trong báo cáo)</label>
         <textarea className="nh-textarea" rows={3} value={form.danhGiaChung} onChange={e => setForm({ ...form, danhGiaChung: e.target.value })}
           placeholder={'VD:\n- Bạn phụ trách rất kỹ tính, làm việc đúng quy trình.\n- Hồ sơ yêu cầu cung cấp chi tiết mới đi bước tiếp theo'} />
       </div>
