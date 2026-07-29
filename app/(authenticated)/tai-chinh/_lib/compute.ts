@@ -57,6 +57,12 @@ export interface Snapshot {
   arBalance: number; apBalance: number
 }
 
+// BS/PL của các kỳ tương lai chưa được nhập số liệu thực tế trong Sheet thường tồn tại như cột
+// trống (toàn 0) — dùng để phân biệt "kỳ chưa có số liệu" với "kỳ có số liệu nhưng thực sự = 0".
+export function hasSnapshotData(s: Snapshot): boolean {
+  return s.tongTS !== 0 || s.dtt !== 0
+}
+
 export function computeSnapshot(docs: FlatDoc[], donViKey: string, period: string): Snapshot {
   const bs = (ms: string) => valueByMaSo(docs, 'BS', period, ms, donViKey)
   const pl = (ms: string) => valueByMaSo(docs, 'PL', period, ms, donViKey)

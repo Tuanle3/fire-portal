@@ -4,7 +4,7 @@ import { get, ref } from 'firebase/database'
 import { getDb } from '@/lib/firebase'
 import { useDashUnit } from '@/contexts/dash-unit'
 import { ALL_DONVI, RawBctc } from './_lib/types'
-import { buildAlerts, computeRatios, computeSnapshot, flattenBctc, listDonVi, listPeriods } from './_lib/compute'
+import { buildAlerts, computeRatios, computeSnapshot, flattenBctc, hasSnapshotData, listDonVi, listPeriods } from './_lib/compute'
 import { moneyFmt, periodLabel } from './_lib/format'
 import { TabTongQuan } from './_tabs/TabTongQuan'
 import { TabSucKhoeTaiChinh } from './_tabs/TabSucKhoeTaiChinh'
@@ -41,16 +41,22 @@ export default function TaiChinhPage() {
   const donViList = useMemo(() => listDonVi(docs), [docs])
   const periods = useMemo(() => listPeriods(docs), [docs])
 
-  // Mặc định = kỳ mới nhất; người dùng có thể chọn kỳ khác qua toolbar (setPeriodOverride).
-  const period = periods.includes(periodOverride) ? periodOverride : (periods[periods.length - 1] ?? '')
+  const historyAll = useMemo(() => periods.map(p => computeSnapshot(docs, donViKey, p)), [docs, donViKey, periods])
+
+  // Mặc định = kỳ gần nhất THỰC SỰ có số liệu BS/PL (không phải kỳ cuối cùng trong danh sách —
+  // các kỳ tương lai trong Sheet thường là cột trống chưa nhập, chọn kỳ đó mặc định sẽ hiện toàn 0
+  // và trông như "không có cảnh báo" một cách sai lệch).
+  const lastPeriodWithData = [...historyAll].reverse().find(hasSnapshotData)?.period
+  const defaultPeriod = lastPeriodWithData ?? periods[periods.length - 1] ?? ''
+  const period = periods.includes(periodOverride) ? periodOverride : defaultPeriod
   const setPeriod = setPeriodOverride
 
-  const historyAll = useMemo(() => periods.map(p => computeSnapshot(docs, donViKey, p)), [docs, donViKey, periods])
   const periodIdx = periods.indexOf(period)
   const snapshot = periodIdx >= 0 ? historyAll[periodIdx] : null
   const history = periodIdx >= 0 ? historyAll.slice(0, periodIdx + 1) : []
   const ratios = snapshot ? computeRatios(snapshot) : null
-  const alerts = snapshot && ratios ? buildAlerts(snapshot, ratios, history) : []
+  const snapshotHasData = snapshot ? hasSnapshotData(snapshot) : false
+  const alerts = snapshot && ratios && snapshotHasData ? buildAlerts(snapshot, ratios, history) : []
 
   const { fmt, fmtS, unitLbl } = moneyFmt(unit)
   const donViLabel = donViKey === ALL_DONVI ? 'Hợp nhất Sơn An Group' : (donViList.find(d => d.key === donViKey)?.label ?? donViKey)
@@ -122,7 +128,9 @@ export default function TaiChinhPage() {
             {donViList.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
           </select>
           <select className="tc-sel" value={period} onChange={e => setPeriod(e.target.value)}>
-            {periods.map(p => <option key={p} value={p}>{periodLabel(p)}</option>)}
+            {periods.map((p, i) => (
+              <option key={p} value={p}>{periodLabel(p)}{hasSnapshotData(historyAll[i]) ? '' : ' (chưa có số liệu)'}</option>
+            ))}
           </select>
           <div className="tc-unit">
             {(['đ', 'tr', 'tỷ'] as const).map(u => (
@@ -142,7 +150,7 @@ export default function TaiChinhPage() {
         {snapshot && ratios && (
           <>
             {tab === 'tongquan' && (
-              <TabTongQuan snapshot={snapshot} ratios={ratios} alerts={alerts} fmt={fmt} fmtS={fmtS} unitLbl={unitLbl} donViLabel={donViLabel} />
+              <TabTongQuan snapshot={snapshot} ratios={ratios} alerts={alerts} hasData={snapshotHasData} fmt={fmt} fmtS={fmtS} unitLbl={unitLbl} donViLabel={donViLabel} />
             )}
             {tab === 'suckhoe' && (
               <TabSucKhoeTaiChinh history={history} donViLabel={donViLabel} />

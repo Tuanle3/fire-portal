@@ -5,13 +5,14 @@ interface Props {
   snapshot: Snapshot
   ratios: Ratios
   alerts: Alert[]
+  hasData: boolean
   fmt: (v: number) => string
   fmtS: (v: number) => string
   unitLbl: string
   donViLabel: string
 }
 
-export function TabTongQuan({ snapshot: s, ratios: r, alerts, fmtS, unitLbl, donViLabel }: Props) {
+export function TabTongQuan({ snapshot: s, ratios: r, alerts, hasData, fmtS, unitLbl, donViLabel }: Props) {
   const kpi1 = [
     { l: 'Tổng tài sản', v: s.tongTS, sub: `Nguồn vốn: ${fmtS(s.tongNguonVon)} ${unitLbl}` },
     { l: 'Nợ phải trả', v: s.noPhaiTra, sub: `NH ${fmtS(s.noNH)} · DH ${fmtS(s.noDH)}` },
@@ -29,7 +30,12 @@ export function TabTongQuan({ snapshot: s, ratios: r, alerts, fmtS, unitLbl, don
     <>
       <div className="tc-sub">{donViLabel} · Kỳ {s.period}</div>
 
-      {alerts.length > 0 && (
+      {!hasData && (
+        <div className="alert-row alert-yellow">
+          ⚠ Kỳ này chưa có số liệu BCTC thực tế (cột trống trong Sheet) — các số dưới đây chỉ là 0, không phải kết quả kinh doanh thật. Chọn kỳ khác ở toolbar để xem số liệu đã nhập.
+        </div>
+      )}
+      {hasData && alerts.length > 0 && (
         <div className="panel">
           <div className="panel-h">🔔 Cảnh báo sức khỏe tài chính<span>{alerts.length} mục</span></div>
           <div className="panel-b">
@@ -42,7 +48,7 @@ export function TabTongQuan({ snapshot: s, ratios: r, alerts, fmtS, unitLbl, don
           </div>
         </div>
       )}
-      {alerts.length === 0 && (
+      {hasData && alerts.length === 0 && (
         <div className="alert-row alert-ok">✅ Không có cảnh báo — các chỉ số nằm trong ngưỡng an toàn tham khảo.</div>
       )}
 

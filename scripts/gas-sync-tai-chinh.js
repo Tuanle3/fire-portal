@@ -4,7 +4,7 @@
 // Đặt SYNC_URL đúng domain fire-portal đang deploy (ví dụ https://sonanland.vercel.app/api/sync-tai-chinh)
 // và SYNC_SECRET đúng giá trị TAICHINH_SYNC_SECRET trong .env.local / Vercel của fire-portal.
 
-const SYNC_URL = 'https://<domain-fire-portal>/api/sync-tai-chinh'
+const SYNC_URL = 'https://sonanland.vercel.app/api/sync-tai-chinh'
 const SYNC_SECRET = 'dgqJzHDSawG0EonpuWbMcr3oyl8E_gs1'
 const TABS = ['Data_TB', 'Data_PL', 'Data_BS', 'Data_AR', 'Data_AP']
 
