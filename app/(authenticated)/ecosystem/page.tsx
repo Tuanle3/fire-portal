@@ -402,11 +402,23 @@ export default function EcosystemPage() {
         .eco-list-sub  { font-size:11px; color:#6B7280; margin-top:1px; }
         .eco-add-box { border:1.5px dashed #D0DCE8; border-radius:10px; padding:14px 16px; margin-top:14px; background:#FAFCFF; }
         .eco-add-title { font-size:11px; font-weight:700; color:#1C3557; margin-bottom:12px; }
+        @media(max-width:1024px){
+          .org-wrap{padding:24px 14px 20px;}
+          .org-dept-col{padding:0 8px;}
+          .org-dept-node{min-width:100px;padding:8px 10px;font-size:11px;}
+          .org-co-col{padding:0 6px;}
+          .org-co-node{min-width:110px;max-width:150px;padding:8px 10px;font-size:10px;}
+          .org-root{min-width:150px;padding:12px 20px;font-size:12px;}
+        }
         @media(max-width:700px){
           .eco-main{padding:16px 12px;}
           .eco-modal{max-width:100%;}
           .eco-row2{grid-template-columns:1fr;}
           .org-panel-row2,.org-panel-row3{grid-template-columns:1fr;}
+        }
+        @media(max-width:480px){
+          .org-tree{min-width:420px;}
+          .co-grid{grid-template-columns:1fr;}
         }
       `}</style>
 

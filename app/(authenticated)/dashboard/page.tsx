@@ -381,7 +381,17 @@ export default function DashboardPage() {
         .risk-title{font-size:11.5px;font-weight:700;color:#1F2430;}
         .risk-msg{font-size:11px;color:#374151;line-height:1.5;}
         .risk-suggest{font-size:10.5px;color:#6B7280;margin-top:2px;font-style:italic;}
+        .tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+        @media(max-width:1180px){
+          .mt{font-size:10px;} .mt th{padding:5px 6px;font-size:8.5px;} .mt td{padding:5px 6px;font-size:9.5px;}
+          .ut{font-size:9.5px;} .ut th{padding:5px 5px;font-size:8px;} .ut td{padding:5px 5px;font-size:9px;}
+          .ut .a-row td:first-child{padding-left:20px;}
+        }
         @media(max-width:900px){.kpi4{grid-template-columns:1fr}.ov2{grid-template-columns:1fr}.ov{padding:14px 12px}}
+        @media(max-width:600px){
+          .mt{font-size:9px;} .mt th{padding:4px 5px;font-size:7.5px;} .mt td{padding:4px 5px;font-size:8.5px;}
+          .ut{font-size:8.5px;} .ut th{padding:4px 4px;font-size:7px;} .ut td{padding:4px 4px;font-size:8px;}
+        }
       `}</style>
 
       <main className="ov">
@@ -595,6 +605,7 @@ export default function DashboardPage() {
           {/* Left: monthly table + chart */}
           <div className="ov-card">
             <div className="ov-card-hdr">SO SÁNH DÒNG TIỀN TỪNG THÁNG</div>
+            <div className="tbl-scroll">
             <table className="mt">
               <thead>
                 <tr>
@@ -620,6 +631,7 @@ export default function DashboardPage() {
                 </tr>
               </tbody>
             </table>
+            </div>
 
           </div>
 
@@ -628,6 +640,7 @@ export default function DashboardPage() {
             <div className="ov-card-hdr">
               DÒNG TIỀN THEO ĐƠN VỊ &nbsp;· Tháng 1–{new Date().getMonth()+1}/{CY}
             </div>
+            <div className="tbl-scroll">
             <table className="ut">
               <thead>
                 <tr>
@@ -677,6 +690,7 @@ export default function DashboardPage() {
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       </main>
