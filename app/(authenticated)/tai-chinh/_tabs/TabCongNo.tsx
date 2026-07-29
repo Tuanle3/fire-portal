@@ -18,35 +18,25 @@ export function TabCongNo({ docs, donViKey, period, snapshot: s, fmtS, unitLbl }
   return (
     <>
       <div className="grid4">
-        <div className="kcard">
-          <div className="kcard-h">Công nợ phải thu (AR)</div>
-          <div className="kcard-b">
-            <div className="kcard-v">{fmtS(s.arBalance)} <span style={{ fontSize: 13, fontWeight: 600, color: '#9CA3AF' }}>{unitLbl}</span></div>
-            <div className="kcard-s">DSO ước tính: {dso == null ? '–' : `${dso.toFixed(0)} ngày`}</div>
-          </div>
+        <div className="kcard" style={{ '--accent': '#2563EB' } as React.CSSProperties}>
+          <div className="kcard-h"><span className="dot" />Công nợ phải thu (AR)</div>
+          <div><span className="kcard-v">{fmtS(s.arBalance)}</span><span className="kcard-u">{unitLbl}</span></div>
+          <div className="kcard-s">DSO ước tính: {dso == null ? '–' : `${dso.toFixed(0)} ngày`}</div>
         </div>
-        <div className="kcard">
-          <div className="kcard-h">Công nợ phải trả (AP)</div>
-          <div className="kcard-b">
-            <div className="kcard-v">{fmtS(s.apBalance)} <span style={{ fontSize: 13, fontWeight: 600, color: '#9CA3AF' }}>{unitLbl}</span></div>
-            <div className="kcard-s">DPO ước tính: {dpo == null ? '–' : `${dpo.toFixed(0)} ngày`}</div>
-          </div>
+        <div className="kcard" style={{ '--accent': '#D97706' } as React.CSSProperties}>
+          <div className="kcard-h"><span className="dot" />Công nợ phải trả (AP)</div>
+          <div><span className="kcard-v">{fmtS(s.apBalance)}</span><span className="kcard-u">{unitLbl}</span></div>
+          <div className="kcard-s">DPO ước tính: {dpo == null ? '–' : `${dpo.toFixed(0)} ngày`}</div>
         </div>
-        <div className="kcard">
-          <div className="kcard-h">Chênh lệch phải thu − phải trả</div>
-          <div className="kcard-b">
-            <div className="kcard-v" style={{ color: s.arBalance - s.apBalance < 0 ? '#DC2626' : '#1C3557' }}>
-              {fmtS(s.arBalance - s.apBalance)} <span style={{ fontSize: 13, fontWeight: 600, color: '#9CA3AF' }}>{unitLbl}</span>
-            </div>
-            <div className="kcard-s">Âm = đang bị chiếm dụng vốn nhiều hơn được chiếm dụng</div>
-          </div>
+        <div className="kcard" style={{ '--accent': s.arBalance - s.apBalance < 0 ? '#DC2626' : '#16A34A' } as React.CSSProperties}>
+          <div className="kcard-h"><span className="dot" />Chênh lệch phải thu − phải trả</div>
+          <div><span className="kcard-v" style={{ color: s.arBalance - s.apBalance < 0 ? '#DC2626' : undefined }}>{fmtS(s.arBalance - s.apBalance)}</span><span className="kcard-u">{unitLbl}</span></div>
+          <div className="kcard-s">Âm = đang bị chiếm dụng vốn nhiều hơn được chiếm dụng</div>
         </div>
-        <div className="kcard">
-          <div className="kcard-h">Số khách nợ / NCC có dư</div>
-          <div className="kcard-b">
-            <div className="kcard-v">{topAR.length + topAP.length}+</div>
-            <div className="kcard-s">Top hiển thị bên dưới (tối đa 8 mỗi bên)</div>
-          </div>
+        <div className="kcard" style={{ '--accent': '#7C3AED' } as React.CSSProperties}>
+          <div className="kcard-h"><span className="dot" />Số khách nợ / NCC có dư</div>
+          <div><span className="kcard-v">{topAR.length + topAP.length}+</span></div>
+          <div className="kcard-s">Top hiển thị bên dưới (tối đa 8 mỗi bên)</div>
         </div>
       </div>
 

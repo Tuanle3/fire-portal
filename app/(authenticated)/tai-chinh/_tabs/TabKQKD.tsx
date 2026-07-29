@@ -42,7 +42,7 @@ function DeltaTag({ cur, prev }: { cur: number; prev: number | null }) {
 }
 
 function BreakdownCard({ title, icon, items, total, fmtS, unitLbl, highlightTop }: {
-  title: string; icon: string; items: { chiTieu: string; value: number; deltaPct?: number | null }[]
+  title: string; icon: string; items: { chiTieu: string; value: number }[]
   total: number; fmtS: (v: number) => string; unitLbl: string; highlightTop?: boolean
 }) {
   const maxAbs = Math.max(...items.map(it => Math.abs(it.value)), 1)
@@ -55,15 +55,16 @@ function BreakdownCard({ title, icon, items, total, fmtS, unitLbl, highlightTop 
       <div className="panel-b">
         {items.length === 0 && <div style={{ color: '#9CA3AF', fontSize: 12.5 }}>Không có dữ liệu</div>}
         {items.map((it, i) => (
-          <div key={it.chiTieu} style={{ marginBottom: 9, background: i === topIdx ? '#FFFBEB' : 'transparent', borderRadius: 6, padding: i === topIdx ? '4px 6px' : 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3, gap: 8 }}>
-              <span style={{ fontSize: 12, color: '#374151', flex: 1 }}>{it.chiTieu}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1C3557', whiteSpace: 'nowrap' }}>{fmtS(it.value)} {unitLbl}</span>
-              <span style={{ fontSize: 11, color: '#9CA3AF', width: 44, textAlign: 'right' }}>{total !== 0 ? pct(it.value / total, 0) : '–'}</span>
-              {it.deltaPct !== undefined && <span style={{ width: 44, textAlign: 'right' }}><DeltaTag cur={it.value} prev={it.deltaPct == null ? null : it.value / (1 + it.deltaPct)} /></span>}
+          <div key={it.chiTieu} className={`bd-row${i === topIdx ? ' top' : ''}`}>
+            <div className="bd-top">
+              <span className="bd-label" title={it.chiTieu}>{it.chiTieu}</span>
+              <div className="bd-right">
+                <span className="bd-value">{fmtS(it.value)} {unitLbl}</span>
+                <span className="bd-pct">{total !== 0 ? pct(it.value / total, 0) : '–'}</span>
+              </div>
             </div>
-            <div style={{ height: 5, background: '#EEF3FA', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, Math.round(Math.abs(it.value) / maxAbs * 100))}%`, height: '100%', background: it.value < 0 ? '#F59E0B' : '#2563EB', borderRadius: 3 }} />
+            <div className="bd-track">
+              <div className="bd-fill" style={{ width: `${Math.min(100, Math.round(Math.abs(it.value) / maxAbs * 100))}%`, background: it.value < 0 ? '#F59E0B' : '#2563EB' }} />
             </div>
           </div>
         ))}
@@ -165,9 +166,9 @@ export function TabKQKD({ docs, donViKey, periods, fmtS, unitLbl }: Props) {
             </div>
           )}
           {mode === 'month' && (
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
               {Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`).map((p, i) => (
-                <button key={p} className={`tc-tab${month === p ? ' act' : ''}`} style={{ padding: '5px 10px', opacity: periods.includes(p) ? 1 : 0.4 }}
+                <button key={p} className={`tc-tab${month === p ? ' act' : ''}`} style={{ padding: '6px 11px', opacity: periods.includes(p) ? 1 : 0.4 }}
                   disabled={!periods.includes(p)} onClick={() => setMonth(p)}>Th.{i + 1}</button>
               ))}
             </div>
@@ -176,37 +177,45 @@ export function TabKQKD({ docs, donViKey, periods, fmtS, unitLbl }: Props) {
       </div>
 
       <div className="grid4">
-        <div className="kcard"><div className="kcard-h">Doanh thu thuần</div><div className="kcard-b">
-          <div className="kcard-v">{fmtS(cur.dtt)} <span style={{ fontSize: 13, color: '#9CA3AF' }}>{unitLbl}</span></div>
+        <div className="kcard" style={{ '--accent': '#2563EB' } as React.CSSProperties}>
+          <div className="kcard-h"><span className="dot" />Doanh thu thuần</div>
+          <div><span className="kcard-v">{fmtS(cur.dtt)}</span><span className="kcard-u">{unitLbl}</span></div>
           <div className="kcard-s">So cùng kỳ: <DeltaTag cur={cur.dtt} prev={prev?.dtt ?? null} /></div>
-        </div></div>
-        <div className="kcard"><div className="kcard-h">Giá vốn</div><div className="kcard-b">
-          <div className="kcard-v">{fmtS(cur.giaVon)} <span style={{ fontSize: 13, color: '#9CA3AF' }}>{unitLbl}</span></div>
-          <div className="kcard-s">{cur.dtt !== 0 ? pct(cur.giaVon / cur.dtt) : '–'} doanh thu</div>
-        </div></div>
-        <div className="kcard"><div className="kcard-h">Lợi nhuận gộp</div><div className="kcard-b">
-          <div className="kcard-v" style={{ color: cur.laiGop < 0 ? '#DC2626' : '#1C3557' }}>{fmtS(cur.laiGop)} <span style={{ fontSize: 13, color: '#9CA3AF' }}>{unitLbl}</span></div>
-          <div className="kcard-s">Biên LN gộp {pct(grossMargin)}</div>
-        </div></div>
-        <div className="kcard"><div className="kcard-h">Lợi nhuận sau thuế</div><div className="kcard-b">
-          <div className="kcard-v" style={{ color: cur.lnSauThue < 0 ? '#DC2626' : '#1C3557' }}>{fmtS(cur.lnSauThue)} <span style={{ fontSize: 13, color: '#9CA3AF' }}>{unitLbl}</span></div>
+        </div>
+        <div className="kcard" style={{ '--accent': '#D97706' } as React.CSSProperties}>
+          <div className="kcard-h"><span className="dot" />Giá vốn</div>
+          <div><span className="kcard-v">{fmtS(cur.giaVon)}</span><span className="kcard-u">{unitLbl}</span></div>
+          <div className="kcard-s">{cur.dtt !== 0 ? pct(cur.giaVon / cur.dtt) : '–'} doanh thu thuần</div>
+        </div>
+        <div className="kcard" style={{ '--accent': '#16A34A' } as React.CSSProperties}>
+          <div className="kcard-h"><span className="dot" />Lợi nhuận gộp</div>
+          <div><span className="kcard-v" style={{ color: cur.laiGop < 0 ? '#DC2626' : undefined }}>{fmtS(cur.laiGop)}</span><span className="kcard-u">{unitLbl}</span></div>
+          <div className="kcard-s">Biên LN gộp <b style={{ color: '#16A34A' }}>{pct(grossMargin)}</b></div>
+        </div>
+        <div className="kcard" style={{ '--accent': '#1C3557' } as React.CSSProperties}>
+          <div className="kcard-h"><span className="dot" />Lợi nhuận sau thuế</div>
+          <div><span className="kcard-v" style={{ color: cur.lnSauThue < 0 ? '#DC2626' : undefined }}>{fmtS(cur.lnSauThue)}</span><span className="kcard-u">{unitLbl}</span></div>
           <div className="kcard-s">So cùng kỳ: <DeltaTag cur={cur.lnSauThue} prev={prev?.lnSauThue ?? null} /></div>
-        </div></div>
+        </div>
       </div>
 
       <div className="grid2">
         <div className="panel" style={{ marginBottom: 0 }}>
-          <div className="panel-h"><span>📈 Kết quả kinh doanh</span><span>{unitLbl}</span></div>
+          <div className="panel-h"><span>📈 Kết quả kinh doanh</span><span>đơn vị: {unitLbl}</span></div>
           <div className="panel-b" style={{ overflowX: 'auto', padding: 0 }}>
-            <table className="stbl">
-              <thead><tr><th>STT</th><th className="lbl">Nội dung</th><th>Mã số</th><th className="num">Giá trị</th>{hasCompare && <th className="num">±% CK</th>}</tr></thead>
+            <table className="rpt">
+              <colgroup>
+                <col className="c-stt" /><col /><col className="c-ms" /><col className="c-val" />
+                {hasCompare && <col className="c-delta" />}
+              </colgroup>
+              <thead><tr><th>STT</th><th>Nội dung</th><th>Mã số</th><th className="num">Giá trị</th>{hasCompare && <th className="num">±% CK</th>}</tr></thead>
               <tbody>
                 {KQKD_ROWS.map(r => (
                   <tr key={r.maSo} className={r.bold ? 'bold' : ''}>
                     <td>{r.stt}</td>
-                    <td className="lbl">{r.label}</td>
+                    <td className="lbl" title={r.label}>{r.label}</td>
                     <td>{r.maSo}</td>
-                    <td className="num" style={{ color: r.value < 0 ? '#DC2626' : undefined }}>{fmtS(r.value)}</td>
+                    <td className={`num${r.value < 0 ? ' neg' : ''}`}>{fmtS(r.value)}</td>
                     {hasCompare && <td className="num"><DeltaTag cur={r.value} prev={r.prevValue ?? null} /></td>}
                   </tr>
                 ))}
@@ -215,7 +224,7 @@ export function TabKQKD({ docs, donViKey, periods, fmtS, unitLbl }: Props) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="col-stack">
           <BreakdownCard title="Doanh thu theo sản phẩm" icon="🏷" items={doanhThuSP} total={cur.dtt} fmtS={fmtS} unitLbl={unitLbl} />
           {thuNhapKhacCT.length > 0 && (
             <BreakdownCard title="Doanh thu & thu nhập khác" icon="➕" items={thuNhapKhacCT} total={cur.dtTaiChinh + cur.thuNhapKhac} fmtS={fmtS} unitLbl={unitLbl} />

@@ -53,6 +53,9 @@ export function breakdownByCode(docs: FlatDoc[], donViKey: string, periods: stri
     if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
     for (const row of d.rows as BctcPlRow[]) {
       if (!codes.includes(row.code)) continue
+      // Dòng đầu mỗi khối thuyết minh là tiêu đề nhóm ("Thuyết minh doanh thu theo sản phẩm"...),
+      // giá trị của nó = tổng các dòng con bên dưới — bỏ qua để không đếm trùng vào breakdown.
+      if (row.chiTieu.trim().toLowerCase().startsWith('thuyết minh')) continue
       const label = row.chiTieu || row.code
       map.set(label, (map.get(label) ?? 0) + row.value)
     }
