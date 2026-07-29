@@ -34,6 +34,32 @@ function safeDiv(a: number, b: number): number {
   return b !== 0 ? a / b : 0
 }
 
+// Cộng dồn 1 mã số PL qua nhiều kỳ (dùng cho bộ lọc Cả năm/Theo Quý — các chỉ tiêu PL là số phát
+// sinh trong kỳ nên cộng dồn hợp lý; KHÔNG dùng cho BS vì BS là số dư tại 1 thời điểm).
+export function maSoSumOverPeriods(docs: FlatDoc[], donViKey: string, periods: string[], maSo: string): number {
+  return periods.reduce((s, p) => s + valueByMaSo(docs, 'PL', p, maSo, donViKey), 0)
+}
+
+export interface CodeBreakdownItem { chiTieu: string; value: number }
+
+// Gom các dòng thuyết minh PL theo `code` (TM_DT_SP, TM_CP, ...) — dùng cho card "Doanh thu theo
+// sản phẩm" / "Cấu trúc chi phí" vốn không có mã số BCTC riêng.
+export function breakdownByCode(docs: FlatDoc[], donViKey: string, periods: string[], codes: string[]): CodeBreakdownItem[] {
+  const periodSet = new Set(periods)
+  const map = new Map<string, number>()
+  for (const d of docs) {
+    if (d.report !== 'PL') continue
+    if (!periodSet.has(d.period)) continue
+    if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
+    for (const row of d.rows as BctcPlRow[]) {
+      if (!codes.includes(row.code)) continue
+      const label = row.chiTieu || row.code
+      map.set(label, (map.get(label) ?? 0) + row.value)
+    }
+  }
+  return [...map.entries()].map(([chiTieu, value]) => ({ chiTieu, value })).filter(it => it.value !== 0)
+}
+
 export function valueByMaSo(docs: FlatDoc[], report: 'BS' | 'PL', period: string, maSo: string, donViKey: string): number {
   let total = 0
   for (const d of docs) {
