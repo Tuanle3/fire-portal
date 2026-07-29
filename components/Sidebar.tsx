@@ -6,6 +6,7 @@ import { useUserSession } from '@/contexts/user-session'
 const NAV = [
   { section: 'TỔNG QUAN',    mod: 'm:dashboard',   href: '/dashboard',       icon: '⊞',  label: 'Tổng quan CEO' },
   { section: 'MODULE CHÍNH', mod: 'm:dashboard',   href: '/ecosystem',       icon: '🌐', label: 'Hệ sinh thái' },
+  { section: 'MODULE CHÍNH', mod: 'm:finance',     href: '/tai-chinh',       icon: '📊', label: 'Tài chính - Kế toán' },
   { section: 'MODULE CHÍNH', mod: 'm:ngan-sach',   href: '/ngan-sach',       icon: '💰', label: 'Ngân sách dòng tiền' },
   { section: 'MODULE CHÍNH', mod: 'm:nganhang',    href: '/nganhang',       icon: '🏦', label: 'List ngân hàng' },
   { section: 'MODULE CHÍNH', mod: 'm:ccn-pricing', href: '/ccn-pricing',     icon: '🏭', label: 'Tính giá cho thuê CCN' },

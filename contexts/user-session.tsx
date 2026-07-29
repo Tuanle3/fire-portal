@@ -64,6 +64,7 @@ export const PATH_MODULE: Record<string, string> = {
   '/dien-nuoc-sadt': 'm:dien-nuoc',
   '/ngan-sach':      'm:ngan-sach',
   '/nganhang':       'm:nganhang',
+  '/tai-chinh':      'm:finance',
 }
 
 // First accessible path for a user given their perms
