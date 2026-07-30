@@ -11,18 +11,14 @@ import { Granularity, usePeriodFilter } from './_lib/usePeriodFilter'
 import { TabTongQuan } from './_tabs/TabTongQuan'
 import { TabPhanTichNgang } from './_tabs/TabPhanTichNgang'
 import { TabPhanTichDoc } from './_tabs/TabPhanTichDoc'
-import { TabSucKhoeTaiChinh } from './_tabs/TabSucKhoeTaiChinh'
-import { TabSanPham } from './_tabs/TabSanPham'
 import { TabCongNo } from './_tabs/TabCongNo'
 import { TabNganSach } from './_tabs/TabNganSach'
 
-type TabKey = 'tongquan' | 'ngang' | 'doc' | 'suckhoe' | 'sanpham' | 'congno' | 'ngansach'
+type TabKey = 'tongquan' | 'ngang' | 'doc' | 'congno' | 'ngansach'
 const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: 'tongquan', label: 'Tổng quan', icon: '📊' },
   { key: 'ngang', label: 'Phân tích ngang', icon: '↔' },
   { key: 'doc', label: 'Phân tích dọc', icon: '↕' },
-  { key: 'suckhoe', label: 'Tỷ lệ tài chính', icon: '⚖' },
-  { key: 'sanpham', label: 'Sản phẩm', icon: '📦' },
   { key: 'congno', label: 'Công nợ', icon: '🧾' },
   { key: 'ngansach', label: 'Ngân sách chi phí', icon: '💰' },
 ]
@@ -311,12 +307,6 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
       )}
       {tab === 'doc' && (
         <TabPhanTichDoc docs={docs} donViKey={donViKey} snapshotPeriod={snapshotPeriod} periods={periods} fmtS={fmtS} unitLbl={unitLbl} />
-      )}
-      {tab === 'suckhoe' && (
-        <TabSucKhoeTaiChinh docs={docs} donViKey={donViKey} periods={periods} snapshotPeriod={snapshotPeriod} donViLabel={donViLabel} />
-      )}
-      {tab === 'sanpham' && (
-        <TabSanPham docs={docs} donViKey={donViKey} pf={pf} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'congno' && (
         <TabCongNo docs={docs} donViKey={donViKey} period={snapshotPeriod} snapshot={computeSnapshot(docs, donViKey, snapshotPeriod)} fmtS={fmtS} unitLbl={unitLbl} />
