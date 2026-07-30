@@ -125,12 +125,28 @@ function BsGroup({ label, rows, fmtS }: { label: string; rows: Row[]; fmtS: (v: 
 export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl }: Props) {
   const year = pf.year
   const prevYear = String(Number(year) - 1)
+  const isQuarterMode = pf.mode === 'quarter'
+  const monthColsOfQuarter = (y: string, q: number): Column[] =>
+    [q * 3 - 2, q * 3 - 1, q * 3].map(m => {
+      const period = `${y}-${String(m).padStart(2, '0')}`
+      return { label: `Tháng ${m}`, periods: pf.periods.includes(period) ? [period] : [] }
+    })
   const quarterCols: Column[] = [1, 2, 3, 4].map(q => ({ label: `Quý ${q}`, periods: periodsForQuarter(pf.periods, year, q) }))
   const yearPeriods = periodsForYear(pf.periods, year)
   const prevYearPeriods = periodsForYear(pf.periods, prevYear)
 
-  const plColumns: Column[] = [...quarterCols, { label: `Năm ${year}`, periods: yearPeriods }]
-  const bsColumns: Column[] = [...quarterCols, { label: `Năm ${year}`, periods: yearPeriods }, { label: `Năm ${prevYear}`, periods: prevYearPeriods }]
+  // Khi bộ lọc Kỳ ở chế độ "Quý" (đã chọn 1 quý cụ thể) — tách cột theo từng THÁNG trong quý đó
+  // thay vì gộp cả 4 quý của năm, để xem biến động từng tháng ngay trong quý đang quan tâm.
+  const plColumns: Column[] = isQuarterMode
+    ? [...monthColsOfQuarter(year, pf.quarter), { label: `Quý ${pf.quarter}`, periods: periodsForQuarter(pf.periods, year, pf.quarter) }]
+    : [...quarterCols, { label: `Năm ${year}`, periods: yearPeriods }]
+  const bsColumns: Column[] = isQuarterMode
+    ? [
+        ...monthColsOfQuarter(year, pf.quarter),
+        { label: `Quý ${pf.quarter}/${year}`, periods: periodsForQuarter(pf.periods, year, pf.quarter) },
+        { label: `Quý ${pf.quarter}/${prevYear}`, periods: periodsForQuarter(pf.periods, prevYear, pf.quarter) },
+      ]
+    : [...quarterCols, { label: `Năm ${year}`, periods: yearPeriods }, { label: `Năm ${prevYear}`, periods: prevYearPeriods }]
 
   const plRows = buildPlRows(docs, donViKey, plColumns)
 
