@@ -1,4 +1,4 @@
-import { BctcArApRow, BctcBsRow, BctcPlRow } from '@/lib/bctc-types'
+import { BctcArApRow, BctcBsRow, BctcPlRow, BctcTbRow } from '@/lib/bctc-types'
 import { ALL_DONVI, DonViInfo, FlatDoc, RawBctc } from './types'
 import { maSoLevelBS, maSoSortKey, MS_BS, MS_PL, PL_BREAKDOWN_CODES } from './masocode'
 
@@ -42,6 +42,18 @@ export function maSoSumOverPeriods(docs: FlatDoc[], donViKey: string, periods: s
 
 export interface CodeBreakdownItem { chiTieu: string; value: number }
 
+// So khớp code bỏ qua ký tự không phải chữ/số — Sheet gốc có lỗi đánh máy thật: dòng tiêu đề
+// "Thuyết minh doanh thu theo sản phẩm" ghi code "TM_DT_SP" nhưng chính các dòng con (Kinh doanh
+// BĐS/Dịch vụ/Hàng hóa - R) lại ghi "TM_DTSP" (thiếu 1 dấu gạch dưới) — so khớp chính xác chuỗi
+// từng khiến "Doanh thu theo sản phẩm" luôn ra 0 dù Giá vốn/Lãi gộp cùng khối vẫn đúng.
+function normCode(s: string): string {
+  return s.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+}
+function codeMatches(codes: string[], rowCode: string): boolean {
+  const normRow = normCode(rowCode)
+  return codes.some(c => normCode(c) === normRow)
+}
+
 // Gom các dòng thuyết minh PL theo `code` (TM_DT_SP, TM_CP, ...) — dùng cho card "Doanh thu theo
 // sản phẩm" / "Cấu trúc chi phí" vốn không có mã số BCTC riêng.
 export function breakdownByCode(docs: FlatDoc[], donViKey: string, periods: string[], codes: string[]): CodeBreakdownItem[] {
@@ -52,7 +64,7 @@ export function breakdownByCode(docs: FlatDoc[], donViKey: string, periods: stri
     if (!periodSet.has(d.period)) continue
     if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
     for (const row of d.rows as BctcPlRow[]) {
-      if (!codes.includes(row.code)) continue
+      if (!codeMatches(codes, row.code)) continue
       // Dòng đầu mỗi khối thuyết minh là tiêu đề nhóm ("Thuyết minh doanh thu theo sản phẩm"...),
       // giá trị của nó = tổng các dòng con bên dưới — bỏ qua để không đếm trùng vào breakdown.
       if (row.chiTieu.trim().toLowerCase().startsWith('thuyết minh')) continue
@@ -61,6 +73,22 @@ export function breakdownByCode(docs: FlatDoc[], donViKey: string, periods: stri
     }
   }
   return [...map.entries()].map(([chiTieu, value]) => ({ chiTieu, value })).filter(it => it.value !== 0)
+}
+
+// Giống breakdownByCode nhưng lấy đúng 1 nhãn, KHÔNG lọc bỏ giá trị 0 — dùng khi cần hiện đủ cột
+// (vd 1 sản phẩm không phát sinh ở quý này vẫn phải hiện "0" thay vì mất hẳn dòng khỏi bảng).
+export function valueByCodeAndLabel(docs: FlatDoc[], donViKey: string, periods: string[], codes: string[], chiTieu: string): number {
+  const periodSet = new Set(periods)
+  let total = 0
+  for (const d of docs) {
+    if (d.report !== 'PL') continue
+    if (!periodSet.has(d.period)) continue
+    if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
+    for (const row of d.rows as BctcPlRow[]) {
+      if (codeMatches(codes, row.code) && row.chiTieu === chiTieu) total += row.value
+    }
+  }
+  return total
 }
 
 export interface ProductPL { name: string; revenue: number; cogs: number; grossProfit: number }
@@ -93,6 +121,33 @@ export function valueByMaSo(docs: FlatDoc[], report: 'BS' | 'PL', period: string
     }
   }
   return total
+}
+
+// Tra cứu theo số tài khoản GL (report TB — "Cân đối phát sinh") tại 1 kỳ cụ thể. Số tài khoản kế
+// toán (331, 34111, 4111, 412, 421...) theo Thông tư 200 gần như không đổi giữa các công ty, đáng
+// tin hơn nhiều so với đoán theo mã số/tên chỉ tiêu Cân đối kế toán (đã có 2 lần đoán sai trước đó).
+export function valueByTaiKhoan(docs: FlatDoc[], period: string, soTaiKhoan: string, donViKey: string): number {
+  let total = 0
+  for (const d of docs) {
+    if (d.report !== 'TB' || d.period !== period) continue
+    if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
+    for (const row of d.rows as BctcTbRow[]) {
+      if (row.soTaiKhoan === soTaiKhoan) total += row.value
+    }
+  }
+  return total
+}
+
+// Dư nợ phải trả người bán (TK 331, report AP) tại 1 kỳ — giống logic trong computeSnapshot nhưng
+// tách riêng thành hàm dùng lại được cho bảng Phân tích ngang (cột theo quý cần giá trị cuối kỳ).
+export function apBalanceAt(docs: FlatDoc[], period: string, donViKey: string): number {
+  let apBalance = 0
+  for (const d of docs) {
+    if (d.report !== 'AP' || d.period !== period) continue
+    if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
+    for (const r of d.rows as BctcArApRow[]) apBalance += r.co - r.no
+  }
+  return apBalance
 }
 
 export interface Snapshot {

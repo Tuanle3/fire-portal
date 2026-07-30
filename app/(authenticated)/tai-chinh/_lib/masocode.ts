@@ -12,6 +12,8 @@ export const MS_BS = {
   TONG_NGUON_VON: '440',
   HANG_TON_KHO: '140',
   TIEN: '110',
+  TSCD: '220',
+  DAU_TU_DH: '260',
 } as const
 
 // Cân đối kế toán theo TT200 có 3 cấp — KHÔNG suy được đáng tin cậy chỉ từ mã số (mã số chi tiết
@@ -57,7 +59,20 @@ export const MS_PL = {
   CHI_PHI_KHAC: '32',
   LN_KHAC: '40',
   LN_TRUOC_THUE: '50',
+  THUE_HIEN_HANH: '51',
+  THUE_HOAN_LAI: '52',
   LN_SAU_THUE: '60',
+} as const
+
+// Số tài khoản GL (report TB) theo Thông tư 200 — ổn định giữa các công ty hơn nhiều so với mã số
+// Cân đối kế toán tự đặt (đã có 2 lần đoán sai theo mã số/tên chỉ tiêu ở phần trước).
+export const TK = {
+  PHAI_TRA_NGUOI_BAN: '331',
+  VAY_NGAN_HAN: '34111',
+  VAY_DAI_HAN: '34112',
+  VON_GOP: '4111',
+  THANG_DU_VON: '412',
+  LNST_CHUA_PHAN_PHOI: '421',
 } as const
 
 // Code (không phải mã số) của các dòng thuyết minh chi tiết trong Data_PL — dùng để lên

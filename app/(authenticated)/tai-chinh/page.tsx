@@ -94,6 +94,13 @@ const STYLE = `
   .tc-linkbtn{background:none;border:none;color:#4B6A8A;font-size:11px;font-weight:700;cursor:pointer;padding:0;font-family:inherit}
   .tc-linkbtn:hover{color:var(--gold)}
 
+  .pn-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+  .pn-section td{background:#EEF3FA;color:#1C3557;font-weight:800;font-size:11.5px;letter-spacing:.04em;padding:9px 10px}
+  .pn-section.nv td{background:#FDF6E3;color:#7A5A16}
+  .pn-grouplabel{background:#F8FAFD;color:#1C3557;font-weight:700;font-size:11px;vertical-align:middle;border-right:1px solid #E7ECF2;text-align:left;padding:8px 8px;width:90px;white-space:normal;line-height:1.3}
+  .stbl tr.pct td{color:#7C3AED;font-style:italic;font-size:11.5px}
+  .stbl td.company-badge{background:#1C3557;color:#fff;font-weight:700;text-align:center;border-radius:6px;padding:4px 10px}
+
   .rpt{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
   .rpt col.c-stt{width:36px}
   .rpt col.c-ms{width:60px}
@@ -272,7 +279,7 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
         <TabTongQuan docs={docs} donViKey={donViKey} donViLabel={donViLabel} periods={periods} snapshotPeriod={snapshotPeriod} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'ngang' && (
-        <TabPhanTichNgang docs={docs} donViKey={donViKey} pf={pf} fmtS={fmtS} unitLbl={unitLbl} />
+        <TabPhanTichNgang docs={docs} donViKey={donViKey} donViLabel={donViLabel} pf={pf} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'doc' && (
         <TabPhanTichDoc docs={docs} donViKey={donViKey} snapshotPeriod={snapshotPeriod} periods={periods} fmtS={fmtS} unitLbl={unitLbl} />
