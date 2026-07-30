@@ -1,6 +1,6 @@
 import { BctcArApRow, BctcBsRow, BctcPlRow } from '@/lib/bctc-types'
 import { ALL_DONVI, DonViInfo, FlatDoc, RawBctc } from './types'
-import { maSoLevelBS, MS_BS, MS_PL, PL_BREAKDOWN_CODES } from './masocode'
+import { maSoLevelBS, maSoSortKey, MS_BS, MS_PL, PL_BREAKDOWN_CODES } from './masocode'
 
 export type { FlatDoc } from './types'
 
@@ -228,7 +228,7 @@ export function buildLineItemMatrix(docs: FlatDoc[], report: 'BS' | 'PL', donViK
       item.values[d.period] = (item.values[d.period] ?? 0) + row.value
     }
   }
-  return [...map.values()].sort((a, b) => (Number(a.maSo) || 0) - (Number(b.maSo) || 0))
+  return [...map.values()].sort((a, b) => maSoSortKey(a.maSo) - maSoSortKey(b.maSo) || a.maSo.localeCompare(b.maSo))
 }
 
 export interface BsGroupNode { item: LineItem; level: 0 | 1 | 2; children: LineItem[] }
@@ -240,7 +240,7 @@ export function groupBsItems(items: LineItem[]): BsGroupNode[] {
   const nodes: BsGroupNode[] = []
   let currentParent: BsGroupNode | null = null
   for (const it of items) {
-    const level = maSoLevelBS(it.maSo)
+    const level = maSoLevelBS(it.maSo, it.chiTieu)
     if (level <= 1) {
       const node: BsGroupNode = { item: it, level, children: [] }
       nodes.push(node)

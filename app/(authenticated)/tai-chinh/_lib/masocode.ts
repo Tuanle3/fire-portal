@@ -14,17 +14,31 @@ export const MS_BS = {
   TIEN: '110',
 } as const
 
-// Cân đối kế toán theo TT200 có đúng 3 cấp mã số: 100/200/300/400 (mục lớn A/B/C/D) + 280/440
-// (tổng cộng) là cấp 0 — luôn hiện; 110/120/.../270/310/330/410/420 (nhóm La Mã I/II/III...) là
-// cấp 1 — nhóm có thể bung/thu; còn lại (111,231,311...) là cấp 2 — chi tiết, ẩn mặc định dưới
-// nhóm cấp 1 gần nhất. Tự suy ra từ chính giá trị mã số nên không cần liệt kê hết danh mục.
-const BS_LEVEL0_EXTRA = new Set(['280', '440'])
-export function maSoLevelBS(maSo: string): 0 | 1 | 2 {
-  const n = Number(maSo)
-  if (!maSo || Number.isNaN(n)) return 2
-  if (n % 100 === 0 || BS_LEVEL0_EXTRA.has(maSo)) return 0
-  if (n % 10 === 0) return 1
+// Cân đối kế toán theo TT200 có 3 cấp — KHÔNG suy được đáng tin cậy chỉ từ mã số (mã số chi tiết
+// thứ #10, #20... cũng tận cùng bằng 0 giống mã nhóm, ví dụ "320 - 10. Phải trả ngắn hạn khác" dễ
+// bị nhầm thành nhóm ngang hàng "I./II."). Sheet đã tự đánh số thứ tự ngay trong tên chỉ tiêu
+// ("A - ...", "I. ...", "1. ...") nên dùng đúng tiền tố đó để phân cấp, đáng tin hơn nhiều:
+//   cấp 0 = "A -"/"B -"/"C -"/"D -" hoặc "TỔNG CỘNG..." — mục lớn, luôn hiện.
+//   cấp 1 = "I."/"II."/"III."... (La Mã) — nhóm có thể bung/thu.
+//   cấp 2 = còn lại (đánh số Ả Rập "1.","10."... hoặc dòng phụ "- ...") — chi tiết, gộp vào nhóm cấp 1 gần nhất.
+const SECTION_PREFIX = /^[A-ZĐ]\s*-\s/
+const ROMAN_PREFIX = /^[IVXLCDM]+\.\s/
+const KNOWN_LEVEL0_MASO = new Set(['100', '200', '280', '300', '400', '440'])
+
+export function maSoLevelBS(maSo: string, chiTieu: string): 0 | 1 | 2 {
+  const label = (chiTieu ?? '').trim()
+  if (SECTION_PREFIX.test(label) || label.toUpperCase().startsWith('TỔNG CỘNG')) return 0
+  if (ROMAN_PREFIX.test(label)) return 1
+  if (KNOWN_LEVEL0_MASO.has(maSo)) return 0
   return 2
+}
+
+// buildLineItemMatrix sort theo mã số — Number("411a")/Number("420b") = NaN nên các mã có hậu tố
+// chữ (411a, 411b, 420a, 420b...) từng bị rơi về 0 và dạt lên đầu bảng. parseInt lấy đúng phần số
+// đứng đầu ("411a" → 411); so bằng chuỗi đầy đủ khi trùng số để "411a" đứng trước "411b".
+export function maSoSortKey(maSo: string): number {
+  const n = parseInt(maSo, 10)
+  return Number.isNaN(n) ? 0 : n
 }
 
 export const MS_PL = {
