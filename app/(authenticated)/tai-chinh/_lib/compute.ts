@@ -1,4 +1,4 @@
-import { BctcArApRow, BctcBsRow, BctcPlRow, BctcTbRow } from '@/lib/bctc-types'
+import { BctcArApRow, BctcBsRow, BctcPlRow } from '@/lib/bctc-types'
 import { ALL_DONVI, DonViInfo, FlatDoc, RawBctc } from './types'
 import { maSoLevelBS, maSoSortKey, MS_BS, MS_PL, PL_BREAKDOWN_CODES } from './masocode'
 
@@ -121,33 +121,6 @@ export function valueByMaSo(docs: FlatDoc[], report: 'BS' | 'PL', period: string
     }
   }
   return total
-}
-
-// Tra cứu theo số tài khoản GL (report TB — "Cân đối phát sinh") tại 1 kỳ cụ thể. Số tài khoản kế
-// toán (331, 34111, 4111, 412, 421...) theo Thông tư 200 gần như không đổi giữa các công ty, đáng
-// tin hơn nhiều so với đoán theo mã số/tên chỉ tiêu Cân đối kế toán (đã có 2 lần đoán sai trước đó).
-export function valueByTaiKhoan(docs: FlatDoc[], period: string, soTaiKhoan: string, donViKey: string): number {
-  let total = 0
-  for (const d of docs) {
-    if (d.report !== 'TB' || d.period !== period) continue
-    if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
-    for (const row of d.rows as BctcTbRow[]) {
-      if (row.soTaiKhoan === soTaiKhoan) total += row.value
-    }
-  }
-  return total
-}
-
-// Dư nợ phải trả người bán (TK 331, report AP) tại 1 kỳ — giống logic trong computeSnapshot nhưng
-// tách riêng thành hàm dùng lại được cho bảng Phân tích ngang (cột theo quý cần giá trị cuối kỳ).
-export function apBalanceAt(docs: FlatDoc[], period: string, donViKey: string): number {
-  let apBalance = 0
-  for (const d of docs) {
-    if (d.report !== 'AP' || d.period !== period) continue
-    if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
-    for (const r of d.rows as BctcArApRow[]) apBalance += r.co - r.no
-  }
-  return apBalance
 }
 
 export interface Snapshot {

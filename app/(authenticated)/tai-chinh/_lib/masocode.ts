@@ -14,6 +14,17 @@ export const MS_BS = {
   TIEN: '110',
   TSCD: '220',
   DAU_TU_DH: '260',
+  // Chi tiết Nợ/VCSH — lấy trực tiếp mã số CĐKT (đã đối chiếu đúng theo Data_BS thật của công ty,
+  // không suy từ số tài khoản TB nữa vì từng đoán sai 421 thay vì 420, và 4111/412 không khớp quy
+  // ước dấu của report TB).
+  PHAI_TRA_NCC_NH: '311',
+  VAY_NH: '321',
+  VAY_DH: '339',
+  VON_GOP: '411',
+  THANG_DU_VON: '412',
+  QUY_DTPT: '418',
+  QUY_KHAC_VCSH: '419',
+  LNST_CHUA_PP: '420',
 } as const
 
 // Cân đối kế toán theo TT200 có 3 cấp — KHÔNG suy được đáng tin cậy chỉ từ mã số (mã số chi tiết
@@ -62,17 +73,6 @@ export const MS_PL = {
   THUE_HIEN_HANH: '51',
   THUE_HOAN_LAI: '52',
   LN_SAU_THUE: '60',
-} as const
-
-// Số tài khoản GL (report TB) theo Thông tư 200 — ổn định giữa các công ty hơn nhiều so với mã số
-// Cân đối kế toán tự đặt (đã có 2 lần đoán sai theo mã số/tên chỉ tiêu ở phần trước).
-export const TK = {
-  PHAI_TRA_NGUOI_BAN: '331',
-  VAY_NGAN_HAN: '34111',
-  VAY_DAI_HAN: '34112',
-  VON_GOP: '4111',
-  THANG_DU_VON: '412',
-  LNST_CHUA_PHAN_PHOI: '421',
 } as const
 
 // Code (không phải mã số) của các dòng thuyết minh chi tiết trong Data_PL — dùng để lên

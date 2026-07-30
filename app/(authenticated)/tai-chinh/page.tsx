@@ -48,11 +48,6 @@ const TOPBAR_STYLE = `
 // màn hình hơn, đỡ phải cuộn — áp dụng chung cho mọi tab dùng các class này.
 const STYLE = `
   .tc{flex:1;padding:14px 20px 24px;overflow-y:auto;background:#FAF8F3;--gold:#D4A64A;font-size:13px}
-
-  .tabnav{display:flex;gap:2px;flex-wrap:wrap;background:#fff;border:1px solid #E0E7F0;border-radius:10px;padding:3px;margin-bottom:12px}
-  .tabnav-btn{padding:6px 12px;font-size:11.5px;font-weight:600;color:#6B7280;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit;border-radius:7px;display:inline-flex;align-items:center;gap:5px}
-  .tabnav-btn:hover{color:#1C3557;background:#FAFBFD}
-  .tabnav-btn.act{color:#1C3557;border-bottom-color:var(--gold);background:#FAFBFD;font-weight:700}
   .tc-sub{font-size:11px;color:#9CA3AF;margin-bottom:10px}
 
   .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
@@ -239,6 +234,14 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
   useEffect(() => {
     setLeft(
       <div className="tb-filters">
+        <div className="tb-pillgroup">
+          {TABS.map(t => (
+            <button key={t.key} className={`tb-pill${tab === t.key ? ' act' : ''}`} onClick={() => setTab(t.key)} title={t.label}>
+              <span>{t.icon}</span> {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="tb-vsep" />
         <span className="tb-flabel">Đơn vị</span>
         <div className="tb-pillgroup">
           <button className={`tb-pill${donViKey === ALL_DONVI ? ' act' : ''}`} onClick={() => setDonViKey(ALL_DONVI)}>Hợp nhất</button>
@@ -271,7 +274,7 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
       </div>,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setLeft, donViKey, donViList, pf.mode, pf.year, pf.quarter, pf.month, pf.years, periods])
+  }, [setLeft, tab, donViKey, donViList, pf.mode, pf.year, pf.quarter, pf.month, pf.years, periods])
 
   useEffect(() => {
     setRight(
@@ -287,14 +290,6 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
 
   return (
     <>
-      <div className="tabnav">
-        {TABS.map(t => (
-          <button key={t.key} className={`tabnav-btn${tab === t.key ? ' act' : ''}`} onClick={() => setTab(t.key)}>
-            <span>{t.icon}</span>{t.label}
-          </button>
-        ))}
-      </div>
-
       {tab === 'tongquan' && (
         <TabTongQuan docs={docs} donViKey={donViKey} donViLabel={donViLabel} periods={periods} snapshotPeriod={snapshotPeriod} fmtS={fmtS} unitLbl={unitLbl} />
       )}
