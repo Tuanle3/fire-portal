@@ -1,6 +1,6 @@
 import { BctcArApRow, BctcBsRow, BctcPlRow } from '@/lib/bctc-types'
 import { ALL_DONVI, DonViInfo, FlatDoc, RawBctc } from './types'
-import { MS_BS, MS_PL } from './masocode'
+import { MS_BS, MS_PL, PL_BREAKDOWN_CODES } from './masocode'
 
 export type { FlatDoc } from './types'
 
@@ -61,6 +61,26 @@ export function breakdownByCode(docs: FlatDoc[], donViKey: string, periods: stri
     }
   }
   return [...map.entries()].map(([chiTieu, value]) => ({ chiTieu, value })).filter(it => it.value !== 0)
+}
+
+export interface ProductPL { name: string; revenue: number; cogs: number; grossProfit: number }
+
+// Ghép 3 khối thuyết minh theo sản phẩm (Doanh thu/Giá vốn/Lãi gộp) theo đúng tên dòng — dữ liệu
+// đã có sẵn từ trước (breakdownByCode) nhưng chưa từng được ghép lại thành P&L theo từng sản phẩm.
+export function productPL(docs: FlatDoc[], donViKey: string, periods: string[]): ProductPL[] {
+  const rev = breakdownByCode(docs, donViKey, periods, [PL_BREAKDOWN_CODES.DOANH_THU_SP])
+  const cogs = breakdownByCode(docs, donViKey, periods, [PL_BREAKDOWN_CODES.GIA_VON_SP])
+  const gp = breakdownByCode(docs, donViKey, periods, [PL_BREAKDOWN_CODES.LAI_GOP_SP])
+  const names = new Set([...rev, ...cogs, ...gp].map(i => i.chiTieu))
+  return [...names]
+    .map(name => ({
+      name,
+      revenue: rev.find(i => i.chiTieu === name)?.value ?? 0,
+      cogs: cogs.find(i => i.chiTieu === name)?.value ?? 0,
+      grossProfit: gp.find(i => i.chiTieu === name)?.value ?? 0,
+    }))
+    .filter(p => p.revenue !== 0 || p.cogs !== 0 || p.grossProfit !== 0)
+    .sort((a, b) => b.revenue - a.revenue)
 }
 
 export function valueByMaSo(docs: FlatDoc[], report: 'BS' | 'PL', period: string, maSo: string, donViKey: string): number {

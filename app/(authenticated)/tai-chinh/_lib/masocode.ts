@@ -43,3 +43,22 @@ export const PL_BREAKDOWN_CODES = {
   CAU_TRUC_CHI_PHI: 'TM_CP',
   CHI_PHI_KHAC_CT: 'TM_CP_K',
 } as const
+
+export interface BudgetCategory {
+  key: string
+  label: string
+  actual: { kind: 'maSo'; maSo: string } | { kind: 'breakdown'; code: string; chiTieu: string }
+}
+
+// Danh mục khoản mục cho tab "Ngân sách chi phí" (nhập kế hoạch tay) — lấy đúng theo các dòng
+// thuyết minh chi phí thật đã thấy trong Data_PL, để "Thực tế" tra được ngay từ data_bctc hiện có.
+export const BUDGET_CATEGORIES: BudgetCategory[] = [
+  { key: 'gia_von', label: 'Giá vốn hàng bán', actual: { kind: 'maSo', maSo: MS_PL.GIA_VON } },
+  { key: 'cp_ban_hang', label: 'Chi phí bán hàng', actual: { kind: 'maSo', maSo: MS_PL.CP_BAN_HANG } },
+  { key: 'cp_tai_chinh', label: 'Chi phí tài chính', actual: { kind: 'maSo', maSo: MS_PL.CP_TAI_CHINH } },
+  { key: 'cp_nhan_su', label: 'Chi phí nhân sự', actual: { kind: 'breakdown', code: PL_BREAKDOWN_CODES.CAU_TRUC_CHI_PHI, chiTieu: 'Chi phí nhân sự' } },
+  { key: 'cp_hanh_chinh', label: 'Chi phí hành chính', actual: { kind: 'breakdown', code: PL_BREAKDOWN_CODES.CAU_TRUC_CHI_PHI, chiTieu: 'Chi phí hành chính' } },
+  { key: 'cp_tiep_khach', label: 'Chi phí tiếp khách', actual: { kind: 'breakdown', code: PL_BREAKDOWN_CODES.CAU_TRUC_CHI_PHI, chiTieu: 'Chi phí tiếp khách' } },
+  { key: 'cp_cong_tac', label: 'Chi phí công tác', actual: { kind: 'breakdown', code: PL_BREAKDOWN_CODES.CAU_TRUC_CHI_PHI, chiTieu: 'Chi phí công tác' } },
+  { key: 'khau_hao', label: 'Khấu hao - Phân bổ', actual: { kind: 'breakdown', code: PL_BREAKDOWN_CODES.CAU_TRUC_CHI_PHI, chiTieu: 'Khấu hao - Phân bổ' } },
+]
