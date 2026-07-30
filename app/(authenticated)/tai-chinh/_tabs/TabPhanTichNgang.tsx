@@ -270,66 +270,63 @@ export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl
           </div>
         </div>
 
-        <div className="panel" style={{ marginBottom: 0 }}>
-          <div className="panel-h"><span>⚖ Cân đối kế toán & Nguồn vốn</span></div>
-          <div className="panel-b" style={{ overflowX: 'auto' }}>
-            <table className="stbl">
-              <thead>
-                <tr><th /><th className="lbl">Chỉ tiêu</th>{bsColumns.map(c => <th key={c.label} className="num">{c.label}</th>)}</tr>
-              </thead>
-              <tbody>
-                <tr className="pn-section"><td colSpan={bsColumns.length + 2}>TỔNG TÀI SẢN</td></tr>
-                <tr className="bold">
-                  <td colSpan={2} className="lbl">{tongTaiSanRow.label}</td>
-                  {tongTaiSanRow.values.map((v, ci) => <td key={ci} className="num">{fmtS(v)}</td>)}
-                </tr>
-                <BsGroup label="TÀI SẢN NGẮN HẠN" rows={tsnhRows} fmtS={fmtS} />
-                <BsGroup label="TÀI SẢN DÀI HẠN" rows={tsdhRows} fmtS={fmtS} />
-                <tr className="pn-section nv"><td colSpan={bsColumns.length + 2}>TỔNG NGUỒN VỐN</td></tr>
-                <tr className="bold">
-                  <td colSpan={2} className="lbl">{tongNguonVonRow.label}</td>
-                  {tongNguonVonRow.values.map((v, ci) => <td key={ci} className="num">{fmtS(v)}</td>)}
-                </tr>
-                <BsGroup label="NỢ" rows={noRows} fmtS={fmtS} />
-                <BsGroup label="VỐN CHỦ SỞ HỮU" rows={vcshRows} fmtS={fmtS} />
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div className="pn-ratio-h">
-        <span>📐 Chỉ số tài chính cơ bản</span>
-        <span>Năm {year}{hasPrevYear ? ` so Năm ${prevYear}` : ''}</span>
-      </div>
-      <div className="grid3" style={{ marginBottom: 0 }}>
-        {ratioGroups.map(g => (
-          <div className="panel" key={g.title} style={{ marginBottom: 0 }}>
-            <div className="panel-h"><span>{g.title}</span></div>
-            <div className="panel-b">
-              <table className="stbl pn-ratio-tbl">
+        <div className="col-stack">
+          <div className="panel" style={{ marginBottom: 0 }}>
+            <div className="panel-h"><span>⚖ Cân đối kế toán & Nguồn vốn</span></div>
+            <div className="panel-b" style={{ overflowX: 'auto' }}>
+              <table className="stbl">
                 <thead>
-                  <tr><th className="lbl" /><th className="num">{year}</th>{hasPrevYear && <th className="num">{prevYear}</th>}</tr>
+                  <tr><th /><th className="lbl">Chỉ tiêu</th>{bsColumns.map(c => <th key={c.label} className="num">{c.label}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {g.rows.map(r => (
-                    <tr key={r.label}>
-                      <td className="lbl">
-                        <div className="pn-ratio-label">{r.label}</div>
-                        {r.formula && <div className="pn-ratio-meta">{r.formula}</div>}
-                        <div className="pn-ratio-meta pn-ratio-note">{r.note}</div>
-                      </td>
-                      <td className="num">{fmtRatio(r.kind, r.cur)}</td>
-                      {hasPrevYear && <td className="num">{r.prev == null ? '–' : fmtRatio(r.kind, r.prev)}</td>}
-                    </tr>
-                  ))}
+                  <tr className="bold">
+                    <td colSpan={2} className="lbl">{tongTaiSanRow.label}</td>
+                    {tongTaiSanRow.values.map((v, ci) => <td key={ci} className="num">{fmtS(v)}</td>)}
+                  </tr>
+                  <BsGroup label="TÀI SẢN NGẮN HẠN" rows={tsnhRows} fmtS={fmtS} />
+                  <BsGroup label="TÀI SẢN DÀI HẠN" rows={tsdhRows} fmtS={fmtS} />
+                  <tr className="bold">
+                    <td colSpan={2} className="lbl">{tongNguonVonRow.label}</td>
+                    {tongNguonVonRow.values.map((v, ci) => <td key={ci} className="num">{fmtS(v)}</td>)}
+                  </tr>
+                  <BsGroup label="NỢ" rows={noRows} fmtS={fmtS} />
+                  <BsGroup label="VỐN CHỦ SỞ HỮU" rows={vcshRows} fmtS={fmtS} />
                 </tbody>
               </table>
             </div>
           </div>
-        ))}
+
+          <div className="panel" style={{ marginBottom: 0 }}>
+            <div className="panel-h"><span>📐 Chỉ số tài chính cơ bản</span><span>Năm {year}{hasPrevYear ? ` so ${prevYear}` : ''}</span></div>
+            <div className="panel-b pn-ratio-cards">
+              {ratioGroups.map(g => (
+                <div className="pn-ratio-card" key={g.title}>
+                  <div className="pn-ratio-cardh">{g.title}</div>
+                  <table className="stbl pn-ratio-tbl">
+                    <thead>
+                      <tr><th className="lbl" /><th className="num">{year}</th>{hasPrevYear && <th className="num">{prevYear}</th>}</tr>
+                    </thead>
+                    <tbody>
+                      {g.rows.map(r => (
+                        <tr key={r.label}>
+                          <td className="lbl">
+                            <div className="pn-ratio-label">{r.label}</div>
+                            {r.formula && <div className="pn-ratio-meta">{r.formula}</div>}
+                            <div className="pn-ratio-meta pn-ratio-note">{r.note}</div>
+                          </td>
+                          <td className="num">{fmtRatio(r.kind, r.cur)}</td>
+                          {hasPrevYear && <td className="num">{r.prev == null ? '–' : fmtRatio(r.kind, r.prev)}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+            {!hasPrevYear && <div style={{ fontSize: 10, color: '#9CA3AF', padding: '0 12px 8px' }}>Chưa có dữ liệu Năm {prevYear} để so sánh.</div>}
+          </div>
+        </div>
       </div>
-      {!hasPrevYear && <div style={{ fontSize: 10.5, color: '#9CA3AF', marginTop: 6 }}>Chưa có dữ liệu Năm {prevYear} để so sánh.</div>}
     </>
   )
 }
