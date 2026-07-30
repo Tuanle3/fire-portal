@@ -1,6 +1,6 @@
 import { BctcArApRow, BctcBsRow, BctcPlRow } from '@/lib/bctc-types'
 import { ALL_DONVI, DonViInfo, FlatDoc, RawBctc } from './types'
-import { MS_BS, MS_PL, PL_BREAKDOWN_CODES } from './masocode'
+import { maSoLevelBS, MS_BS, MS_PL, PL_BREAKDOWN_CODES } from './masocode'
 
 export type { FlatDoc } from './types'
 
@@ -229,6 +229,29 @@ export function buildLineItemMatrix(docs: FlatDoc[], report: 'BS' | 'PL', donViK
     }
   }
   return [...map.values()].sort((a, b) => (Number(a.maSo) || 0) - (Number(b.maSo) || 0))
+}
+
+export interface BsGroupNode { item: LineItem; level: 0 | 1 | 2; children: LineItem[] }
+
+// Gom các dòng Cân đối kế toán (đã sort theo mã số) thành cây 3 cấp theo maSoLevelBS — dòng cấp 2
+// (chi tiết) gắn vào dòng cấp 1 (nhóm La Mã) gần nhất phía trước để có thể bung/thu khi hiển thị.
+// Bảng CĐKT có quá nhiều dòng chi tiết nếu hiện phẳng hết — nhóm lại giúp dễ đọc hơn nhiều.
+export function groupBsItems(items: LineItem[]): BsGroupNode[] {
+  const nodes: BsGroupNode[] = []
+  let currentParent: BsGroupNode | null = null
+  for (const it of items) {
+    const level = maSoLevelBS(it.maSo)
+    if (level <= 1) {
+      const node: BsGroupNode = { item: it, level, children: [] }
+      nodes.push(node)
+      currentParent = level === 1 ? node : null
+    } else if (currentParent) {
+      currentParent.children.push(it)
+    } else {
+      nodes.push({ item: it, level: 2, children: [] })
+    }
+  }
+  return nodes
 }
 
 export interface TopEntry { code: string; name: string; balance: number }

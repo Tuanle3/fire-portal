@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { ChartConfiguration } from 'chart.js'
-import { buildLineItemMatrix, FlatDoc, valueByMaSo } from '../_lib/compute'
+import { buildLineItemMatrix, FlatDoc, groupBsItems, LineItem, valueByMaSo } from '../_lib/compute'
 import { MS_BS, MS_PL } from '../_lib/masocode'
 import { periodLabel } from '../_lib/format'
 import { shiftYear } from '../_lib/usePeriodFilter'
@@ -15,40 +15,107 @@ interface Props {
   unitLbl: string
 }
 
-function CommonSizeTable({ title, icon, items, base, baseLabel, curP, cmpP, fmtS }: {
-  title: string; icon: string; items: ReturnType<typeof buildLineItemMatrix>
-  base: number; baseLabel: string; curP: string; cmpP: string | null; fmtS: (v: number) => string
+function CommonSizeHead({ baseLabel, cmpP }: { baseLabel: string; cmpP: string | null }) {
+  return (
+    <thead>
+      <tr>
+        <th className="lbl">Chỉ tiêu</th>
+        <th className="num">Giá trị</th><th className="num">% {baseLabel}</th>
+        {cmpP && <th className="num">Cùng kỳ trước</th>}
+        {cmpP && <th className="num">% {baseLabel}</th>}
+        {cmpP && <th className="num">Δ điểm %</th>}
+      </tr>
+    </thead>
+  )
+}
+
+function ValueCells({ item, base, curP, cmpP, fmtS }: {
+  item: LineItem; base: number; curP: string; cmpP: string | null; fmtS: (v: number) => string
+}) {
+  const curV = item.values[curP] ?? 0
+  const curPct = base !== 0 ? curV / base * 100 : 0
+  const cmpV = cmpP ? (item.values[cmpP] ?? 0) : 0
+  const cmpPct = cmpP && base !== 0 ? cmpV / base * 100 : 0
+  const dp = curPct - cmpPct
+  return (
+    <>
+      <td className="num">{fmtS(curV)}</td>
+      <td className="num" style={{ color: '#4B6A8A' }}>{curPct.toFixed(1)}%</td>
+      {cmpP && <td className="num">{fmtS(cmpV)}</td>}
+      {cmpP && <td className="num" style={{ color: '#4B6A8A' }}>{cmpPct.toFixed(1)}%</td>}
+      {cmpP && <td className="num" style={{ color: dp < 0 ? '#DC2626' : dp > 0 ? '#16A34A' : '#9CA3AF' }}>{dp > 0 ? '+' : ''}{dp.toFixed(1)}pp</td>}
+    </>
+  )
+}
+
+function PlCommonSizeTable({ title, icon, items, base, baseLabel, curP, cmpP, fmtS }: {
+  title: string; icon: string; items: LineItem[]; base: number; baseLabel: string
+  curP: string; cmpP: string | null; fmtS: (v: number) => string
 }) {
   return (
     <div className="panel">
       <div className="panel-h"><span>{icon} {title}</span><span className="panel-badge">% TRÊN {baseLabel}</span></div>
       <div className="panel-b" style={{ overflowX: 'auto' }}>
         <table className="stbl">
-          <thead>
-            <tr>
-              <th className="lbl">Chỉ tiêu</th>
-              <th className="num">{periodLabel(curP)}</th><th className="num">% {baseLabel}</th>
-              {cmpP && <th className="num">{periodLabel(cmpP)}</th>}
-              {cmpP && <th className="num">% {baseLabel}</th>}
-              {cmpP && <th className="num">Δ điểm %</th>}
-            </tr>
-          </thead>
+          <CommonSizeHead baseLabel={baseLabel} cmpP={cmpP} />
           <tbody>
-            {items.map(it => {
-              const curV = it.values[curP] ?? 0
-              const curPct = base !== 0 ? curV / base * 100 : 0
-              const cmpV = cmpP ? (it.values[cmpP] ?? 0) : 0
-              const cmpPct = cmpP && base !== 0 ? cmpV / base * 100 : 0
-              const dp = curPct - cmpPct
+            {items.map(it => (
+              <tr key={it.maSo}>
+                <td className="lbl">{it.chiTieu}</td>
+                <ValueCells item={it} base={base} curP={curP} cmpP={cmpP} fmtS={fmtS} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// Cân đối kế toán common-size cũng nhiều dòng chi tiết như Phân tích ngang — nhóm + bung/thu tương tự.
+function BsCommonSizeTable({ title, icon, items, base, baseLabel, curP, cmpP, fmtS }: {
+  title: string; icon: string; items: LineItem[]; base: number; baseLabel: string
+  curP: string; cmpP: string | null; fmtS: (v: number) => string
+}) {
+  const groups = groupBsItems(items)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggle = (maSo: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(maSo)) next.delete(maSo); else next.add(maSo)
+    return next
+  })
+
+  return (
+    <div className="panel">
+      <div className="panel-h"><span>{icon} {title}</span><span className="panel-badge">% TRÊN {baseLabel}</span></div>
+      <div className="panel-b" style={{ overflowX: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 8 }}>
+          <button className="tc-linkbtn" onClick={() => setExpanded(new Set(groups.filter(g => g.children.length > 0).map(g => g.item.maSo)))}>Bung tất cả</button>
+          <button className="tc-linkbtn" onClick={() => setExpanded(new Set())}>Thu gọn tất cả</button>
+        </div>
+        <table className="stbl">
+          <CommonSizeHead baseLabel={baseLabel} cmpP={cmpP} />
+          <tbody>
+            {groups.map(node => {
+              const canToggle = node.children.length > 0
+              const isOpen = expanded.has(node.item.maSo)
               return (
-                <tr key={it.maSo}>
-                  <td className="lbl">{it.chiTieu}</td>
-                  <td className="num">{fmtS(curV)}</td>
-                  <td className="num" style={{ color: '#4B6A8A' }}>{curPct.toFixed(1)}%</td>
-                  {cmpP && <td className="num">{fmtS(cmpV)}</td>}
-                  {cmpP && <td className="num" style={{ color: '#4B6A8A' }}>{cmpPct.toFixed(1)}%</td>}
-                  {cmpP && <td className="num" style={{ color: dp < 0 ? '#DC2626' : dp > 0 ? '#16A34A' : '#9CA3AF' }}>{dp > 0 ? '+' : ''}{dp.toFixed(1)}pp</td>}
-                </tr>
+                <Fragment key={node.item.maSo}>
+                  <tr className={node.level === 0 ? 'bold' : canToggle ? 'grp' : ''} onClick={canToggle ? () => toggle(node.item.maSo) : undefined}>
+                    <td className="lbl">
+                      {canToggle && <button className="tree-toggle" onClick={e => { e.stopPropagation(); toggle(node.item.maSo) }}>{isOpen ? '−' : '+'}</button>}
+                      {node.item.chiTieu}
+                      {canToggle && <span style={{ fontWeight: 400, color: '#9CA3AF', fontSize: 11 }}> ({node.children.length} dòng)</span>}
+                    </td>
+                    <ValueCells item={node.item} base={base} curP={curP} cmpP={cmpP} fmtS={fmtS} />
+                  </tr>
+                  {canToggle && isOpen && node.children.map(child => (
+                    <tr key={child.maSo}>
+                      <td className="lbl indent">{child.chiTieu}</td>
+                      <ValueCells item={child} base={base} curP={curP} cmpP={cmpP} fmtS={fmtS} />
+                    </tr>
+                  ))}
+                </Fragment>
               )
             })}
           </tbody>
@@ -109,8 +176,8 @@ export function TabPhanTichDoc({ docs, donViKey, snapshotPeriod, periods, fmtS, 
       <div className="tc-sub">
         Kỳ {periodLabel(snapshotPeriod)}{cmpP ? ` · so cùng kỳ ${periodLabel(cmpP)}` : ' · chưa có dữ liệu cùng kỳ năm trước để so sánh'} (đơn vị: {unitLbl})
       </div>
-      <CommonSizeTable title="Kết quả kinh doanh — Phân tích dọc" icon="📈" items={plItems} base={dtt} baseLabel="DTT" curP={snapshotPeriod} cmpP={cmpP} fmtS={fmtS} />
-      <CommonSizeTable title="Cân đối kế toán — Phân tích dọc" icon="⚖" items={bsItems} base={tongTS} baseLabel="TỔNG TS" curP={snapshotPeriod} cmpP={cmpP} fmtS={fmtS} />
+      <PlCommonSizeTable title="Kết quả kinh doanh — Phân tích dọc" icon="📈" items={plItems} base={dtt} baseLabel="DTT" curP={snapshotPeriod} cmpP={cmpP} fmtS={fmtS} />
+      <BsCommonSizeTable title="Cân đối kế toán — Phân tích dọc" icon="⚖" items={bsItems} base={tongTS} baseLabel="TỔNG TS" curP={snapshotPeriod} cmpP={cmpP} fmtS={fmtS} />
 
       <div className="grid2-even">
         <div className="panel" style={{ marginBottom: 0 }}>

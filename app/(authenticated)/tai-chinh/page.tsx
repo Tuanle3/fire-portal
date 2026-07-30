@@ -86,6 +86,13 @@ const STYLE = `
   .stbl .num{text-align:right;font-variant-numeric:tabular-nums}
   .stbl .lbl{text-align:left;white-space:normal;min-width:220px}
   .stbl .bold td{font-weight:700;border-top:1.5px solid #D0DCE8}
+  .stbl tr.grp td{font-weight:700;color:#1C3557;background:#F6F9FC;cursor:pointer}
+  .stbl tr.grp:hover td{background:#EEF3FA}
+  .stbl td.indent{padding-left:30px;color:#64748B;font-size:12px;font-weight:400}
+  .tree-toggle{background:#fff;border:1px solid #D0DCE8;border-radius:4px;width:16px;height:16px;line-height:1;font-size:11px;font-weight:700;color:#4B6A8A;cursor:pointer;margin-right:7px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+  .tree-toggle:hover{background:#EEF3FA;border-color:var(--gold)}
+  .tc-linkbtn{background:none;border:none;color:#4B6A8A;font-size:11px;font-weight:700;cursor:pointer;padding:0;font-family:inherit}
+  .tc-linkbtn:hover{color:var(--gold)}
 
   .rpt{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
   .rpt col.c-stt{width:36px}

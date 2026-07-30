@@ -14,6 +14,19 @@ export const MS_BS = {
   TIEN: '110',
 } as const
 
+// Cân đối kế toán theo TT200 có đúng 3 cấp mã số: 100/200/300/400 (mục lớn A/B/C/D) + 280/440
+// (tổng cộng) là cấp 0 — luôn hiện; 110/120/.../270/310/330/410/420 (nhóm La Mã I/II/III...) là
+// cấp 1 — nhóm có thể bung/thu; còn lại (111,231,311...) là cấp 2 — chi tiết, ẩn mặc định dưới
+// nhóm cấp 1 gần nhất. Tự suy ra từ chính giá trị mã số nên không cần liệt kê hết danh mục.
+const BS_LEVEL0_EXTRA = new Set(['280', '440'])
+export function maSoLevelBS(maSo: string): 0 | 1 | 2 {
+  const n = Number(maSo)
+  if (!maSo || Number.isNaN(n)) return 2
+  if (n % 100 === 0 || BS_LEVEL0_EXTRA.has(maSo)) return 0
+  if (n % 10 === 0) return 1
+  return 2
+}
+
 export const MS_PL = {
   DT_BAN_HANG: '01',
   GIAM_TRU: '02',
