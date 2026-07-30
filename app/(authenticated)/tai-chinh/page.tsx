@@ -103,6 +103,15 @@ const STYLE = `
   .stbl tr.pct td{color:#7C3AED;font-style:italic;font-size:10px}
   .stbl td.company-badge{background:#1C3557;color:#fff;font-weight:700;text-align:center;border-radius:5px;padding:3px 8px;font-size:10.5px}
 
+  .pn-ratio-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:2px 0 6px;font-size:11px;font-weight:700;color:#4B6A8A}
+  .pn-ratio-h span:last-child{color:#1C3557;font-weight:800;font-size:12.5px;font-family:var(--font-display,inherit)}
+  .pn-ratio-tbl .lbl{min-width:0}
+  .pn-ratio-tbl td.lbl{white-space:normal}
+  .pn-ratio-tbl th.num{width:52px}
+  .pn-ratio-label{font-weight:600;color:#1C2B3D}
+  .pn-ratio-meta{font-size:9px;color:#9CA3AF;line-height:1.35}
+  .pn-ratio-note{color:#B08A3E}
+
   .rpt{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
   .rpt col.c-stt{width:28px}
   .rpt col.c-ms{width:48px}

@@ -230,31 +230,31 @@ export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl
   const prevR = hasPrevYear ? ratioSet(prevYearPeriods, plPrevYear, khauHaoOf(prevYearPeriods)) : null
 
   type RKind = 'ratio' | 'pct' | 'money'
-  interface RRow { label: string; note: string; kind: RKind; cur: number; prev: number | null }
+  interface RRow { label: string; formula?: string; note: string; kind: RKind; cur: number; prev: number | null }
   const fmtRatio = (kind: RKind, v: number) => kind === 'pct' ? pct(v) : kind === 'money' ? fmtS(v) : `${ratioStr(v)} lần`
 
   const ratioGroups: { title: string; rows: RRow[] }[] = [
     {
-      title: '1. NHÓM THANH KHOẢN', rows: [
-        { label: 'Thanh khoản hiện hành [= TSNH / Nợ NH]', note: 'BĐS: ≥ 1,3 | Xây dựng: ≥ 1,2', kind: 'ratio', cur: curR.currentRatio, prev: prevR?.currentRatio ?? null },
-        { label: 'Thanh khoản nhanh [= (TSNH − HTK) / Nợ NH]', note: 'BĐS: ≥ 0,5 | Xây dựng: ≥ 0,7', kind: 'ratio', cur: curR.quickRatio, prev: prevR?.quickRatio ?? null },
-        { label: 'Thanh khoản tiền mặt [= Tiền / Nợ NH]', note: '≥ 0,1 là mức tối thiểu an toàn', kind: 'ratio', cur: curR.cashRatio, prev: prevR?.cashRatio ?? null },
-        { label: 'Vốn lưu động ròng [= TSNH − Nợ NH]', note: `> 0 (đơn vị: ${unitLbl})`, kind: 'money', cur: curR.workingCapital, prev: prevR?.workingCapital ?? null },
+      title: '1. Thanh khoản', rows: [
+        { label: 'Thanh khoản hiện hành', formula: 'TSNH / Nợ NH', note: 'BĐS: ≥ 1,3 | Xây dựng: ≥ 1,2', kind: 'ratio', cur: curR.currentRatio, prev: prevR?.currentRatio ?? null },
+        { label: 'Thanh khoản nhanh', formula: '(TSNH − HTK) / Nợ NH', note: 'BĐS: ≥ 0,5 | Xây dựng: ≥ 0,7', kind: 'ratio', cur: curR.quickRatio, prev: prevR?.quickRatio ?? null },
+        { label: 'Thanh khoản tiền mặt', formula: 'Tiền / Nợ NH', note: '≥ 0,1 là mức tối thiểu an toàn', kind: 'ratio', cur: curR.cashRatio, prev: prevR?.cashRatio ?? null },
+        { label: 'Vốn lưu động ròng', formula: 'TSNH − Nợ NH', note: `> 0 (đơn vị: ${unitLbl})`, kind: 'money', cur: curR.workingCapital, prev: prevR?.workingCapital ?? null },
       ],
     },
     {
-      title: '2. NHÓM ĐÒN BẨY TÀI CHÍNH', rows: [
-        { label: 'Nợ / Tổng TS [= Tổng nợ phải trả / Tổng TS]', note: 'BĐS: ≤ 65% | Xây dựng: ≤ 70%', kind: 'pct', cur: curR.debtToAssets, prev: prevR?.debtToAssets ?? null },
-        { label: 'Nợ / Vốn CSH [= Tổng nợ phải trả / Vốn CSH]', note: 'An toàn: ≤ 2,0x | Cảnh báo: > 3,0x', kind: 'ratio', cur: curR.debtToEquity, prev: prevR?.debtToEquity ?? null },
-        { label: 'ICR — Khả năng trả lãi [= (LNTT + CP lãi vay) / CP lãi vay]', note: 'BĐS: ≥ 2,5x | Xây dựng: ≥ 3,0x', kind: 'ratio', cur: curR.icr, prev: prevR?.icr ?? null },
-        { label: 'Nợ vay / EBITDA [= (Nợ vay NH + DH) / EBITDA]', note: 'Ổn: ≤ 4x | Nguy hiểm: > 6x', kind: 'ratio', cur: curR.debtToEbitda, prev: prevR?.debtToEbitda ?? null },
+      title: '2. Đòn bẩy tài chính', rows: [
+        { label: 'Nợ / Tổng TS', formula: 'Tổng nợ phải trả / Tổng TS', note: 'BĐS: ≤ 65% | Xây dựng: ≤ 70%', kind: 'pct', cur: curR.debtToAssets, prev: prevR?.debtToAssets ?? null },
+        { label: 'Nợ / Vốn CSH', formula: 'Tổng nợ phải trả / Vốn CSH', note: 'An toàn: ≤ 2,0x | Cảnh báo: > 3,0x', kind: 'ratio', cur: curR.debtToEquity, prev: prevR?.debtToEquity ?? null },
+        { label: 'ICR — Khả năng trả lãi', formula: '(LNTT + CP lãi vay) / CP lãi vay', note: 'BĐS: ≥ 2,5x | Xây dựng: ≥ 3,0x', kind: 'ratio', cur: curR.icr, prev: prevR?.icr ?? null },
+        { label: 'Nợ vay / EBITDA', formula: '(Nợ vay NH + DH) / EBITDA', note: 'Ổn: ≤ 4x | Nguy hiểm: > 6x', kind: 'ratio', cur: curR.debtToEbitda, prev: prevR?.debtToEbitda ?? null },
       ],
     },
     {
-      title: '3. NHÓM SINH LỜI - LỢI NHUẬN', rows: [
+      title: '3. Sinh lời - Lợi nhuận', rows: [
         { label: 'Lãi gộp / Doanh thu thuần', note: 'BĐS: ≥ 25% | Xây dựng: ≥ 8%', kind: 'pct', cur: curR.grossMargin, prev: prevR?.grossMargin ?? null },
-        { label: 'ROE [= LNST / Vốn CSH]', note: 'BĐS: ≥ 15% | Xây dựng: ≥ 12%', kind: 'pct', cur: curR.roe, prev: prevR?.roe ?? null },
-        { label: 'ROA [= LNST / Tổng TS]', note: 'BĐS: ≥ 5% | Xây dựng: ≥ 6%', kind: 'pct', cur: curR.roa, prev: prevR?.roa ?? null },
+        { label: 'ROE', formula: 'LNST / Vốn CSH', note: 'BĐS: ≥ 15% | Xây dựng: ≥ 12%', kind: 'pct', cur: curR.roe, prev: prevR?.roe ?? null },
+        { label: 'ROA', formula: 'LNST / Tổng TS', note: 'BĐS: ≥ 5% | Xây dựng: ≥ 6%', kind: 'pct', cur: curR.roa, prev: prevR?.roa ?? null },
         { label: 'LNST / Doanh thu thuần', note: 'BĐS TM: ≥ 12% | NOXH: ≥ 4%', kind: 'pct', cur: curR.netMargin, prev: prevR?.netMargin ?? null },
       ],
     },
@@ -279,51 +279,57 @@ export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl
               </thead>
               <tbody>
                 <tr className="pn-section"><td colSpan={bsColumns.length + 2}>TỔNG TÀI SẢN</td></tr>
-                <BsGroup label="TÀI SẢN NGẮN HẠN" rows={tsnhRows} fmtS={fmtS} />
-                <BsGroup label="TÀI SẢN DÀI HẠN" rows={tsdhRows} fmtS={fmtS} />
                 <tr className="bold">
                   <td colSpan={2} className="lbl">{tongTaiSanRow.label}</td>
                   {tongTaiSanRow.values.map((v, ci) => <td key={ci} className="num">{fmtS(v)}</td>)}
                 </tr>
+                <BsGroup label="TÀI SẢN NGẮN HẠN" rows={tsnhRows} fmtS={fmtS} />
+                <BsGroup label="TÀI SẢN DÀI HẠN" rows={tsdhRows} fmtS={fmtS} />
                 <tr className="pn-section nv"><td colSpan={bsColumns.length + 2}>TỔNG NGUỒN VỐN</td></tr>
-                <BsGroup label="NỢ" rows={noRows} fmtS={fmtS} />
-                <BsGroup label="VỐN CHỦ SỞ HỮU" rows={vcshRows} fmtS={fmtS} />
                 <tr className="bold">
                   <td colSpan={2} className="lbl">{tongNguonVonRow.label}</td>
                   {tongNguonVonRow.values.map((v, ci) => <td key={ci} className="num">{fmtS(v)}</td>)}
                 </tr>
+                <BsGroup label="NỢ" rows={noRows} fmtS={fmtS} />
+                <BsGroup label="VỐN CHỦ SỞ HỮU" rows={vcshRows} fmtS={fmtS} />
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
-      <div className="panel">
-        <div className="panel-h"><span>📐 Chỉ số tài chính cơ bản</span><span>Năm {year}{hasPrevYear ? ` so Năm ${prevYear}` : ''}</span></div>
-        <div className="panel-b" style={{ overflowX: 'auto' }}>
-          <table className="stbl">
-            <thead>
-              <tr><th className="lbl">Chỉ tiêu</th><th className="num">Năm {year}</th>{hasPrevYear && <th className="num">Năm {prevYear}</th>}<th className="lbl">Ngưỡng tham khảo</th></tr>
-            </thead>
-            <tbody>
-              {ratioGroups.map(g => (
-                <Fragment key={g.title}>
-                  <tr className="grp"><td colSpan={hasPrevYear ? 4 : 3}>{g.title}</td></tr>
+      <div className="pn-ratio-h">
+        <span>📐 Chỉ số tài chính cơ bản</span>
+        <span>Năm {year}{hasPrevYear ? ` so Năm ${prevYear}` : ''}</span>
+      </div>
+      <div className="grid3" style={{ marginBottom: 0 }}>
+        {ratioGroups.map(g => (
+          <div className="panel" key={g.title} style={{ marginBottom: 0 }}>
+            <div className="panel-h"><span>{g.title}</span></div>
+            <div className="panel-b">
+              <table className="stbl pn-ratio-tbl">
+                <thead>
+                  <tr><th className="lbl" /><th className="num">{year}</th>{hasPrevYear && <th className="num">{prevYear}</th>}</tr>
+                </thead>
+                <tbody>
                   {g.rows.map(r => (
                     <tr key={r.label}>
-                      <td className="lbl">{r.label}</td>
+                      <td className="lbl">
+                        <div className="pn-ratio-label">{r.label}</div>
+                        {r.formula && <div className="pn-ratio-meta">{r.formula}</div>}
+                        <div className="pn-ratio-meta pn-ratio-note">{r.note}</div>
+                      </td>
                       <td className="num">{fmtRatio(r.kind, r.cur)}</td>
                       {hasPrevYear && <td className="num">{r.prev == null ? '–' : fmtRatio(r.kind, r.prev)}</td>}
-                      <td className="lbl" style={{ color: '#9CA3AF', fontSize: 10 }}>{r.note}</td>
                     </tr>
                   ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-          {!hasPrevYear && <div style={{ fontSize: 10.5, color: '#9CA3AF', marginTop: 6 }}>Chưa có dữ liệu Năm {prevYear} để so sánh.</div>}
-        </div>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
+      {!hasPrevYear && <div style={{ fontSize: 10.5, color: '#9CA3AF', marginTop: 6 }}>Chưa có dữ liệu Năm {prevYear} để so sánh.</div>}
     </>
   )
 }
