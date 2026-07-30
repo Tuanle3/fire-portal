@@ -250,14 +250,18 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
             </button>
           ))}
         </div>
-        <div className="tb-vsep" />
-        <span className="tb-flabel">Đơn vị</span>
-        <div className="tb-pillgroup">
-          <button className={`tb-pill${donViKey === ALL_DONVI ? ' act' : ''}`} onClick={() => setDonViKey(ALL_DONVI)}>Hợp nhất</button>
-          {donViList.map(d => (
-            <button key={d.key} className={`tb-pill${donViKey === d.key ? ' act' : ''}`} onClick={() => setDonViKey(d.key)}>{d.label}</button>
-          ))}
-        </div>
+        {tab !== 'doc' && (
+          <>
+            <div className="tb-vsep" />
+            <span className="tb-flabel">Đơn vị</span>
+            <div className="tb-pillgroup">
+              <button className={`tb-pill${donViKey === ALL_DONVI ? ' act' : ''}`} onClick={() => setDonViKey(ALL_DONVI)}>Hợp nhất</button>
+              {donViList.map(d => (
+                <button key={d.key} className={`tb-pill${donViKey === d.key ? ' act' : ''}`} onClick={() => setDonViKey(d.key)}>{d.label}</button>
+              ))}
+            </div>
+          </>
+        )}
         <div className="tb-vsep" />
         <span className="tb-flabel">Kỳ</span>
         <div className="tb-pillgroup">
@@ -306,7 +310,7 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
         <TabPhanTichNgang docs={docs} donViKey={donViKey} donViLabel={donViLabel} pf={pf} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'doc' && (
-        <TabPhanTichDoc docs={docs} donViKey={donViKey} snapshotPeriod={snapshotPeriod} periods={periods} fmtS={fmtS} unitLbl={unitLbl} />
+        <TabPhanTichDoc docs={docs} donViList={donViList} snapshotPeriod={snapshotPeriod} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'congno' && (
         <TabCongNo docs={docs} donViKey={donViKey} period={snapshotPeriod} snapshot={computeSnapshot(docs, donViKey, snapshotPeriod)} fmtS={fmtS} unitLbl={unitLbl} />
