@@ -172,6 +172,23 @@ const STYLE = `
   .budget-input{width:100%;border:1px solid #E0E7F0;border-radius:5px;padding:3px 6px;font-size:10.5px;font-family:inherit;text-align:right;font-variant-numeric:tabular-nums;color:#1C3557}
   .budget-input:focus{outline:2px solid var(--gold);outline-offset:-1px;border-color:var(--gold)}
   .budget-saved{font-size:9px;color:#16A34A;margin-left:3px}
+
+  .panel-b{overflow-x:auto}
+
+  /* ── Responsive (iPad và màn nhỏ hơn) — các panel 2 cột (BS/PL, so sánh công ty...) xếp chồng
+     thay vì nằm cạnh nhau để khỏi bị đè bảng, đồng thời thu nhỏ chữ cho vừa màn hình hơn. */
+  @media (max-width: 1180px) {
+    .tc{padding:12px 14px 20px;font-size:12px}
+    .grid2, .grid2-even, .pn-grid{grid-template-columns:1fr}
+    .grid3, .grid4{grid-template-columns:repeat(2,1fr)}
+    .kcard-v{font-size:16px}
+    .stbl, .rpt{font-size:10px}
+    .rpt{table-layout:auto}
+  }
+  @media (max-width: 640px) {
+    .grid3, .grid4{grid-template-columns:1fr}
+    .pn-ratio-cards{grid-template-columns:1fr}
+  }
 `
 
 export default function TaiChinhPage() {
@@ -322,7 +339,7 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
         <TabPhanTichDoc docs={docs} donViList={donViList} snapshotPeriod={snapshotPeriod} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'congno' && (
-        <TabCongNo docs={docs} donViKey={donViKey} period={snapshotPeriod} snapshot={computeSnapshot(docs, donViKey, snapshotPeriod)} fmtS={fmtS} unitLbl={unitLbl} />
+        <TabCongNo docs={docs} donViKey={donViKey} period={snapshotPeriod} periods={periods} snapshot={computeSnapshot(docs, donViKey, snapshotPeriod)} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'ngansach' && (
         <TabNganSach docs={docs} donViKey={donViKey} pf={pf} fmtS={fmtS} unitLbl={unitLbl} />

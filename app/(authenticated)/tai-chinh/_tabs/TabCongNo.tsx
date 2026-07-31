@@ -1,23 +1,41 @@
-import { FlatDoc, Snapshot, topCongNo } from '../_lib/compute'
+import { buildCongNoAlerts, computeSnapshot, congNoDsoDpo, FlatDoc, Snapshot, topCongNo } from '../_lib/compute'
 
 interface Props {
   docs: FlatDoc[]
   donViKey: string
   period: string
+  periods: string[]
   snapshot: Snapshot
   fmtS: (v: number) => string
   unitLbl: string
 }
 
-export function TabCongNo({ docs, donViKey, period, snapshot: s, fmtS, unitLbl }: Props) {
+export function TabCongNo({ docs, donViKey, period, periods, snapshot: s, fmtS, unitLbl }: Props) {
   const topAR = topCongNo(docs, 'AR', period, donViKey, 8)
   const topAP = topCongNo(docs, 'AP', period, donViKey, 8)
-  const dso = s.dtt > 0 ? (s.arBalance / s.dtt) * 30 : null
-  const dpo = s.giaVon > 0 ? (s.apBalance / s.giaVon) * 30 : null
+  const { dso, dpo } = congNoDsoDpo(s)
+  const history = periods.filter(p => p <= period).slice(-3).map(p => computeSnapshot(docs, donViKey, p))
+  const alerts = buildCongNoAlerts(s, dso, dpo, topAR, topAP, history)
 
   return (
     <>
-      <div className="grid4">
+      {alerts.length > 0 && (
+        <div className="panel">
+          <div className="panel-h"><span>🔔 Cảnh báo công nợ</span><span className="panel-badge">{alerts.length} MỤC</span></div>
+          <div className="panel-b">
+            {alerts.map((a, i) => (
+              <div key={i} className={`alert-row alert-${a.level}`}>
+                <span>{a.level === 'red' ? '🔴' : '🟡'}</span><span>{a.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {alerts.length === 0 && (
+        <div className="alert-row alert-ok">✅ Không có cảnh báo — công nợ phải thu/phải trả trong ngưỡng an toàn tham khảo.</div>
+      )}
+
+      <div className="grid4" style={{ marginTop: 14 }}>
         <div className="kcard" style={{ '--accent': '#2563EB' } as React.CSSProperties}>
           <div className="kcard-h"><span className="dot" />Công nợ phải thu (AR)</div>
           <div><span className="kcard-v">{fmtS(s.arBalance)}</span><span className="kcard-u">{unitLbl}</span></div>

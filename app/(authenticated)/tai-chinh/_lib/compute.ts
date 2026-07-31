@@ -304,3 +304,55 @@ export function topCongNo(docs: FlatDoc[], report: 'AR' | 'AP', period: string, 
   }
   return [...map.values()].filter(e => e.balance !== 0).sort((a, b) => b.balance - a.balance).slice(0, limit)
 }
+
+// DSO/DPO ước tính theo vòng quay 30 ngày — dùng chung cho card hiển thị lẫn cảnh báo để không lệch
+// công thức giữa 2 nơi.
+export function congNoDsoDpo(s: Snapshot): { dso: number | null; dpo: number | null } {
+  return {
+    dso: s.dtt > 0 ? (s.arBalance / s.dtt) * 30 : null,
+    dpo: s.giaVon > 0 ? (s.apBalance / s.giaVon) * 30 : null,
+  }
+}
+
+// Cảnh báo công nợ — dựa trên đúng dữ liệu đang có (số dư Nợ/Có theo tháng), KHÔNG có ngày đến hạn
+// hoá đơn nên không tính được "quá hạn" thật; thay bằng các dấu hiệu rủi ro suy ra được: vòng quay
+// thu/trả chậm bất thường, tập trung công nợ vào 1 khách/NCC, và phải thu phình to hơn doanh thu.
+export function buildCongNoAlerts(
+  s: Snapshot, dso: number | null, dpo: number | null,
+  topAR: TopEntry[], topAP: TopEntry[], history: Snapshot[],
+): Alert[] {
+  const alerts: Alert[] = []
+
+  if (dso != null) {
+    if (dso > 90) alerts.push({ level: 'red', text: `Vòng quay thu tiền (DSO) ước tính ${dso.toFixed(0)} ngày — khách hàng thanh toán rất chậm, rủi ro thu hồi` })
+    else if (dso > 60) alerts.push({ level: 'yellow', text: `Vòng quay thu tiền (DSO) ước tính ${dso.toFixed(0)} ngày — cần theo dõi tốc độ thu hồi công nợ` })
+  }
+
+  if (dpo != null) {
+    if (dpo > 120) alerts.push({ level: 'red', text: `Vòng quay trả tiền (DPO) ước tính ${dpo.toFixed(0)} ngày — trả NCC rất chậm, rủi ro ảnh hưởng quan hệ nhà cung cấp` })
+    else if (dpo > 90) alerts.push({ level: 'yellow', text: `Vòng quay trả tiền (DPO) ước tính ${dpo.toFixed(0)} ngày — cần theo dõi` })
+  }
+
+  if (s.arBalance > 0 && topAR.length > 0) {
+    const pct = topAR[0].balance / s.arBalance
+    if (pct > 0.6) alerts.push({ level: 'red', text: `${topAR[0].name || topAR[0].code} chiếm ${(pct * 100).toFixed(0)}% tổng phải thu — rủi ro tập trung vào 1 khách hàng` })
+    else if (pct > 0.4) alerts.push({ level: 'yellow', text: `${topAR[0].name || topAR[0].code} chiếm ${(pct * 100).toFixed(0)}% tổng phải thu — cần theo dõi mức độ tập trung` })
+  }
+
+  if (s.apBalance > 0 && topAP.length > 0) {
+    const pct = topAP[0].balance / s.apBalance
+    if (pct > 0.6) alerts.push({ level: 'red', text: `${topAP[0].name || topAP[0].code} chiếm ${(pct * 100).toFixed(0)}% tổng phải trả — rủi ro phụ thuộc vào 1 nhà cung cấp` })
+    else if (pct > 0.4) alerts.push({ level: 'yellow', text: `${topAP[0].name || topAP[0].code} chiếm ${(pct * 100).toFixed(0)}% tổng phải trả — cần theo dõi mức độ tập trung` })
+  }
+
+  const last3 = history.slice(-3)
+  if (last3.length === 3 && last3[2].arBalance > last3[1].arBalance && last3[1].arBalance > last3[0].arBalance && last3[2].dtt <= last3[0].dtt) {
+    alerts.push({ level: 'yellow', text: 'Công nợ phải thu tăng liên tục 3 kỳ trong khi doanh thu không tăng tương ứng — rủi ro thu hồi' })
+  }
+
+  if (s.vcsh > 0 && s.arBalance - s.apBalance < 0 && Math.abs(s.arBalance - s.apBalance) > 0.2 * s.vcsh) {
+    alerts.push({ level: 'yellow', text: 'Đang bị đối tác chiếm dụng vốn đáng kể so với vốn chủ sở hữu — ảnh hưởng dòng tiền' })
+  }
+
+  return alerts
+}
