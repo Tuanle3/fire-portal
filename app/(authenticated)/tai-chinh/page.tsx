@@ -234,7 +234,16 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
   const [tab, setTab] = useState<TabKey>('tongquan')
   const pf = usePeriodFilter(periods, defaultMonth)
 
-  const snapshotPeriod = pf.selectedPeriods[pf.selectedPeriods.length - 1] ?? ''
+  // Kỳ chốt snapshot (BS + card tổng quan) = kỳ gần nhất THỰC SỰ có số liệu trong khoảng đã chọn —
+  // không phải kỳ cuối cùng theo lịch, vì lọc Năm/Quý có thể kéo dài tới các tháng tương lai còn
+  // trống trong Sheet (xem hasSnapshotData ở compute.ts), khiến toàn bộ bảng ra "-"/0%.
+  const snapshotPeriod = useMemo(() => {
+    const sel = pf.selectedPeriods
+    for (let i = sel.length - 1; i >= 0; i--) {
+      if (hasSnapshotData(computeSnapshot(docs, ALL_DONVI, sel[i]))) return sel[i]
+    }
+    return sel[sel.length - 1] ?? ''
+  }, [docs, pf.selectedPeriods])
   const { fmtS, unitLbl } = moneyFmt(unit)
   const donViLabel = donViKey === ALL_DONVI ? 'Hợp nhất Sơn An Group' : (donViList.find(d => d.key === donViKey)?.label ?? donViKey)
 

@@ -197,7 +197,12 @@ body {
   .topbar { padding: 0 10px; gap: 4px; }
   .topbar-brand-name { font-size: 12px; }
   .topbar-brand-tag { display: none; }
-  .topbar-left { display: none; }
+  .topbar-left {
+    flex: 1 1 auto; min-width: 0; margin-right: 8px;
+    overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .topbar-left::-webkit-scrollbar { display: none; }
   .chpw-btn, .logout-btn { padding: 4px 8px; font-size: 11px; }
 }
 
