@@ -20,10 +20,21 @@ export function flattenBctc(raw: RawBctc | null | undefined): FlatDoc[] {
   return out
 }
 
+// Chỉ liệt kê donVi có ít nhất 1 báo cáo BS/PL thật — một công ty luôn phải có bảng cân đối/KQKD.
+// Phòng trường hợp Sheet AR/AP lỗi layout từng khiến dòng tên cột (vd "Đơn vị") bị đọc nhầm thành 1
+// "công ty" ảo chỉ có mỗi báo cáo AR/AP rỗng (đã sửa ở bctc-parse.ts, nhưng dữ liệu cũ có thể còn
+// sót trong Firebase) — lọc theo tiêu chí này để chắc chắn không hiện lại dù dữ liệu cũ chưa dọn.
 export function listDonVi(docs: FlatDoc[]): DonViInfo[] {
   const map = new Map<string, string>()
-  for (const d of docs) map.set(d.donViKey, d.donVi)
-  return [...map.entries()].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label))
+  const hasFinancials = new Set<string>()
+  for (const d of docs) {
+    map.set(d.donViKey, d.donVi)
+    if (d.report === 'BS' || d.report === 'PL') hasFinancials.add(d.donViKey)
+  }
+  return [...map.entries()]
+    .filter(([key]) => hasFinancials.has(key))
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.label.localeCompare(b.label))
 }
 
 export function listPeriods(docs: FlatDoc[]): string[] {
@@ -286,11 +297,13 @@ export function groupBsItems(items: LineItem[]): BsGroupNode[] {
   return nodes
 }
 
-export interface TopEntry { code: string; name: string; balance: number }
+export interface TopEntry { code: string; name: string; balance: number; donVi: string }
 
-// Top khách nợ (AR, balance = Nợ - Có) hoặc top NCC (AP, balance = Có - Nợ) tại 1 kỳ
+// Top khách nợ (AR, balance = Nợ - Có) hoặc top NCC (AP, balance = Có - Nợ) tại 1 kỳ — kèm nhãn đơn
+// vị (ghép nhiều tên nếu cùng mã khách/NCC xuất hiện ở >1 công ty) để xem ở góc nhìn Hợp nhất vẫn
+// biết được khoản công nợ đó thuộc đơn vị nào.
 export function topCongNo(docs: FlatDoc[], report: 'AR' | 'AP', period: string, donViKey: string, limit = 8): TopEntry[] {
-  const map = new Map<string, TopEntry>()
+  const map = new Map<string, { code: string; name: string; balance: number; donViSet: Set<string> }>()
   for (const d of docs) {
     if (d.report !== report || d.period !== period) continue
     if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
@@ -299,13 +312,19 @@ export function topCongNo(docs: FlatDoc[], report: 'AR' | 'AP', period: string, 
       if (!row.maDoiTuong) continue
       const key = row.maDoiTuong
       const prev = map.get(key)
-      map.set(key, { code: key, name: row.tenDoiTuong, balance: (prev?.balance ?? 0) + balance })
+      const donViSet = prev?.donViSet ?? new Set<string>()
+      donViSet.add(d.donVi)
+      map.set(key, { code: key, name: row.tenDoiTuong, balance: (prev?.balance ?? 0) + balance, donViSet })
     }
   }
-  return [...map.values()].filter(e => e.balance !== 0).sort((a, b) => b.balance - a.balance).slice(0, limit)
+  return [...map.values()]
+    .filter(e => e.balance !== 0)
+    .map(e => ({ code: e.code, name: e.name, balance: e.balance, donVi: [...e.donViSet].sort().join(', ') }))
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, limit)
 }
 
-export interface DebtAgingEntry { code: string; name: string; balance: number; monthsUnchanged: number }
+export interface DebtAgingEntry { code: string; name: string; balance: number; monthsUnchanged: number; donVi: string }
 
 // Công nợ "đứng yên" nhiều tháng — dư nợ cuối kỳ giữ NGUYÊN qua nhiều tháng liên tiếp nghĩa là
 // không có khoản thu/chi nào phát sinh với khách/NCC đó, dấu hiệu tồn đọng rõ ràng hơn hẳn DSO/DPO
@@ -322,6 +341,7 @@ export function debtAging(
 
   const byEntity = new Map<string, Map<string, number>>()
   const nameOf = new Map<string, string>()
+  const donViOf = new Map<string, Set<string>>()
   for (const d of docs) {
     if (d.report !== report) continue
     if (!relevantPeriods.includes(d.period)) continue
@@ -333,6 +353,9 @@ export function debtAging(
       perPeriod.set(d.period, (perPeriod.get(d.period) ?? 0) + balance)
       byEntity.set(row.maDoiTuong, perPeriod)
       if (row.tenDoiTuong) nameOf.set(row.maDoiTuong, row.tenDoiTuong)
+      const donViSet = donViOf.get(row.maDoiTuong) ?? new Set<string>()
+      donViSet.add(d.donVi)
+      donViOf.set(row.maDoiTuong, donViSet)
     }
   }
 
@@ -346,7 +369,12 @@ export function debtAging(
       if (v === undefined || v !== cur) break
       months++
     }
-    if (months >= minMonths) out.push({ code, name: nameOf.get(code) ?? code, balance: cur, monthsUnchanged: months })
+    if (months >= minMonths) {
+      out.push({
+        code, name: nameOf.get(code) ?? code, balance: cur, monthsUnchanged: months,
+        donVi: [...(donViOf.get(code) ?? [])].sort().join(', '),
+      })
+    }
   }
   return out.sort((a, b) => b.monthsUnchanged - a.monthsUnchanged || b.balance - a.balance)
 }

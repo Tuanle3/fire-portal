@@ -1,4 +1,5 @@
-import { buildCongNoAlerts, computeSnapshot, congNoDsoDpo, DebtAgingEntry, debtAging, FlatDoc, Snapshot, topCongNo } from '../_lib/compute'
+import { buildCongNoAlerts, computeSnapshot, congNoDsoDpo, DebtAgingEntry, debtAging, FlatDoc, Snapshot, topCongNo, TopEntry } from '../_lib/compute'
+import { ALL_DONVI } from '../_lib/types'
 
 interface Props {
   docs: FlatDoc[]
@@ -17,8 +18,42 @@ function actionBadge(months: number, kind: 'AR' | 'AP') {
   return <span className="badge badge-warn">🟡 {kind === 'AR' ? 'Cần nhắc nợ' : 'Cần rà soát'}</span>
 }
 
-function AgingTable({ title, icon, kind, rows, fmtS }: {
-  title: string; icon: string; kind: 'AR' | 'AP'; rows: DebtAgingEntry[]; fmtS: (v: number) => string
+// showDonVi: chỉ hiện cột Đơn vị khi đang xem Hợp nhất — lọc theo 1 đơn vị rồi thì cột này luôn ra
+// cùng 1 giá trị, thừa thông tin.
+function TopTable({ title, icon, kind, rows, showDonVi, fmtS }: {
+  title: string; icon: string; kind: 'AR' | 'AP'; rows: TopEntry[]; showDonVi: boolean; fmtS: (v: number) => string
+}) {
+  return (
+    <div className="panel" style={{ marginBottom: 0 }}>
+      <div className="panel-h"><span>{icon} {title}</span><span>{rows.length} {kind === 'AR' ? 'khách' : 'NCC'}</span></div>
+      <div className="panel-b">
+        {rows.length === 0 ? <div style={{ color: '#9CA3AF', fontSize: 12.5 }}>Không có dư nợ</div> : (
+          <table className="stbl">
+            <thead>
+              <tr>
+                <th className="lbl">{kind === 'AR' ? 'Khách hàng' : 'Nhà cung cấp'}</th>
+                {showDonVi && <th className="lbl">Đơn vị</th>}
+                <th className="num">Dư nợ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(t => (
+                <tr key={t.code}>
+                  <td className="lbl">{t.name || t.code}</td>
+                  {showDonVi && <td className="lbl">{t.donVi}</td>}
+                  <td className="num">{fmtS(t.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AgingTable({ title, icon, kind, rows, showDonVi, fmtS }: {
+  title: string; icon: string; kind: 'AR' | 'AP'; rows: DebtAgingEntry[]; showDonVi: boolean; fmtS: (v: number) => string
 }) {
   return (
     <div className="panel" style={{ marginBottom: 0 }}>
@@ -28,11 +63,18 @@ function AgingTable({ title, icon, kind, rows, fmtS }: {
           <div style={{ color: '#9CA3AF', fontSize: 12.5 }}>Không có khoản nào tồn đọng ≥3 tháng</div>
         ) : (
           <table className="stbl">
-            <thead><tr><th className="lbl">{kind === 'AR' ? 'Khách hàng' : 'Nhà cung cấp'}</th><th className="num">Dư nợ</th><th className="num">Số tháng chưa đổi</th><th className="lbl">Hành động</th></tr></thead>
+            <thead>
+              <tr>
+                <th className="lbl">{kind === 'AR' ? 'Khách hàng' : 'Nhà cung cấp'}</th>
+                {showDonVi && <th className="lbl">Đơn vị</th>}
+                <th className="num">Dư nợ</th><th className="num">Số tháng chưa đổi</th><th className="lbl">Hành động</th>
+              </tr>
+            </thead>
             <tbody>
               {rows.map(t => (
                 <tr key={t.code}>
                   <td className="lbl">{t.name || t.code}</td>
+                  {showDonVi && <td className="lbl">{t.donVi}</td>}
                   <td className="num">{fmtS(t.balance)}</td>
                   <td className="num">{t.monthsUnchanged}</td>
                   <td className="lbl">{actionBadge(t.monthsUnchanged, kind)}</td>
@@ -47,6 +89,7 @@ function AgingTable({ title, icon, kind, rows, fmtS }: {
 }
 
 export function TabCongNo({ docs, donViKey, period, periods, snapshot: s, fmtS, unitLbl }: Props) {
+  const showDonVi = donViKey === ALL_DONVI
   const topAR = topCongNo(docs, 'AR', period, donViKey, 8)
   const topAP = topCongNo(docs, 'AP', period, donViKey, 8)
   const { dso, dpo } = congNoDsoDpo(s)
@@ -97,42 +140,13 @@ export function TabCongNo({ docs, donViKey, period, periods, snapshot: s, fmtS, 
       </div>
 
       <div className="grid2">
-        <div className="panel" style={{ marginBottom: 0 }}>
-          <div className="panel-h"><span>🧾 Top khách nợ (phải thu)</span><span>{topAR.length} khách</span></div>
-          <div className="panel-b">
-            {topAR.length === 0 ? <div style={{ color: '#9CA3AF', fontSize: 12.5 }}>Không có dư nợ</div> : (
-              <table className="stbl">
-                <thead><tr><th className="lbl">Khách hàng</th><th className="num">Dư nợ</th></tr></thead>
-                <tbody>
-                  {topAR.map(t => (
-                    <tr key={t.code}><td className="lbl">{t.name || t.code}</td><td className="num">{fmtS(t.balance)}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-        <div className="panel" style={{ marginBottom: 0 }}>
-          <div className="panel-h"><span>🏭 Top nhà cung cấp (phải trả)</span><span>{topAP.length} NCC</span></div>
-          <div className="panel-b">
-            {topAP.length === 0 ? <div style={{ color: '#9CA3AF', fontSize: 12.5 }}>Không có dư nợ</div> : (
-              <table className="stbl">
-                <thead><tr><th className="lbl">Nhà cung cấp</th><th className="num">Dư nợ</th></tr></thead>
-                <tbody>
-                  {topAP.map(t => (
-                    <tr key={t.code}><td className="lbl">{t.name || t.code}</td><td className="num">{fmtS(t.balance)}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
+        <TopTable title="Top khách nợ (phải thu)" icon="🧾" kind="AR" rows={topAR} showDonVi={showDonVi} fmtS={fmtS} />
+        <TopTable title="Top nhà cung cấp (phải trả)" icon="🏭" kind="AP" rows={topAP} showDonVi={showDonVi} fmtS={fmtS} />
       </div>
 
       <div className="grid2-even">
-        <AgingTable title="Phải thu tồn đọng ≥3 tháng" icon="⏳" kind="AR" rows={arAging} fmtS={fmtS} />
-        <AgingTable title="Phải trả tồn đọng ≥3 tháng" icon="⏳" kind="AP" rows={apAging} fmtS={fmtS} />
+        <AgingTable title="Phải thu tồn đọng ≥3 tháng" icon="⏳" kind="AR" rows={arAging} showDonVi={showDonVi} fmtS={fmtS} />
+        <AgingTable title="Phải trả tồn đọng ≥3 tháng" icon="⏳" kind="AP" rows={apAging} showDonVi={showDonVi} fmtS={fmtS} />
       </div>
     </>
   )
