@@ -305,6 +305,52 @@ export function topCongNo(docs: FlatDoc[], report: 'AR' | 'AP', period: string, 
   return [...map.values()].filter(e => e.balance !== 0).sort((a, b) => b.balance - a.balance).slice(0, limit)
 }
 
+export interface DebtAgingEntry { code: string; name: string; balance: number; monthsUnchanged: number }
+
+// Công nợ "đứng yên" nhiều tháng — dư nợ cuối kỳ giữ NGUYÊN qua nhiều tháng liên tiếp nghĩa là
+// không có khoản thu/chi nào phát sinh với khách/NCC đó, dấu hiệu tồn đọng rõ ràng hơn hẳn DSO/DPO
+// bình quân (vốn bị pha loãng bởi các khách quay vòng nhanh). Đếm ngược từ kỳ đang xem: dư nợ phải
+// GIỐNG HỆT kỳ hiện tại thì mới tính là "chưa phát sinh" — dư nợ tăng/giảm dù nhỏ vẫn coi là có phát
+// sinh, dừng đếm; thiếu dữ liệu 1 kỳ (khách không xuất hiện trong Sheet tháng đó) cũng dừng đếm vì
+// không chắc chắn được dư nợ có đổi hay không.
+export function debtAging(
+  docs: FlatDoc[], report: 'AR' | 'AP', donViKey: string, periods: string[], asOfPeriod: string, minMonths = 3,
+): DebtAgingEntry[] {
+  const relevantPeriods = periods.filter(p => p <= asOfPeriod).sort()
+  const idx = relevantPeriods.indexOf(asOfPeriod)
+  if (idx === -1) return []
+
+  const byEntity = new Map<string, Map<string, number>>()
+  const nameOf = new Map<string, string>()
+  for (const d of docs) {
+    if (d.report !== report) continue
+    if (!relevantPeriods.includes(d.period)) continue
+    if (donViKey !== ALL_DONVI && d.donViKey !== donViKey) continue
+    for (const row of d.rows as BctcArApRow[]) {
+      if (!row.maDoiTuong) continue
+      const balance = report === 'AR' ? row.no - row.co : row.co - row.no
+      const perPeriod = byEntity.get(row.maDoiTuong) ?? new Map<string, number>()
+      perPeriod.set(d.period, (perPeriod.get(d.period) ?? 0) + balance)
+      byEntity.set(row.maDoiTuong, perPeriod)
+      if (row.tenDoiTuong) nameOf.set(row.maDoiTuong, row.tenDoiTuong)
+    }
+  }
+
+  const out: DebtAgingEntry[] = []
+  for (const [code, perPeriod] of byEntity) {
+    const cur = perPeriod.get(asOfPeriod) ?? 0
+    if (cur === 0) continue
+    let months = 1
+    for (let i = idx - 1; i >= 0; i--) {
+      const v = perPeriod.get(relevantPeriods[i])
+      if (v === undefined || v !== cur) break
+      months++
+    }
+    if (months >= minMonths) out.push({ code, name: nameOf.get(code) ?? code, balance: cur, monthsUnchanged: months })
+  }
+  return out.sort((a, b) => b.monthsUnchanged - a.monthsUnchanged || b.balance - a.balance)
+}
+
 // DSO/DPO ước tính theo vòng quay 30 ngày — dùng chung cho card hiển thị lẫn cảnh báo để không lệch
 // công thức giữa 2 nơi.
 export function congNoDsoDpo(s: Snapshot): { dso: number | null; dpo: number | null } {
@@ -320,8 +366,24 @@ export function congNoDsoDpo(s: Snapshot): { dso: number | null; dpo: number | n
 export function buildCongNoAlerts(
   s: Snapshot, dso: number | null, dpo: number | null,
   topAR: TopEntry[], topAP: TopEntry[], history: Snapshot[],
+  arAging: DebtAgingEntry[] = [], apAging: DebtAgingEntry[] = [],
 ): Alert[] {
   const alerts: Alert[] = []
+
+  if (arAging.length > 0) {
+    const worst = arAging[0].monthsUnchanged
+    alerts.push({
+      level: worst >= 6 ? 'red' : 'yellow',
+      text: `${arAging.length} khách hàng có dư nợ phải thu không đổi ≥3 tháng (cao nhất ${worst} tháng, "${arAging[0].name}") — cần lên kế hoạch thu hồi, xem chi tiết bên dưới`,
+    })
+  }
+  if (apAging.length > 0) {
+    const worst = apAging[0].monthsUnchanged
+    alerts.push({
+      level: worst >= 6 ? 'red' : 'yellow',
+      text: `${apAging.length} nhà cung cấp có dư nợ phải trả không đổi ≥3 tháng (cao nhất ${worst} tháng, "${apAging[0].name}") — cần rà soát lý do chưa thanh toán, xem chi tiết bên dưới`,
+    })
+  }
 
   if (dso != null) {
     if (dso > 90) alerts.push({ level: 'red', text: `Vòng quay thu tiền (DSO) ước tính ${dso.toFixed(0)} ngày — khách hàng thanh toán rất chậm, rủi ro thu hồi` })

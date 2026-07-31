@@ -1,4 +1,4 @@
-import { buildCongNoAlerts, computeSnapshot, congNoDsoDpo, FlatDoc, Snapshot, topCongNo } from '../_lib/compute'
+import { buildCongNoAlerts, computeSnapshot, congNoDsoDpo, DebtAgingEntry, debtAging, FlatDoc, Snapshot, topCongNo } from '../_lib/compute'
 
 interface Props {
   docs: FlatDoc[]
@@ -10,12 +10,50 @@ interface Props {
   unitLbl: string
 }
 
+// Khoản còn đứng yên 3-5 tháng cần nhắc/theo dõi; ≥6 tháng coi là rủi ro cao, cần xử lý ngay
+// (đòi/đàm phán hoặc cân nhắc trích lập dự phòng nợ khó đòi với AR).
+function actionBadge(months: number, kind: 'AR' | 'AP') {
+  if (months >= 6) return <span className="badge badge-bad">🔴 Xử lý ngay</span>
+  return <span className="badge badge-warn">🟡 {kind === 'AR' ? 'Cần nhắc nợ' : 'Cần rà soát'}</span>
+}
+
+function AgingTable({ title, icon, kind, rows, fmtS }: {
+  title: string; icon: string; kind: 'AR' | 'AP'; rows: DebtAgingEntry[]; fmtS: (v: number) => string
+}) {
+  return (
+    <div className="panel" style={{ marginBottom: 0 }}>
+      <div className="panel-h"><span>{icon} {title}</span><span>{rows.length} {kind === 'AR' ? 'khách' : 'NCC'}</span></div>
+      <div className="panel-b">
+        {rows.length === 0 ? (
+          <div style={{ color: '#9CA3AF', fontSize: 12.5 }}>Không có khoản nào tồn đọng ≥3 tháng</div>
+        ) : (
+          <table className="stbl">
+            <thead><tr><th className="lbl">{kind === 'AR' ? 'Khách hàng' : 'Nhà cung cấp'}</th><th className="num">Dư nợ</th><th className="num">Số tháng chưa đổi</th><th className="lbl">Hành động</th></tr></thead>
+            <tbody>
+              {rows.map(t => (
+                <tr key={t.code}>
+                  <td className="lbl">{t.name || t.code}</td>
+                  <td className="num">{fmtS(t.balance)}</td>
+                  <td className="num">{t.monthsUnchanged}</td>
+                  <td className="lbl">{actionBadge(t.monthsUnchanged, kind)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function TabCongNo({ docs, donViKey, period, periods, snapshot: s, fmtS, unitLbl }: Props) {
   const topAR = topCongNo(docs, 'AR', period, donViKey, 8)
   const topAP = topCongNo(docs, 'AP', period, donViKey, 8)
   const { dso, dpo } = congNoDsoDpo(s)
   const history = periods.filter(p => p <= period).slice(-3).map(p => computeSnapshot(docs, donViKey, p))
-  const alerts = buildCongNoAlerts(s, dso, dpo, topAR, topAP, history)
+  const arAging = debtAging(docs, 'AR', donViKey, periods, period)
+  const apAging = debtAging(docs, 'AP', donViKey, periods, period)
+  const alerts = buildCongNoAlerts(s, dso, dpo, topAR, topAP, history, arAging, apAging)
 
   return (
     <>
@@ -90,6 +128,11 @@ export function TabCongNo({ docs, donViKey, period, periods, snapshot: s, fmtS, 
             )}
           </div>
         </div>
+      </div>
+
+      <div className="grid2-even">
+        <AgingTable title="Phải thu tồn đọng ≥3 tháng" icon="⏳" kind="AR" rows={arAging} fmtS={fmtS} />
+        <AgingTable title="Phải trả tồn đọng ≥3 tháng" icon="⏳" kind="AP" rows={apAging} fmtS={fmtS} />
       </div>
     </>
   )
