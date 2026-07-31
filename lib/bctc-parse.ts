@@ -36,9 +36,13 @@ function periodFromHeader(cell: string): string {
 }
 
 interface MonthCol { period: string; valueCol: number; noCol?: number; coCol?: number }
-interface HeaderInfo { headerRow: number; dataStart: number; monthCols: MonthCol[] }
+interface HeaderInfo { headerRow: number; labelRow: number; dataStart: number; monthCols: MonthCol[] }
 
 // Dò dòng header (chứa cell "Tháng MM/YYYY") và xác định layout 1 cột/tháng hay 2 cột (Nợ/Có)/tháng.
+// Sheet Data_AR/Data_AP có 2 dòng header xếp chồng: dòng "Tháng MM/YYYY" (gộp ô) rồi tới dòng tên
+// cột cố định (Đơn vị/Code/Mã KH.../TK Công nợ) + nhãn phụ mỗi tháng — nhãn phụ không phải "Nợ"/"Có"
+// trơn mà ghép cả kỳ ("12/2025 - Nợ") nên so khớp tuyệt đối cũ luôn ra false → coi nhầm là layout 1
+// cột, đẩy dataStart lệch 1 dòng (ăn luôn dòng tên cột làm dòng dữ liệu ảo) và Nợ/Có luôn đọc ra 0.
 function detectHeader(sheet: Sheet): HeaderInfo | null {
   let headerRow = -1
   for (let r = 0; r < Math.min(sheet.length, 8); r++) {
@@ -57,14 +61,17 @@ function detectHeader(sheet: Sheet): HeaderInfo | null {
   const isTwoCol = starts.some(s => {
     const a = String(subRow[s.col] ?? '').trim().toLowerCase()
     const b = String(subRow[s.col + 1] ?? '').trim().toLowerCase()
-    return a === 'nợ' && b === 'có'
+    return a.endsWith('nợ') && b.endsWith('có')
   })
 
   const monthCols: MonthCol[] = isTwoCol
     ? starts.map(s => ({ period: s.period, valueCol: s.col, noCol: s.col, coCol: s.col + 1 }))
     : starts.map(s => ({ period: s.period, valueCol: s.col }))
 
-  return { headerRow, dataStart: headerRow + (isTwoCol ? 2 : 1), monthCols }
+  // Tên cột cố định (Đơn vị/Code/Mã.../TK Công nợ) nằm cùng dòng với nhãn phụ Nợ/Có khi có 2 dòng
+  // header — dòng "Tháng..." phía trên luôn để trống các cột này.
+  const labelRow = isTwoCol ? headerRow + 1 : headerRow
+  return { headerRow, labelRow, dataStart: headerRow + (isTwoCol ? 2 : 1), monthCols }
 }
 
 function num(v: Cell): number {
@@ -95,7 +102,7 @@ function groupDocs(report: BctcReport, entries: { donVi: string; period: string;
 function parsePL(sheet: Sheet): BctcPeriodDoc[] {
   const h = detectHeader(sheet)
   if (!h) return []
-  const header = sheet[h.headerRow]
+  const header = sheet[h.labelRow]
   const colCode   = findCol(header, n => n === 'code')
   const colChiTieu = findCol(header, n => n === 'sotaikhoan')
   const colMaSo   = findCol(header, n => n === 'maso')
@@ -123,7 +130,7 @@ function parsePL(sheet: Sheet): BctcPeriodDoc[] {
 function parseBS(sheet: Sheet): BctcPeriodDoc[] {
   const h = detectHeader(sheet)
   if (!h) return []
-  const header = sheet[h.headerRow]
+  const header = sheet[h.labelRow]
   const colCode    = findCol(header, n => n === 'code')
   const colChiTieu = findCol(header, n => n === 'chitieu')
   const colMaSo    = findCol(header, n => n.startsWith('ma') && !n.includes('khach') && !n.includes('cungcap') && !n.includes('ncc'))
@@ -151,7 +158,7 @@ function parseBS(sheet: Sheet): BctcPeriodDoc[] {
 function parseTB(sheet: Sheet): BctcPeriodDoc[] {
   const h = detectHeader(sheet)
   if (!h) return []
-  const header = sheet[h.headerRow]
+  const header = sheet[h.labelRow]
   const colCode        = findCol(header, n => n === 'code')
   const colSoTaiKhoan  = findCol(header, n => n === 'sotaikhoan')
   const colCap         = findCol(header, n => n === 'cap')
@@ -179,10 +186,12 @@ function parseTB(sheet: Sheet): BctcPeriodDoc[] {
 function parseArAp(sheet: Sheet, report: 'AR' | 'AP'): BctcPeriodDoc[] {
   const h = detectHeader(sheet)
   if (!h) return []
-  const header = sheet[h.headerRow]
+  const header = sheet[h.labelRow]
+  // "Mã KH"/"Tên KH" (AR) và "Mã NCC"/"Tên NCC" (AP) đều viết tắt trong Sheet thật, không phải
+  // "khách hàng"/"nhà cung cấp" đầy đủ — so khớp cả dạng rút gọn "kh"/"ncc".
   const colCode        = findCol(header, n => n === 'code')
-  const colMaDoiTuong  = findCol(header, n => n.startsWith('ma') && (n.includes('khach') || n.includes('cungcap') || n.includes('ncc')))
-  const colTenDoiTuong = findCol(header, n => n.startsWith('ten') && (n.includes('khach') || n.includes('cungcap') || n.includes('ncc')))
+  const colMaDoiTuong  = findCol(header, n => n.startsWith('ma') && (n.includes('kh') || n.includes('cungcap') || n.includes('ncc')))
+  const colTenDoiTuong = findCol(header, n => n.startsWith('ten') && (n.includes('kh') || n.includes('cungcap') || n.includes('ncc')))
   const colTkCongNo    = findCol(header, n => n.includes('congno'))
 
   const entries: { donVi: string; period: string; row: BctcArApRow }[] = []
