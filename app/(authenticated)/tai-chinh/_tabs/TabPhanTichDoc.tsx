@@ -43,10 +43,14 @@ function CompanyValueCells({ item, base, curP, fmtS }: {
   return (
     <>
       <td className="num">{fmtS(v)}</td>
-      <td className="num" style={{ color: '#4B6A8A' }}>{p.toFixed(1)}%</td>
+      <td className="num" style={{ color: '#7C3AED', fontStyle: 'italic' }}>{p.toFixed(1)}%</td>
     </>
   )
 }
+
+// Các dòng tổng/kết quả quan trọng (DTT, Lãi gộp, LN thuần HĐKD, LN trước thuế, LN sau thuế) —
+// bôi đậm để nổi bật giữa các dòng chi tiết, cùng quy ước với Phân tích ngang (xem TabPhanTichNgang).
+const KEY_PL_MASO = new Set<string>([MS_PL.DTT, MS_PL.LAI_GOP, MS_PL.LN_THUAN_HDKD, MS_PL.LN_TRUOC_THUE, MS_PL.LN_SAU_THUE])
 
 function PlCommonSizeTable({ title, icon, rows, companies, byCompany, curP, fmtS }: {
   title: string; icon: string; rows: LineItem[]; companies: CompanyCol[]
@@ -61,7 +65,7 @@ function PlCommonSizeTable({ title, icon, rows, companies, byCompany, curP, fmtS
           <CommonSizeHead companies={companies} baseLabel="DTT" />
           <tbody>
             {rows.map(row => (
-              <tr key={row.maSo}>
+              <tr key={row.maSo} className={KEY_PL_MASO.has(row.maSo) ? 'bold' : ''}>
                 <td className="lbl">{row.chiTieu}</td>
                 {companies.map(c => (
                   <CompanyValueCells key={c.key} item={byCompany[c.key].map.get(row.maSo)} base={byCompany[c.key].base} curP={curP} fmtS={fmtS} />
