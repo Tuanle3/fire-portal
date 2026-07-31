@@ -44,7 +44,7 @@ function CompanyValueCells({ item, base, curP, fmtS }: {
   const isZero = pLabel === '0.0' || pLabel === '-0.0'
   return (
     <>
-      <td className="num">{fmtS(v)}</td>
+      <td className="num" style={{ color: v < 0 ? '#DC2626' : undefined }}>{fmtS(v)}</td>
       <td className="num" style={{ color: isZero ? '#C7CCD6' : '#7C3AED', fontStyle: isZero ? 'normal' : 'italic' }}>{pLabel}%</td>
     </>
   )
