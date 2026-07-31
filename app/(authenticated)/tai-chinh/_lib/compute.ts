@@ -272,7 +272,11 @@ export function groupBsItems(items: LineItem[]): BsGroupNode[] {
     if (level <= 1) {
       const node: BsGroupNode = { item: it, level, children: [] }
       nodes.push(node)
-      currentParent = level === 1 ? node : null
+      // Cấp 0 cũng làm currentParent: mục "D - Vốn chủ sở hữu" không có nhóm La Mã con (I./II...) mà
+      // đi thẳng vào chi tiết đánh số Ả Rập (1., 2.,...) — nếu không, các dòng này rơi hết ra ngoài
+      // thành node rời rạc, không bung/thu được như các nhóm khác. Với A/B/C có nhóm La Mã ngay sau,
+      // node La Mã đó ghi đè currentParent ngay ở vòng lặp kế tiếp nên không ảnh hưởng.
+      currentParent = node
     } else if (currentParent) {
       currentParent.children.push(it)
     } else {
