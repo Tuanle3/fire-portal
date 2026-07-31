@@ -40,10 +40,12 @@ function CompanyValueCells({ item, base, curP, fmtS }: {
 }) {
   const v = item?.values[curP] ?? 0
   const p = base !== 0 ? v / base * 100 : 0
+  const pLabel = p.toFixed(1)
+  const isZero = pLabel === '0.0' || pLabel === '-0.0'
   return (
     <>
       <td className="num">{fmtS(v)}</td>
-      <td className="num" style={{ color: '#7C3AED', fontStyle: 'italic' }}>{p.toFixed(1)}%</td>
+      <td className="num" style={{ color: isZero ? '#C7CCD6' : '#7C3AED', fontStyle: isZero ? 'normal' : 'italic' }}>{pLabel}%</td>
     </>
   )
 }
