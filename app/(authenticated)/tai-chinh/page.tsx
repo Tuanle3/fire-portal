@@ -336,7 +336,7 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
         <TabPhanTichNgang docs={docs} donViKey={donViKey} donViLabel={donViLabel} pf={pf} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'doc' && (
-        <TabPhanTichDoc docs={docs} donViList={donViList} snapshotPeriod={snapshotPeriod} fmtS={fmtS} unitLbl={unitLbl} />
+        <TabPhanTichDoc docs={docs} donViList={donViList} pf={pf} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'congno' && (
         <TabCongNo docs={docs} donViKey={donViKey} period={snapshotPeriod} periods={periods} snapshot={computeSnapshot(docs, donViKey, snapshotPeriod)} fmtS={fmtS} unitLbl={unitLbl} />
