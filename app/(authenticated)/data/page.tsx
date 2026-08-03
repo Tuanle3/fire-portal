@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 import { useDashUnit } from '@/contexts/dash-unit'
+import { exportNhatKyWord } from '@/lib/nhatky-word'
 
 type Row = Record<string, unknown>
 
@@ -68,6 +69,7 @@ export default function DataPage() {
   const [search,     setSearch]     = useState('')
   const [searchNhom, setSearchNhom] = useState('')
   const [page,       setPage]       = useState(1)
+  const [exporting,  setExporting]  = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -200,6 +202,45 @@ export default function DataPage() {
     a.click()
   }
 
+  async function exportWord() {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const filterParts: string[] = []
+      if (fUnit !== 'Tất cả') filterParts.push(`Đơn vị: ${fUnit}`)
+      if (fBank !== 'Tất cả') filterParts.push(`Ngân hàng: ${fBank}`)
+      if (fStk  !== 'Tất cả') filterParts.push(`Số TK: ${fStk}`)
+      if (fType !== 'Tất cả') filterParts.push(`Loại: ${fType}`)
+      if (search.trim())     filterParts.push(`Nội dung chứa "${search.trim()}"`)
+      if (searchNhom.trim()) filterParts.push(`Nhóm chứa "${searchNhom.trim()}"`)
+
+      await exportNhatKyWord({
+        unit,
+        printDate: new Date().toLocaleDateString('vi-VN'),
+        kyLabel: `${fmtD(dateFrom)} – ${fmtD(dateTo)}`,
+        cuoiKyLabel: `Tại ${fmtD(dateTo || today)}`,
+        filterLabel: filterParts.length ? filterParts.join(' · ') : undefined,
+        fileTag: `${dateFrom}_${dateTo}`,
+        rows: filtered.map(r => ({
+          ngay: fmtD(r['Ngày']),
+          donVi: String(r['Đơn_vị'] ?? ''),
+          nganHang: String(r['Ngân_hàng'] ?? ''),
+          soTk: String(r['Số_tài_khoản'] ?? ''),
+          noiDung: String(r['Nội_dung'] ?? ''),
+          nhom: String(r['Nhóm_CP'] ?? ''),
+          loai: String(r['Ghi_chu'] ?? ''),
+          soTienPS: Number(r['Số_tiền_PS'] ?? 0),
+          ton: Number(r['Tồn'] ?? 0),
+        })),
+        totalRaw: raw.length,
+        kpi,
+        cuoiKy: cuoiky,
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <>
       <style>{`
@@ -223,6 +264,7 @@ export default function DataPage() {
         .hfil:focus{border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.18);}
         .hfil[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.45;cursor:pointer;}
         .btn-csv{height:34px;padding:0 14px;background:#1C3557;color:#fff;border:none;border-radius:7px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;}
+        .btn-csv:disabled{opacity:.55;cursor:default;}
         .btn-reset{height:34px;padding:0 12px;background:#fff;color:#374151;border:1px solid #D0CCC4;border-radius:7px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;}
         .btn-reset:hover{border-color:#1C3557;color:#1C3557;}
 
@@ -285,6 +327,9 @@ export default function DataPage() {
             <input className="fil-inp" type="date" value={dateTo}   onChange={e=>setDateTo(e.target.value)}   style={{height:30,padding:'0 8px',border:'1px solid #D0CCC4',borderRadius:6,fontSize:11,fontFamily:'inherit',outline:'none',color:'#374151'}}/>
             <div style={{flex:1}}/>
             <button className="btn-csv" onClick={exportCSV}>↓ Xuất CSV</button>
+            <button className="btn-csv" onClick={exportWord} disabled={exporting}>
+              {exporting ? '⏳ Đang xuất...' : '⬇ Xuất Word'}
+            </button>
             <button className="btn-reset" onClick={reset}>↺ Reset</button>
           </div>
         </div>
