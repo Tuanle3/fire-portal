@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { getDb } from '@/lib/firebase'
 import { ref, get } from 'firebase/database'
 import { useDashUnit } from '@/contexts/dash-unit'
+import { exportBaocaoWord } from '@/lib/baocao-word'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
@@ -300,7 +301,7 @@ export default function BaocaoPage() {
   }
   const collapseAll = () => { setThuExp(new Set()); setChiExp(new Set()); setAnnChiExp(new Set()); setAnnThuExp(new Set()) }
 
-  const doExport = (format: 'pdf' | 'word') => {
+  const doExportPdf = () => {
     expandAll()
     setTimeout(() => {
       const paper = document.getElementById('bc-report-paper')
@@ -336,29 +337,50 @@ ${styles}
 </head>
 <body>
 ${paper.outerHTML}
-${format === 'pdf' ? '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print()},400)}<\/scr' + 'ipt>' : ''}
+<scr${''}ipt>window.onload=function(){setTimeout(function(){window.print()},400)}</scr${''}ipt>
 </body>
 </html>`
 
-      if (format === 'pdf') {
-        const win = window.open('', '_blank')
-        if (!win) { alert('Trình duyệt đã chặn cửa sổ mới. Vui lòng cho phép pop-up.'); return }
-        win.document.write(html)
-        win.document.close()
-      } else {
-        const blob = new Blob(['﻿', html], { type: 'application/msword' })
-        const url  = URL.createObjectURL(blob)
-        const a    = document.createElement('a')
-        a.href     = url
-        a.download = mode === 'monthly'
-          ? `BaoCao_T${String(selMonth).padStart(2,'0')}_${selYear}.doc`
-          : `BaoCao_Nam_${selYear}.doc`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      }
+      const win = window.open('', '_blank')
+      if (!win) { alert('Trình duyệt đã chặn cửa sổ mới. Vui lòng cho phép pop-up.'); return }
+      win.document.write(html)
+      win.document.close()
     }, 300)
+  }
+
+  const doExportWord = () => {
+    const printDate = new Date().toLocaleDateString('vi-VN')
+    if (mode === 'monthly') {
+      exportBaocaoWord({
+        mode: 'monthly',
+        unit,
+        printDate,
+        monthly: {
+          selMonth, selYear,
+          thuGroups: monthlyData.thuGroups,
+          chiGroups: monthlyData.chiGroups,
+          totalThu: monthlyData.totalThu,
+          totalChi: monthlyData.totalChi,
+          openBal: selOpenBal,
+          closeBal: selCloseBal,
+        },
+      })
+    } else {
+      exportBaocaoWord({
+        mode: 'annual',
+        unit,
+        printDate,
+        annual: {
+          selYear,
+          monthRows: annualData.monthRows,
+          yearOpen: annualData.yearOpen,
+          chiSuperGroups: annualData.chiSuperGroups,
+          thuNhomRows: annualData.thuNhomRows,
+          totalThu: annualData.totalThu,
+          totalChi: annualData.totalChi,
+        },
+      })
+    }
   }
 
   const mmLbl = (mm: string) => `T${mm}/${String(selYear).slice(2)}`
@@ -513,10 +535,10 @@ ${format === 'pdf' ? '<scr' + 'ipt>window.onload=function(){setTimeout(function(
           )}
 
           <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-            <button className="bc-btn bc-btn-p" onClick={() => doExport('pdf')}>
+            <button className="bc-btn bc-btn-p" onClick={doExportPdf}>
               ⬇ Xuất PDF
             </button>
-            <button className="bc-btn" onClick={() => doExport('word')}>
+            <button className="bc-btn" onClick={doExportWord}>
               ⬇ Xuất Word
             </button>
           </div>
