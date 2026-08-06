@@ -214,8 +214,12 @@ function parseArAp(sheet: Sheet, report: 'AR' | 'AP'): BctcPeriodDoc[] {
   return groupDocs(report, entries)
 }
 
+// Cho phép tên tab có hậu tố năm ("Data_PL_2025") để tách sheet theo năm — layout "mỗi tháng 1
+// cột" gộp hết mọi năm vào 1 sheet sẽ ngày càng rộng ra, nên mỗi năm giờ có sheet riêng, period
+// thật vẫn lấy từ header "Tháng M/YYYY" như cũ nên không phụ thuộc việc tách sheet này.
 export function parseTab(tab: string, values: Sheet): BctcPeriodDoc[] {
-  switch (tab) {
+  const base = tab.replace(/_\d{4}$/, '')
+  switch (base) {
     case 'Data_PL': return parsePL(values)
     case 'Data_BS': return parseBS(values)
     case 'Data_TB': return parseTB(values)

@@ -48,13 +48,17 @@ const ROLE_COLOR: Record<UserRole, { bg: string; color: string }> = {
 interface PermModule { id: string; label: string; icon: string; alwaysOn?: boolean }
 
 const MODULES: PermModule[] = [
-  { id: 'm:dashboard', label: 'Dashboard',            icon: '⊞' },
-  { id: 'm:tasks',     label: 'Công việc',             icon: '✓'  },
-  { id: 'm:finance',   label: 'Tài chính',             icon: '💰' },
-  { id: 'm:assets',    label: 'Tài sản đảm bảo',      icon: '🏦' },
-  { id: 'm:data',      label: 'Nhật ký dòng tiền',    icon: '📊' },
-  { id: 'm:dien-nuoc', label: 'Điện nước SA.ĐT',       icon: '⚡' },
-  { id: 'm:users',     label: 'Quản lý User',          icon: '👥' },
+  { id: 'm:dashboard',   label: 'Dashboard',              icon: '⊞'  },
+  { id: 'm:tasks',       label: 'Công việc',               icon: '✓'  },
+  { id: 'm:finance',     label: 'Tài chính – Kế toán',    icon: '💰' },
+  { id: 'm:assets',      label: 'Tài sản đảm bảo',        icon: '🏦' },
+  { id: 'm:data',        label: 'Nhật ký dòng tiền',      icon: '📊' },
+  { id: 'm:ngan-sach',   label: 'Ngân sách dòng tiền',    icon: '📋' },
+  { id: 'm:nganhang',    label: 'List ngân hàng',         icon: '🏛️' },
+  { id: 'm:ccn-pricing', label: 'Tính giá thuê CCN',      icon: '🏭' },
+  { id: 'm:noxh',        label: 'NOXH Nguyễn Trãi',       icon: '🏘️' },
+  { id: 'm:dien-nuoc',   label: 'Điện nước SA.ĐT',        icon: '⚡' },
+  { id: 'm:users',       label: 'Quản lý User',            icon: '👥' },
 ]
 
 const DEFAULT_PERMS: Record<UserRole, string[]> = {
@@ -158,7 +162,7 @@ function PermModal({ user, departments, onClose, onSaved }: {
     <>
       <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000 }} />
       <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
-        background:'#fff', borderRadius:12, width:820, maxWidth:'97vw', maxHeight:'92vh',
+        background:'#fff', borderRadius:12, width:960, maxWidth:'97vw', maxHeight:'92vh',
         display:'flex', flexDirection:'column', zIndex:1001, overflow:'hidden',
         boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
 
@@ -239,7 +243,7 @@ function PermModal({ user, departments, onClose, onSaved }: {
 
             {/* Section: Module chính */}
             <div style={{ fontSize:11, fontWeight:700, color:'#374151', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>Module chính</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6 }}>
               {MODULES.map(m => (
                 <PermRow key={m.id} module={m}
                   checked={perms.includes(m.id)}
