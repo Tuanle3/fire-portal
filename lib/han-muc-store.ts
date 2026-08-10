@@ -92,7 +92,7 @@ export async function saveHopDong(
   return ref.id
 }
 
-// ── Đánh dấu kỳ đã trả ─────────────────────────────────────
+// ── Đánh dấu kỳ đã trả (không tách gốc/lãi — giữ cho tương thích cũ) ──
 export async function markKyDaTra(
   hopDongId: string,
   kyId: string,
@@ -102,6 +102,82 @@ export async function markKyDaTra(
   await setDoc(doc(kyCol(hopDongId), kyId), {
     trangThai: 'da-tra', ngayThucTra, soTienThucTra, updatedAt: Date.now(),
   }, { merge: true })
+}
+
+// ── Lãi suất áp dụng cho 1 kỳ cụ thể (có tính đến ưu đãi/thả nổi) ──
+function laiSuatChoKy(hd: HopDongTinDung, ngayTraKy: Date): number {
+  if (hd.laiSuatLoai !== 'tha-noi' || !hd.soThangUuDai || hd.laiSuatSauUuDai == null) {
+    return hd.laiSuat
+  }
+  const soThangDaTrai = monthDiff(new Date(hd.ngayKy), ngayTraKy)
+  return soThangDaTrai > hd.soThangUuDai ? hd.laiSuatSauUuDai : hd.laiSuat
+}
+
+// ── Đánh dấu kỳ đã trả VỚI gốc/lãi thực tế + tự tính lại các kỳ sau ──
+// Nếu gốc thực trả khác gốc kế hoạch, dư nợ thực tế cuối kỳ sẽ chênh so với
+// kế hoạch ban đầu. Hàm này lan chênh lệch đó vào toàn bộ các kỳ CHƯA TRẢ
+// còn lại của hợp đồng, tính lại lãi/gốc/dư nợ cho từng kỳ theo đúng
+// phương thức trả gốc (giảm dần / cuối kỳ) đang áp dụng, và theo đúng
+// lãi suất áp dụng tại thời điểm của từng kỳ (có tính ưu đãi/thả nổi).
+export async function markKyDaTraThucTe(
+  hopDong: HopDongTinDung,
+  kyHienTai: KyTraNo,
+  allKy: KyTraNo[],
+  ngayThucTra: string,
+  gocThucTra: number,
+  laiThucTra: number,
+): Promise<void> {
+  const batch = writeBatch(db())
+
+  batch.set(doc(kyCol(hopDong.id), kyHienTai.id), {
+    trangThai: 'da-tra',
+    ngayThucTra,
+    gocThucTra,
+    laiThucTra,
+    soTienThucTra: gocThucTra + laiThucTra,
+    updatedAt: Date.now(),
+  }, { merge: true })
+
+  const duNoThucTeCuoiKy = Math.max(0, kyHienTai.dunNoDauKy - gocThucTra)
+  const chenhLech = duNoThucTeCuoiKy - kyHienTai.dunNoCuoiKy // >0: còn nợ nhiều hơn kế hoạch
+
+  const cacKySau = allKy
+    .filter(k => k.soKy > kyHienTai.soKy && k.trangThai !== 'da-tra')
+    .sort((a, b) => a.soKy - b.soKy)
+
+  if (chenhLech !== 0 && cacKySau.length > 0) {
+    const soKyConLai = cacKySau.length
+    const gocKyMoi = hopDong.phuongThuc === 'giam-dan'
+      ? Math.round(duNoThucTeCuoiKy / soKyConLai)
+      : 0
+    let dunNo = duNoThucTeCuoiKy
+
+    cacKySau.forEach((k, idx) => {
+      const isLast = idx === cacKySau.length - 1
+      const lsKy   = laiSuatChoKy(hopDong, new Date(k.ngayTra)) / 100 / (hopDong.kyTra === 'monthly' ? 12 : 4)
+
+      const laiTra = hopDong.phuongThuc === 'giam-dan'
+        ? Math.round(dunNo * lsKy)
+        : Math.round(duNoThucTeCuoiKy * lsKy)
+      const gocTra = hopDong.phuongThuc === 'cuoi-ky'
+        ? (isLast ? dunNo : 0)
+        : (isLast ? dunNo : gocKyMoi)
+      const dunNoCuoi = Math.max(0, dunNo - gocTra)
+
+      batch.set(doc(kyCol(hopDong.id), k.id), {
+        dunNoDauKy: dunNo,
+        gocTra,
+        laiTra,
+        tongTra: gocTra + laiTra,
+        dunNoCuoiKy: dunNoCuoi,
+        updatedAt: Date.now(),
+      }, { merge: true })
+
+      if (hopDong.phuongThuc === 'giam-dan') dunNo = dunNoCuoi
+    })
+  }
+
+  await batch.commit()
 }
 
 // ── Xóa hợp đồng (cascade) ──────────────────────────────────
@@ -142,14 +218,15 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   const diffM      = monthDiff(ngayKy, ngayDaoHan)
   const period     = hd.kyTra === 'monthly' ? 1 : 3
   const numKy      = Math.max(1, Math.floor(diffM / period))
-  const lsKy       = hd.laiSuat / 100 / (hd.kyTra === 'monthly' ? 12 : 4)
   const gocKy      = Math.round(hd.soTienGiaiNgan / numKy)
   const todayD     = new Date()
   let dunNo        = hd.soTienGiaiNgan
   const rows: KyTraNo[] = []
 
   for (let i = 1; i <= numKy; i++) {
-    const ngayTra   = addMonths(ngayKy, i * period)
+    const ngayTra = addMonths(ngayKy, i * period)
+    const lsKy    = laiSuatChoKy(hd, ngayTra) / 100 / (hd.kyTra === 'monthly' ? 12 : 4)
+
     const laiTra    = hd.phuongThuc === 'giam-dan'
       ? Math.round(dunNo * lsKy)
       : Math.round(hd.soTienGiaiNgan * lsKy)

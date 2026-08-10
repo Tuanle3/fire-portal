@@ -106,7 +106,23 @@ export default function NganHangPage() {
         .btn-ghost:hover { border-color:var(--nh-navy); background:#EEF3FA; }
         .btn-danger { background:#fff; border:1px solid #FECACA; color:#DC2626; padding:5px 10px; border-radius:7px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; }
         .btn-danger:hover { background:#FEF2F2; }
+	.nh-modal-overlay { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:rgba(15,23,42,.5); padding:16px; }
+	.nh-modal-card { width:100%; max-width:760px; max-height:88vh; display:flex; flex-direction:column; background:#fff; border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.25); overflow:hidden; }
+	.nh-modal-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--nh-border); background:#EEF3FA; }
+	.nh-modal-title { font-size:14.5px; font-weight:700; color:var(--nh-navy); }
+	.nh-modal-close { border:none; background:none; cursor:pointer; color:var(--nh-muted); padding:4px; border-radius:6px; }
+	.nh-modal-close:hover { background:#fff; color:var(--nh-navy); }
+	.nh-modal-body { padding:16px 20px; overflow-y:auto; }
+	.nh-modal-foot { display:flex; justify-content:flex-end; gap:8px; padding:14px 20px; border-top:1px solid var(--nh-border); }
+	.nh-radio-row { display:flex; gap:16px; align-items:center; padding:6px 0 2px; }
+	.nh-radio-row label { display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--nh-txt); cursor:pointer; font-weight:600; }
+	.nh-hint { font-size:11px; color:var(--nh-muted2); margin-top:8px; }
+	.nh-err { font-size:12.5px; color:var(--nh-red); background:var(--nh-redbg); border:1px solid #FECACA; border-radius:8px; padding:8px 10px; margin-top:8px; }
 
+/* Nút Lưu tách màu rõ với Hủy (btn-ghost) và các nút primary khác */
+.btn-save { background:var(--nh-green); color:#fff; border:none; padding:8px 16px; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+.btn-save:hover { background:#17532F; }
+.btn-save:disabled { opacity:.6; cursor:not-allowed; }
         .nh-badge { display:inline-flex; align-items:center; border-radius:20px; padding:2px 9px; font-size:9.5px; font-weight:700; border:1px solid; white-space:nowrap; }
         .nh-b-green  { background:var(--nh-greenbg); color:var(--nh-green); border-color:#BBF7D0; }
         .nh-b-red    { background:var(--nh-redbg);   color:var(--nh-red);   border-color:#FECACA; }

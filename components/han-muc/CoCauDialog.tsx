@@ -39,29 +39,39 @@ export default function CoCauDialog({ open, onClose, hopDong, kyList }: Props) {
 
   const handleSubmit = async () => {
     if (!kyMoc) { setError('Không tìm thấy kỳ mốc.'); return }
+
+    if (option === 'giam-ls' && !laiSuatMoi) {
+      setError('Vui lòng nhập lãi suất mới.')
+      return
+    }
+    if (option === 'von-hoa-lai' && !gocMoi) {
+      setError('Vui lòng nhập dư nợ gốc mới.')
+      return
+    }
+
     setSaving(true)
     setError('')
     try {
-      await saveCoCauNo(
-        {
-          hopDongId: hopDong.id,
-          tuKy,
-          option,
-          ngayDaoHanMoi: option === 'gia-han' ? ngayDaoHanMoi : undefined,
-          laiSuatMoi: option === 'giam-ls' ? Number(laiSuatMoi) : undefined,
-          gocMoi: option === 'von-hoa-lai' ? Number(gocMoi) : undefined,
-          dunNoTruoc: kyMoc.dunNoDauKy,
-          laiKyTruoc: kyMoc.laiTra,
-          dunNoSau: option === 'von-hoa-lai' ? Number(gocMoi) : kyMoc.dunNoDauKy,
-          laiKySau: option === 'giam-ls'
-            ? Math.round(kyMoc.dunNoDauKy * (Number(laiSuatMoi) / 100 / (hopDong.kyTra === 'monthly' ? 12 : 4)))
-            : kyMoc.laiTra,
-          ngayTao: new Date().toISOString().slice(0, 10),
-          ghiChu: ghiChu || undefined,
-        },
-        hopDong,
-        kyList,
-      )
+      // QUAN TRỌNG: chỉ đưa vào object các trường có giá trị thực.
+      // Firestore không cho phép field value là undefined.
+      const cc: any = {
+        hopDongId: hopDong.id,
+        tuKy,
+        option,
+        dunNoTruoc: kyMoc.dunNoDauKy,
+        laiKyTruoc: kyMoc.laiTra,
+        dunNoSau: option === 'von-hoa-lai' ? Number(gocMoi) : kyMoc.dunNoDauKy,
+        laiKySau: option === 'giam-ls'
+          ? Math.round(kyMoc.dunNoDauKy * (Number(laiSuatMoi) / 100 / (hopDong.kyTra === 'monthly' ? 12 : 4)))
+          : kyMoc.laiTra,
+        ngayTao: new Date().toISOString().slice(0, 10),
+      }
+      if (option === 'gia-han')     cc.ngayDaoHanMoi = ngayDaoHanMoi
+      if (option === 'giam-ls')     cc.laiSuatMoi    = Number(laiSuatMoi)
+      if (option === 'von-hoa-lai') cc.gocMoi        = Number(gocMoi)
+      if (ghiChu)                   cc.ghiChu        = ghiChu
+
+      await saveCoCauNo(cc, hopDong, kyList)
       onClose()
     } catch (e) {
       setError('Lưu phương án cơ cấu thất bại.')
@@ -72,101 +82,72 @@ export default function CoCauDialog({ open, onClose, hopDong, kyList }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="font-serif text-lg font-semibold text-[#1C3557]">
-            Cơ cấu nợ — {hopDong.soHopDong}
-          </h2>
-          <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-            <X size={20} />
-          </button>
+    <div className="nh-modal-overlay" onClick={onClose}>
+      <div className="nh-modal-card" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+        <div className="nh-modal-head">
+          <span className="nh-modal-title">Cơ cấu nợ — {hopDong.soHopDong}</span>
+          <button className="nh-modal-close" onClick={onClose}><X size={18} /></button>
         </div>
 
-        <div className="space-y-4 px-6 py-5">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-600">Áp dụng từ kỳ</span>
-            <select
-              className="input"
-              value={tuKy}
-              onChange={e => setTuKy(Number(e.target.value))}
-            >
+        <div className="nh-modal-body">
+          <div style={{ marginBottom: 10 }}>
+            <span className="nh-label">Áp dụng từ kỳ</span>
+            <select className="nh-select" value={tuKy} onChange={e => setTuKy(Number(e.target.value))}>
               {kyList.filter(k => k.trangThai !== 'da-tra').map(k => (
                 <option key={k.id} value={k.soKy}>
                   Kỳ {k.soKy} — {k.ngayTra} (dư nợ {k.dunNoDauKy.toLocaleString('vi-VN')})
                 </option>
               ))}
             </select>
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-600">Hình thức cơ cấu</span>
-            <select className="input" value={option} onChange={e => setOption(e.target.value as CoCauOption)}>
+          <div style={{ marginBottom: 10 }}>
+            <span className="nh-label">Hình thức cơ cấu</span>
+            <select className="nh-select" value={option} onChange={e => setOption(e.target.value as CoCauOption)}>
               {(Object.keys(OPTION_LABEL) as CoCauOption[]).map(o => (
                 <option key={o} value={o}>{OPTION_LABEL[o]}</option>
               ))}
             </select>
-          </label>
+          </div>
 
           {option === 'gia-han' && (
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-gray-600">Ngày đáo hạn mới</span>
-              <input type="date" className="input" value={ngayDaoHanMoi} onChange={e => setNgayDaoHanMoi(e.target.value)} />
-            </label>
+            <div style={{ marginBottom: 10 }}>
+              <span className="nh-label">Ngày đáo hạn mới</span>
+              <input type="date" className="nh-input" value={ngayDaoHanMoi} onChange={e => setNgayDaoHanMoi(e.target.value)} />
+            </div>
           )}
           {option === 'giam-ls' && (
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-gray-600">Lãi suất mới (%/năm)</span>
-              <input type="number" step="0.01" className="input" value={laiSuatMoi} onChange={e => setLaiSuatMoi(e.target.value)} />
-            </label>
+            <div style={{ marginBottom: 10 }}>
+              <span className="nh-label">Lãi suất mới (%/năm)</span>
+              <input type="number" step="0.01" className="nh-input" value={laiSuatMoi} onChange={e => setLaiSuatMoi(e.target.value)} />
+            </div>
           )}
           {option === 'von-hoa-lai' && (
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-gray-600">Dư nợ gốc mới (đã gồm lãi vốn hóa)</span>
-              <input type="number" className="input" value={gocMoi} onChange={e => setGocMoi(e.target.value)} />
-            </label>
+            <div style={{ marginBottom: 10 }}>
+              <span className="nh-label">Dư nợ gốc mới (đã gồm lãi vốn hóa)</span>
+              <input type="number" className="nh-input" value={gocMoi} onChange={e => setGocMoi(e.target.value)} />
+            </div>
           )}
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-600">Ghi chú</span>
-            <textarea className="input" rows={2} value={ghiChu} onChange={e => setGhiChu(e.target.value)} />
-          </label>
+          <div style={{ marginBottom: 4 }}>
+            <span className="nh-label">Ghi chú</span>
+            <textarea className="nh-textarea" rows={2} value={ghiChu} onChange={e => setGhiChu(e.target.value)} />
+          </div>
 
-          <p className="text-xs text-gray-500">
+          <p className="nh-hint">
             Sau khi lưu, hệ thống sẽ đánh dấu các kỳ từ kỳ {tuKy} trở đi là "Đã cơ cấu" và sinh lại
             lịch trả nợ mới dựa trên phương án đã chọn.
           </p>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="nh-err">{error}</p>}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
-          <button onClick={onClose} className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-            Hủy
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
-            className="rounded-md bg-[#1C3557] px-4 py-2 text-sm font-medium text-white hover:bg-[#16294494] disabled:opacity-60"
-          >
+        <div className="nh-modal-foot">
+          <button className="btn-ghost" onClick={onClose}>Hủy</button>
+          <button className="btn-save" onClick={handleSubmit} disabled={saving}>
             {saving ? 'Đang lưu…' : 'Lưu phương án'}
           </button>
         </div>
       </div>
-
-      <style jsx>{`
-        .input {
-          width: 100%;
-          border: 1px solid #d1d5db;
-          border-radius: 6px;
-          padding: 8px 10px;
-          font-size: 14px;
-        }
-        .input:focus {
-          outline: none;
-          border-color: #d4a64a;
-          box-shadow: 0 0 0 2px rgba(212, 166, 74, 0.25);
-        }
-      `}</style>
     </div>
   )
 }

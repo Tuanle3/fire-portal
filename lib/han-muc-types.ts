@@ -18,6 +18,7 @@ export type TrangThaiKy =
   | 'da-tra'
   | 'co-cau'
 export type CoCauOption = 'gia-han' | 'giam-ls' | 'von-hoa-lai'
+export type LaiSuatLoai = 'co-dinh' | 'tha-noi'
 export interface HopDongTinDung {
   id:              string
   soHopDong:       string
@@ -25,9 +26,12 @@ export interface HopDongTinDung {
   nguoiVay?:       string
   nganHang:        BankName
   chiNhanh?:       string
-  hanMuc:          number        // triệu đồng
-  soTienGiaiNgan:  number
-  laiSuat:         number        // %/năm
+  hanMuc:           number        // đồng (VNĐ) — không còn là triệu
+  soTienGiaiNgan:   number        // đồng (VNĐ)
+  laiSuat:          number        // %/năm — lãi suất cố định, hoặc lãi ưu đãi nếu thả nổi
+  laiSuatLoai:      LaiSuatLoai
+  soThangUuDai?:    number        // chỉ dùng khi thả nổi
+  laiSuatSauUuDai?: number        // %/năm — chỉ dùng khi thả nổi
   phuongThuc:      PhuongThuc
   kyTra:           KyTra
   ngayKy:          string        // ISO date
@@ -50,6 +54,8 @@ export interface KyTraNo {
   trangThai:       TrangThaiKy
   ngayThucTra?:    string
   soTienThucTra?:  number
+  gocThucTra?:     number   // gốc thực trả — có thể lệch với gocTra kế hoạch
+  laiThucTra?:     number   // lãi thực trả — có thể lệch với laiTra kế hoạch
   coCauId?:        string
 }
 export interface CoCauNo {

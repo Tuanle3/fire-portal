@@ -71,8 +71,8 @@ export function TabHanMuc() {
               {selected.nguoiVay ? ` · ${selected.nguoiVay}` : ''}
             </div>
             <div className="nh-form-grid" style={{ marginBottom: 0 }}>
-              <Stat label="Hạn mức" value={`${fmt(selected.hanMuc)} triệu`} />
-              <Stat label="Giải ngân" value={`${fmt(selected.soTienGiaiNgan)} triệu`} />
+              <Stat label="Hạn mức" value={`${fmt(selected.hanMuc)} đ`} />
+              <Stat label="Giải ngân" value={`${fmt(selected.soTienGiaiNgan)} đ`} />
               <Stat label="Lãi suất" value={`${selected.laiSuat}%/năm`} />
               <Stat label="Kỳ trả" value={selected.kyTra === 'monthly' ? 'Hàng tháng' : 'Hàng quý'} />
               <Stat label="Đáo hạn" value={selected.ngayDaoHan} />
@@ -84,7 +84,7 @@ export function TabHanMuc() {
         <div className="nh-card">
           <div className="nh-card-head"><span className="nh-card-title">Lịch trả nợ</span></div>
           <div className="nh-card-body" style={{ padding: 0 }}>
-            <LichTraNoTable hopDongId={selected.id} rows={kyList} />
+            <LichTraNoTable hopDong={selected} rows={kyList} />
           </div>
         </div>
 
