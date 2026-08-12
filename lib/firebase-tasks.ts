@@ -18,13 +18,16 @@ let _tasksAuthReady: Promise<void> | undefined
 
 export function ensureTasksAuth(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve()
-  if (_tasksAuthReady) return _tasksAuthReady
   const auth = getAuth(app)
   if (auth.currentUser) return Promise.resolve()
-  _tasksAuthReady = signInAnonymously(auth)
-    .then(() => undefined)
-    .catch(e => {
-      console.warn('[firebase-tasks] signInAnonymously failed:', e?.code || e)
-    })
+  // Không cache promise — nếu lần trước fail thì retry
+  if (!_tasksAuthReady) {
+    _tasksAuthReady = signInAnonymously(auth)
+      .then(() => undefined)
+      .catch(e => {
+        _tasksAuthReady = undefined // reset để có thể retry lần sau
+        console.warn('[firebase-tasks] signInAnonymously failed:', e?.code || e)
+      })
+  }
   return _tasksAuthReady
 }
