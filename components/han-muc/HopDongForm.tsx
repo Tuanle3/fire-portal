@@ -8,7 +8,15 @@ import {
 } from '@/lib/han-muc-types'
 
 const ENTITIES: EntityType[]    = ['SAG', 'SAHS', 'ĐTSA', 'YANA', 'Cá nhân']
-const BANKS:    BankName[]      = ['Agribank', 'ACB', 'BIDV', 'Vietinbank', 'Khác']
+const BANKS: BankName[] = [
+  'Agribank', 'Vietcombank', 'BIDV', 'Vietinbank',
+  'ACB', 'MB Bank', 'Techcombank', 'VPBank', 'Sacombank',
+  'HDBank', 'VIB', 'TPBank', 'MSB', 'SeABank', 'LPBank',
+  'OCB', 'SHB', 'Eximbank', 'Nam A Bank', 'NCB',
+  'ABBank', 'BacABank', 'BaoViet Bank', 'CBBank', 'PGBank',
+  'VietBank', 'VietABank', 'KienlongBank', 'Vikki Bank',
+  'Chailease', 'Khác',
+]
 const TRANG_THAI: TrangThaiHD[] = ['dang-vay', 'binh-thuong', 'gan-dao-han', 'qua-han', 'tat-toan']
 
 const TRANG_THAI_LABEL: Record<TrangThaiHD, string> = {

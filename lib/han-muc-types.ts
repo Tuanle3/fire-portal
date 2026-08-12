@@ -2,7 +2,7 @@
 // TYPES — Module Hạn mức tín dụng
 // ============================================================
 export type EntityType  = 'SAG' | 'SAHS' | 'ĐTSA' | 'YANA' | 'Cá nhân'
-export type BankName    = 'Agribank' | 'ACB' | 'BIDV' | 'Vietinbank' | 'Khác'
+export type BankName = 'Agribank' | 'ACB' | 'BIDV' | 'Vietinbank' | 'VPBank' | 'Techcombank' | 'MB Bank' | 'Chailease'| 'Khác'
 export type PhuongThuc  = 'giam-dan' | 'cuoi-ky'
 export type KyTra       = 'monthly'  | 'quarterly'
 export type TrangThaiHD =
