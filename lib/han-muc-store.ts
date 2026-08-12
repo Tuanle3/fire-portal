@@ -10,10 +10,10 @@ import {
   query, orderBy, where, writeBatch,
   QuerySnapshot, DocumentData,
 } from 'firebase/firestore'
-import { getMainFirestore, ensureAnonAuth } from '@/lib/firebase'
+import { tasksDb, ensureTasksAuth } from '@/lib/firebase-tasks'
 import { HopDongTinDung, KyTraNo, CoCauNo, PhuongThuc, KyTra } from './han-muc-types'
 
-const db = () => getMainFirestore()
+const db = () => tasksDb
 
 // ── Collection refs ─────────────────────────────────────────
 const hdCol  = ()             => collection(db(), 'hanMucTinDung')
@@ -80,7 +80,7 @@ export async function saveHopDong(
   hd: Omit<HopDongTinDung, 'id' | 'createdAt' | 'updatedAt'>,
   id?: string,
 ): Promise<string> {
-  await ensureAnonAuth()   // ← thêm dòng này
+  await ensureTasksAuth()
   const ref  = id ? doc(hdCol(), id) : doc(hdCol())
   const now  = Date.now()
   const data: HopDongTinDung = { ...hd, id: ref.id, createdAt: now, updatedAt: now }
@@ -100,6 +100,7 @@ export async function markKyDaTra(
   ngayThucTra: string,
   soTienThucTra: number,
 ): Promise<void> {
+  await ensureTasksAuth()
   await setDoc(doc(kyCol(hopDongId), kyId), {
     trangThai: 'da-tra', ngayThucTra, soTienThucTra, updatedAt: Date.now(),
   }, { merge: true })
@@ -115,11 +116,6 @@ function laiSuatChoKy(hd: HopDongTinDung, ngayTraKy: Date): number {
 }
 
 // ── Đánh dấu kỳ đã trả VỚI gốc/lãi thực tế + tự tính lại các kỳ sau ──
-// Nếu gốc thực trả khác gốc kế hoạch, dư nợ thực tế cuối kỳ sẽ chênh so với
-// kế hoạch ban đầu. Hàm này lan chênh lệch đó vào toàn bộ các kỳ CHƯA TRẢ
-// còn lại của hợp đồng, tính lại lãi/gốc/dư nợ cho từng kỳ theo đúng
-// phương thức trả gốc (giảm dần / cuối kỳ) đang áp dụng, và theo đúng
-// lãi suất áp dụng tại thời điểm của từng kỳ (có tính ưu đãi/thả nổi).
 export async function markKyDaTraThucTe(
   hopDong: HopDongTinDung,
   kyHienTai: KyTraNo,
@@ -128,6 +124,7 @@ export async function markKyDaTraThucTe(
   gocThucTra: number,
   laiThucTra: number,
 ): Promise<void> {
+  await ensureTasksAuth()
   const batch = writeBatch(db())
 
   batch.set(doc(kyCol(hopDong.id), kyHienTai.id), {
@@ -140,7 +137,7 @@ export async function markKyDaTraThucTe(
   }, { merge: true })
 
   const duNoThucTeCuoiKy = Math.max(0, kyHienTai.dunNoDauKy - gocThucTra)
-  const chenhLech = duNoThucTeCuoiKy - kyHienTai.dunNoCuoiKy // >0: còn nợ nhiều hơn kế hoạch
+  const chenhLech = duNoThucTeCuoiKy - kyHienTai.dunNoCuoiKy
 
   const cacKySau = allKy
     .filter(k => k.soKy > kyHienTai.soKy && k.trangThai !== 'da-tra')
@@ -183,6 +180,7 @@ export async function markKyDaTraThucTe(
 
 // ── Xóa hợp đồng (cascade) ──────────────────────────────────
 export async function deleteHopDong(id: string, kyIds: string[]): Promise<void> {
+  await ensureTasksAuth()
   const batch = writeBatch(db())
   kyIds.forEach(kid => batch.delete(doc(kyCol(id), kid)))
   batch.delete(doc(hdCol(), id))
@@ -195,6 +193,7 @@ export async function saveCoCauNo(
   hd: HopDongTinDung,
   kyList: KyTraNo[],
 ): Promise<void> {
+  await ensureTasksAuth()
   const ref    = doc(ccCol())
   const now    = Date.now()
   const ccData: CoCauNo = { ...cc, id: ref.id, createdAt: now }
