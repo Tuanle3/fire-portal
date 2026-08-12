@@ -1,12 +1,14 @@
 import {
   collection, doc, setDoc, deleteDoc, onSnapshot, Unsubscribe,
 } from 'firebase/firestore'
-import { tasksDb } from './firebase-tasks'
+import { getMainFirestore, ensureAnonAuth } from './firebase'
 import { BankRelation, BankProposal, BankNote } from './bank-types'
 
 const COL_NH = 'bank_relations'
 const COL_PA = 'bank_proposals'
 const COL_GC = 'bank_notes'
+
+const db = () => getMainFirestore()
 
 // Firestore không chấp nhận giá trị undefined
 function clean<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
@@ -34,15 +36,17 @@ function fromFirestoreNH(id: string, data: Record<string, unknown>): BankRelatio
 }
 
 export async function saveBankRelation(r: BankRelation): Promise<void> {
-  await setDoc(doc(tasksDb, COL_NH, r.id), clean({ ...r, updatedAt: new Date().toISOString().slice(0, 10) }))
+  await ensureAnonAuth()
+  await setDoc(doc(db(), COL_NH, r.id), clean({ ...r, updatedAt: new Date().toISOString().slice(0, 10) }))
 }
 
 export async function deleteBankRelation(id: string): Promise<void> {
-  await deleteDoc(doc(tasksDb, COL_NH, id))
+  await ensureAnonAuth()
+  await deleteDoc(doc(db(), COL_NH, id))
 }
 
 export function subscribeBankRelations(cb: (rows: BankRelation[]) => void): Unsubscribe {
-  return onSnapshot(collection(tasksDb, COL_NH), snap => {
+  return onSnapshot(collection(db(), COL_NH), snap => {
     cb(snap.docs.map(d => fromFirestoreNH(d.id, d.data() as Record<string, unknown>)))
   })
 }
@@ -77,15 +81,17 @@ function fromFirestorePA(id: string, data: Record<string, unknown>): BankProposa
 }
 
 export async function saveBankProposal(p: BankProposal): Promise<void> {
-  await setDoc(doc(tasksDb, COL_PA, p.id), clean({ ...p, ngayCapNhat: new Date().toISOString().slice(0, 10) }))
+  await ensureAnonAuth()
+  await setDoc(doc(db(), COL_PA, p.id), clean({ ...p, ngayCapNhat: new Date().toISOString().slice(0, 10) }))
 }
 
 export async function deleteBankProposal(id: string): Promise<void> {
-  await deleteDoc(doc(tasksDb, COL_PA, id))
+  await ensureAnonAuth()
+  await deleteDoc(doc(db(), COL_PA, id))
 }
 
 export function subscribeBankProposals(cb: (rows: BankProposal[]) => void): Unsubscribe {
-  return onSnapshot(collection(tasksDb, COL_PA), snap => {
+  return onSnapshot(collection(db(), COL_PA), snap => {
     cb(snap.docs.map(d => fromFirestorePA(d.id, d.data() as Record<string, unknown>)))
   })
 }
@@ -106,15 +112,17 @@ function fromFirestoreGC(id: string, data: Record<string, unknown>): BankNote {
 }
 
 export async function saveBankNote(n: BankNote): Promise<void> {
-  await setDoc(doc(tasksDb, COL_GC, n.id), clean({ ...n }))
+  await ensureAnonAuth()
+  await setDoc(doc(db(), COL_GC, n.id), clean({ ...n }))
 }
 
 export async function deleteBankNote(id: string): Promise<void> {
-  await deleteDoc(doc(tasksDb, COL_GC, id))
+  await ensureAnonAuth()
+  await deleteDoc(doc(db(), COL_GC, id))
 }
 
 export function subscribeBankNotes(cb: (rows: BankNote[]) => void): Unsubscribe {
-  return onSnapshot(collection(tasksDb, COL_GC), snap => {
+  return onSnapshot(collection(db(), COL_GC), snap => {
     cb(snap.docs.map(d => fromFirestoreGC(d.id, d.data() as Record<string, unknown>)))
   })
 }
