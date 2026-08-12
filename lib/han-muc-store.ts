@@ -10,7 +10,7 @@ import {
   query, orderBy, where, writeBatch,
   QuerySnapshot, DocumentData,
 } from 'firebase/firestore'
-import { getMainFirestore } from '@/lib/firebase'
+import { getMainFirestore, ensureAnonAuth } from '@/lib/firebase'
 import { HopDongTinDung, KyTraNo, CoCauNo, PhuongThuc, KyTra } from './han-muc-types'
 
 const db = () => getMainFirestore()
@@ -80,6 +80,7 @@ export async function saveHopDong(
   hd: Omit<HopDongTinDung, 'id' | 'createdAt' | 'updatedAt'>,
   id?: string,
 ): Promise<string> {
+  await ensureAnonAuth()   // ← thêm dòng này
   const ref  = id ? doc(hdCol(), id) : doc(hdCol())
   const now  = Date.now()
   const data: HopDongTinDung = { ...hd, id: ref.id, createdAt: now, updatedAt: now }
