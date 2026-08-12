@@ -88,7 +88,7 @@ export function TabHanMuc() {
           </div>
         </div>
 
-        <HopDongForm open={formOpen} onClose={() => setFormOpen(false)} editing={editing} />
+        <HopDongForm key={editing?.id ?? 'new'} open={formOpen} onClose={() => setFormOpen(false)} editing={editing} />
         <CoCauDialog open={coCauOpen} onClose={() => setCoCauOpen(false)} hopDong={selected} kyList={kyList} />
       </div>
     )
@@ -172,7 +172,7 @@ export function TabHanMuc() {
         </div>
       </div>
 
-      <HopDongForm open={formOpen} onClose={() => setFormOpen(false)} editing={editing} />
+      <HopDongForm key={editing?.id ?? 'new'} open={formOpen} onClose={() => setFormOpen(false)} editing={editing} />
     </div>
   )
 }

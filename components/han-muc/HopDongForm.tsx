@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { saveHopDong } from '@/lib/han-muc-store'
 import {
@@ -47,6 +47,24 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
   )
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
+  
+  useEffect(() => {
+  if (!open) return
+  setForm(editing ? {
+    soHopDong: editing.soHopDong, entity: editing.entity, nguoiVay: editing.nguoiVay ?? '',
+    nganHang: editing.nganHang, chiNhanh: editing.chiNhanh ?? '',
+    hanMuc: String(editing.hanMuc), soTienGiaiNgan: String(editing.soTienGiaiNgan),
+    laiSuatLoai: editing.laiSuatLoai ?? 'co-dinh',
+    laiSuat: String(editing.laiSuat),
+    soThangUuDai: editing.soThangUuDai != null ? String(editing.soThangUuDai) : '',
+    laiSuatSauUuDai: editing.laiSuatSauUuDai != null ? String(editing.laiSuatSauUuDai) : '',
+    phuongThuc: editing.phuongThuc, kyTra: editing.kyTra,
+    ngayKy: editing.ngayKy, ngayDaoHan: editing.ngayDaoHan,
+    trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
+  } : emptyForm)
+  setError('')
+}, [open, editing])
+
 
   if (!open) return null
 
