@@ -30,10 +30,14 @@ export function subscribeHopDong(
   cb: (rows: HopDongTinDung[]) => void,
   entityFilter?: string,
 ): () => void {
-  const q = entityFilter && entityFilter !== 'all'
-    ? query(hdCol(), where('entity', '==', entityFilter), orderBy('createdAt', 'desc'))
-    : query(hdCol(), orderBy('createdAt', 'desc'))
-  return onSnapshot(q, s => cb(snap<HopDongTinDung>(s)))
+  let unsub: (() => void) | undefined
+  ensureTasksAuth().then(() => {
+    const q = entityFilter && entityFilter !== 'all'
+      ? query(hdCol(), where('entity', '==', entityFilter), orderBy('createdAt', 'desc'))
+      : query(hdCol(), orderBy('createdAt', 'desc'))
+    unsub = onSnapshot(q, s => cb(snap<HopDongTinDung>(s)))
+  }).catch(e => console.error('[subscribeHopDong] auth failed', e))
+  return () => unsub?.()
 }
 
 // ── Subscribe lịch trả nợ của 1 hợp đồng ───────────────────
@@ -41,8 +45,12 @@ export function subscribeLichTraNo(
   hopDongId: string,
   cb: (rows: KyTraNo[]) => void,
 ): () => void {
-  const q = query(kyCol(hopDongId), orderBy('soKy', 'asc'))
-  return onSnapshot(q, s => cb(snap<KyTraNo>(s)))
+  let unsub: (() => void) | undefined
+  ensureTasksAuth().then(() => {
+    const q = query(kyCol(hopDongId), orderBy('soKy', 'asc'))
+    unsub = onSnapshot(q, s => cb(snap<KyTraNo>(s)))
+  }).catch(e => console.error('[subscribeLichTraNo] auth failed', e))
+  return () => unsub?.()
 }
 
 // ── Subscribe tất cả kỳ trả nợ (nhiều HĐ) ──────────────────
