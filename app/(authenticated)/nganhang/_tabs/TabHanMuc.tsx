@@ -50,6 +50,13 @@ export function TabHanMuc() {
   }, [hopDongs])
   const soQuaHan = hopDongs.filter(h => h.trangThai === 'qua-han').length
 
+  // ── Thống kê kỳ đã trả ─────────────────────────────────────
+  const kyDaTra   = kyList.filter(k => k.trangThai === 'da-tra')
+  const soKyDaTra = kyDaTra.length
+  const tongGocDaTra = kyDaTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
+  const tongLaiDaTra = kyDaTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
+  const kyConLai  = kyList.filter(k => k.trangThai !== 'da-tra').length
+
   if (selected) {
     return (
       <div>
@@ -86,6 +93,35 @@ export function TabHanMuc() {
               <Stat label="Đáo hạn" value={selected.ngayDaoHan} />
               <Stat label="Trạng thái" badge={<span className={`nh-badge ${HD_BADGE[selected.trangThai]}`}>{HD_LABEL[selected.trangThai]}</span>} />
             </div>
+
+            {/* ── Tóm tắt thanh toán ── */}
+            {kyList.length > 0 && (
+              <div style={{
+                marginTop: 14,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                gap: 8,
+              }}>
+                <PayStat
+                  label="Số kỳ đã trả"
+                  value={`${soKyDaTra} / ${kyList.length} kỳ`}
+                  sub={kyConLai > 0 ? `Còn ${kyConLai} kỳ` : 'Đã trả hết'}
+                  color="#1C3557"
+                />
+                <PayStat
+                  label="Gốc đã trả"
+                  value={`${fmt(tongGocDaTra)} đ`}
+                  sub={`Còn: ${fmt(Math.max(0, selected.soTienGiaiNgan - tongGocDaTra))} đ`}
+                  color="#1C3557"
+                />
+                <PayStat
+                  label="Lãi đã trả"
+                  value={`${fmt(tongLaiDaTra)} đ`}
+                  sub={`Tổng đã trả: ${fmt(tongGocDaTra + tongLaiDaTra)} đ`}
+                  color="#b45309"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -197,6 +233,23 @@ function Stat({ label, value, badge }: { label: string; value?: string; badge?: 
     <div>
       <span className="nh-label">{label}</span>
       {badge ?? <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--nh-txt)' }}>{value}</div>}
+    </div>
+  )
+}
+
+function PayStat({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+  return (
+    <div style={{
+      background: '#f8fafc',
+      border: '1px solid #e2e8f0',
+      borderRadius: 8,
+      padding: '10px 14px',
+    }}>
+      <div style={{ fontSize: 10.5, color: 'var(--nh-muted)', marginBottom: 3, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 700, color, lineHeight: 1.3 }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'var(--nh-muted)', marginTop: 2 }}>{sub}</div>
     </div>
   )
 }
