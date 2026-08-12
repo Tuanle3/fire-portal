@@ -73,11 +73,14 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
   setError('')
 }, [open, editing])
 
-const fmtInput = (v: string) => {
+// Luôn lưu vào state dạng digits thuần (không có dấu phân cách)
+  // fmtInput: hiển thị có dấu phân cách vi-VN
+  // parseInput: strip mọi ký tự không phải số trước khi lưu vào state
+  const fmtInput = (v: string) => {
     const num = v.replace(/\D/g, '')
     return num ? Number(num).toLocaleString('vi-VN') : ''
   }
-  const parseInput = (v: string) => v.replace(/\./g, '').replace(/,/g, '')
+  const parseInput = (v: string) => v.replace(/\D/g, '') // chỉ giữ digits
   
 if (!open) return null
 
@@ -95,13 +98,23 @@ if (!open) return null
     try {
       // QUAN TRỌNG: chỉ đưa vào payload các trường có giá trị.
       // Firestore không cho phép field value là undefined.
+      // form.hanMuc / form.soTienGiaiNgan đã là digits thuần (parseInput strip hết ký tự lạ)
+      // → Number() sẽ cho kết quả đúng, không bao giờ NaN
+      const hanMucNum        = Number(form.hanMuc)
+      const soTienGiaiNganNum = Number(form.soTienGiaiNgan)
+      const laiSuatNum       = Number(form.laiSuat)
+      if (isNaN(hanMucNum) || isNaN(soTienGiaiNganNum) || isNaN(laiSuatNum)) {
+        setError('Giá trị số không hợp lệ, vui lòng kiểm tra lại.')
+        setSaving(false)
+        return
+      }
       const payload: any = {
         soHopDong: form.soHopDong,
         entity: form.entity,
         nganHang: form.nganHang,
-        hanMuc: Number(form.hanMuc),
-        soTienGiaiNgan: Number(form.soTienGiaiNgan),
-        laiSuat: Number(form.laiSuat),
+        hanMuc: hanMucNum,
+        soTienGiaiNgan: soTienGiaiNganNum,
+        laiSuat: laiSuatNum,
         laiSuatLoai: form.laiSuatLoai,
         phuongThuc: form.phuongThuc,
         kyTra: form.kyTra,
