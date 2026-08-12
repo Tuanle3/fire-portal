@@ -65,8 +65,13 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
   setError('')
 }, [open, editing])
 
-
-  if (!open) return null
+const fmtInput = (v: string) => {
+    const num = v.replace(/\D/g, '')
+    return num ? Number(num).toLocaleString('vi-VN') : ''
+  }
+  const parseInput = (v: string) => v.replace(/\./g, '').replace(/,/g, '')
+  
+if (!open) return null
 
   const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }))
 
@@ -151,10 +156,10 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
             </Field>
 
             <Field label="Hạn mức (VNĐ) *">
-              <input type="number" className="nh-input" value={form.hanMuc} onChange={e => set('hanMuc', e.target.value)} placeholder="VD: 3640000000" />
+              <input className="nh-input" value={fmtInput(form.hanMuc)} onChange={e => set('hanMuc', parseInput(e.target.value))} placeholder="VD: 3.640.000.000" />
             </Field>
             <Field label="Số tiền giải ngân (VNĐ) *">
-              <input type="number" className="nh-input" value={form.soTienGiaiNgan} onChange={e => set('soTienGiaiNgan', e.target.value)} placeholder="VD: 3640000000" />
+              <input className="nh-input" value={fmtInput(form.soTienGiaiNgan)} onChange={e => set('soTienGiaiNgan', parseInput(e.target.value))} placeholder="VD: 3.640.000.000" />
             </Field>
             <Field label="Phương thức trả gốc">
               <select className="nh-select" value={form.phuongThuc} onChange={e => set('phuongThuc', e.target.value)}>
