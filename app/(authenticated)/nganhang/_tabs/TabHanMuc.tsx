@@ -73,7 +73,15 @@ export function TabHanMuc() {
             <div className="nh-form-grid" style={{ marginBottom: 0 }}>
               <Stat label="Hạn mức" value={`${fmt(selected.hanMuc)} đ`} />
               <Stat label="Giải ngân" value={`${fmt(selected.soTienGiaiNgan)} đ`} />
-              <Stat label="Lãi suất" value={`${selected.laiSuat}%/năm`} />
+              {selected.laiSuatLoai === 'tha-noi' ? (
+             <>
+            <Stat label="Lãi ưu đãi" value={`${selected.laiSuat}%/năm`} />
+            <Stat label="Số tháng ưu đãi" value={`${selected.soThangUuDai} tháng`} />
+           <Stat label="Lãi sau ưu đãi" value={`${selected.laiSuatSauUuDai}%/năm (thả nổi)`} />
+          </>
+) : (
+  <Stat label="Lãi suất" value={`${selected.laiSuat}%/năm (cố định)`} />
+)}
               <Stat label="Kỳ trả" value={selected.kyTra === 'monthly' ? 'Hàng tháng' : 'Hàng quý'} />
               <Stat label="Đáo hạn" value={selected.ngayDaoHan} />
               <Stat label="Trạng thái" badge={<span className={`nh-badge ${HD_BADGE[selected.trangThai]}`}>{HD_LABEL[selected.trangThai]}</span>} />
@@ -88,7 +96,7 @@ export function TabHanMuc() {
           </div>
         </div>
 
-        <HopDongForm key={editing?.id ?? 'new'} open={formOpen} onClose={() => setFormOpen(false)} editing={editing} />
+        <HopDongForm key={editing?.id ?? 'new'} open={formOpen} onClose={() => { setFormOpen(false); setEditing(null) }} editing={editing} />
         <CoCauDialog open={coCauOpen} onClose={() => setCoCauOpen(false)} hopDong={selected} kyList={kyList} />
       </div>
     )
@@ -159,7 +167,14 @@ export function TabHanMuc() {
                   <td>{h.nganHang}{h.chiNhanh ? ` · ${h.chiNhanh}` : ''}</td>
                   <td className="r">{fmt(h.hanMuc)}</td>
                   <td className="r">{fmt(h.soTienGiaiNgan)}</td>
-                  <td className="r">{h.laiSuat}%</td>
+                  <td className="r">
+  {h.laiSuat}%
+  {h.laiSuatLoai === 'tha-noi' && h.laiSuatSauUuDai != null && (
+    <div style={{ fontSize: 10, color: 'var(--nh-muted)', whiteSpace: 'nowrap' }}>
+      → {h.laiSuatSauUuDai}% sau {h.soThangUuDai}th
+    </div>
+  )}
+</td>
                   <td>{h.ngayDaoHan}</td>
                   <td><span className={`nh-badge ${HD_BADGE[h.trangThai]}`}>{HD_LABEL[h.trangThai]}</span></td>
                 </tr>
@@ -172,7 +187,7 @@ export function TabHanMuc() {
         </div>
       </div>
 
-      <HopDongForm key={editing?.id ?? 'new'} open={formOpen} onClose={() => setFormOpen(false)} editing={editing} />
+      <HopDongForm key={editing?.id ?? 'new'} open={formOpen} onClose={() => { setFormOpen(false); setEditing(null) }} editing={editing} />
     </div>
   )
 }
