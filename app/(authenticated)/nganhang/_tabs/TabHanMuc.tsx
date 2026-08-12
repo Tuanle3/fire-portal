@@ -112,12 +112,12 @@ export function TabHanMuc() {
         </div>
         <div className="nh-kpi">
           <span className="nh-kpi-label">Tổng hạn mức</span>
-          <span className="nh-kpi-val">{fmt(tongHanMuc)}<span style={{ fontSize: 12 }}> triệu</span></span>
+          <span className="nh-kpi-val">{fmt(tongHanMuc)}<span style={{ fontSize: 12 }}> đồng</span></span>
           <span className="nh-kpi-sub">Trên các hợp đồng</span>
         </div>
         <div className="nh-kpi">
           <span className="nh-kpi-label">Tổng dư nợ giải ngân</span>
-          <span className="nh-kpi-val">{fmt(tongDuNo)}<span style={{ fontSize: 12 }}> triệu</span></span>
+          <span className="nh-kpi-val">{fmt(tongDuNo)}<span style={{ fontSize: 12 }}> đồng</span></span>
           <span className="nh-kpi-sub">Đã giải ngân</span>
         </div>
         <div className="nh-kpi">
