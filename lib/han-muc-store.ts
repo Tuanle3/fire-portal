@@ -30,12 +30,17 @@ export function subscribeHopDong(
   cb: (rows: HopDongTinDung[]) => void,
   entityFilter?: string,
 ): () => void {
+  console.log('[subscribeHopDong] called, filter:', entityFilter)
   let unsub: (() => void) | undefined
   ensureTasksAuth().then(() => {
+    console.log('[subscribeHopDong] auth ok, setting up listener')
     const q = entityFilter && entityFilter !== 'all'
       ? query(hdCol(), where('entity', '==', entityFilter), orderBy('createdAt', 'desc'))
       : query(hdCol(), orderBy('createdAt', 'desc'))
-    unsub = onSnapshot(q, s => cb(snap<HopDongTinDung>(s)))
+    unsub = onSnapshot(q,
+      s => { console.log('[subscribeHopDong] snapshot docs:', s.docs.length); cb(snap<HopDongTinDung>(s)) },
+      e => console.error('[subscribeHopDong] snapshot error:', e.code, e.message)
+    )
   }).catch(e => console.error('[subscribeHopDong] auth failed', e))
   return () => unsub?.()
 }
