@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, X, CalendarDays, Banknote } from 'lucide-react'
+import { Check, X, CalendarDays, Banknote, Pencil } from 'lucide-react'
 import { markKyDaTraThucTe } from '@/lib/han-muc-store'
 import { HopDongTinDung, KyTraNo } from '@/lib/han-muc-types'
 
@@ -36,9 +36,10 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
 
   const startMark = (ky: KyTraNo) => {
     setMarkingId(ky.id)
-    setNgayThucTra(new Date().toISOString().slice(0, 10))
-    setGocThucTra(String(ky.gocTra))
-    setLaiThucTra(String(ky.laiTra))
+    const daTra = ky.trangThai === 'da-tra'
+    setNgayThucTra(daTra && ky.ngayThucTra ? ky.ngayThucTra : new Date().toISOString().slice(0, 10))
+    setGocThucTra(String(daTra && ky.gocThucTra != null ? ky.gocThucTra : ky.gocTra))
+    setLaiThucTra(String(daTra && ky.laiThucTra != null ? ky.laiThucTra : ky.laiTra))
   }
 
   const confirmMark = async (ky: KyTraNo) => {
@@ -62,20 +63,20 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm" style={{ minWidth: 1080 }}>
         <thead>
           <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
-            <th className="px-3 py-2.5 text-left font-medium text-xs opacity-80 w-10">Kỳ</th>
-            <th className="px-3 py-2.5 text-left font-medium text-xs opacity-80">Ngày trả</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs opacity-80">Dư nợ đầu kỳ</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs opacity-80 w-36">
+            <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap">Kỳ</th>
+            <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap">Ngày trả</th>
+            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap">Dư nợ đầu kỳ</th>
+            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap">
               <div>Gốc</div>
               <div className="font-normal opacity-60">Lãi</div>
             </th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs opacity-80">Tổng trả</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs opacity-80">Dư nợ cuối kỳ</th>
-            <th className="px-3 py-2.5 text-center font-medium text-xs opacity-80 w-24">Trạng thái</th>
-            <th className="px-3 py-2.5 text-center font-medium text-xs opacity-80 w-40">Thao tác</th>
+            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap">Tổng trả</th>
+            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap">Dư nợ cuối kỳ</th>
+            <th className="px-4 py-3 text-center font-medium text-xs opacity-80 whitespace-nowrap">Trạng thái</th>
+            <th className="px-4 py-3 text-center font-medium text-xs opacity-80" style={{ minWidth: 220 }}>Thao tác</th>
           </tr>
         </thead>
         <tbody>
@@ -92,18 +93,18 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                 style={{ background: rowBg, borderBottom: '1px solid #e8ecf0' }}
               >
                 {/* Kỳ */}
-                <td className="px-3 py-2.5 font-semibold text-center" style={{ color: 'var(--nh-navy, #1C3557)' }}>
+                <td className="px-4 py-3 font-semibold text-center whitespace-nowrap" style={{ color: 'var(--nh-navy, #1C3557)' }}>
                   {ky.soKy}
                 </td>
 
                 {/* Ngày trả */}
-                <td className="px-3 py-2.5 text-gray-600 text-xs">{ky.ngayTra}</td>
+                <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{ky.ngayTra}</td>
 
                 {/* Dư nợ đầu kỳ */}
-                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmt(ky.dunNoDauKy)}</td>
+                <td className="px-4 py-3 text-right text-gray-700 tabular-nums whitespace-nowrap">{fmt(ky.dunNoDauKy)}</td>
 
                 {/* Gốc + Lãi gộp trong 1 ô */}
-                <td className="px-3 py-2.5 text-right tabular-nums">
+                <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
                   {/* Gốc */}
                   <div className="font-semibold" style={{ color: '#1C3557' }}>
                     {fmt(ky.gocTra)}
@@ -121,7 +122,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                 </td>
 
                 {/* Tổng trả */}
-                <td className="px-3 py-2.5 text-right font-semibold tabular-nums" style={{ color: isQuaHan ? '#b91c1c' : '#111' }}>
+                <td className="px-4 py-3 text-right font-semibold tabular-nums whitespace-nowrap" style={{ color: isQuaHan ? '#b91c1c' : '#111' }}>
                   {fmt(ky.tongTra)}
                   {lech !== null && (
                     <div className={`text-[10px] font-normal ${lech > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
@@ -131,19 +132,31 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                 </td>
 
                 {/* Dư nợ cuối kỳ */}
-                <td className="px-3 py-2.5 text-right text-gray-600 tabular-nums">{fmt(ky.dunNoCuoiKy)}</td>
+                <td className="px-4 py-3 text-right text-gray-600 tabular-nums whitespace-nowrap">{fmt(ky.dunNoCuoiKy)}</td>
 
                 {/* Trạng thái */}
-                <td className="px-3 py-2.5 text-center">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[ky.trangThai]}`}>
+                <td className="px-4 py-3 text-center whitespace-nowrap">
+                  <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_STYLE[ky.trangThai]}`}>
                     {STATUS_LABEL[ky.trangThai]}
                   </span>
                 </td>
 
                 {/* Thao tác */}
-                <td className="px-3 py-2.5 text-center">
-                  {isDaTra ? (
-                    <span className="text-xs text-gray-400">{ky.ngayThucTra}</span>
+                <td className="px-4 py-3 text-center">
+                  {isDaTra && !isMarking ? (
+                    <button
+                      onClick={() => startMark(ky)}
+                      style={{
+                        fontSize: 11, padding: '4px 10px',
+                        border: '1px solid #cbd5e1', borderRadius: 6,
+                        background: '#fff', color: '#475569',
+                        cursor: 'pointer', fontWeight: 500,
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                      }}
+                      title="Sửa ngày/số tiền đã trả thực tế"
+                    >
+                      <Pencil size={12} /> {ky.ngayThucTra}
+                    </button>
                   ) : isMarking ? (
                     /* ── Form xác nhận thanh toán ── */
                     <div style={{
@@ -243,7 +256,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                             display: 'flex', alignItems: 'center', gap: 3,
                           }}
                         >
-                          <Check size={11} /> {saving ? 'Đang lưu…' : 'Xác nhận'}
+                          <Check size={11} /> {saving ? 'Đang lưu…' : isDaTra ? 'Cập nhật' : 'Xác nhận'}
                         </button>
                       </div>
                     </div>

@@ -20,6 +20,14 @@ const HD_LABEL: Record<HopDongTinDung['trangThai'], string> = {
 
 const fmt = (n: number) => n.toLocaleString('vi-VN')
 
+const getPayStats = (rows: KyTraNo[] | undefined) => {
+  const list    = rows ?? []
+  const daTra   = list.filter(k => k.trangThai === 'da-tra')
+  const goc     = daTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
+  const lai     = daTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
+  return { soKyDaTra: daTra.length, tongKy: list.length, goc, lai }
+}
+
 export function TabHanMuc() {
   const [entityFilter, setEntityFilter] = useState<'all' | EntityType>('all')
   const [hopDongs, setHopDongs]         = useState<HopDongTinDung[]>([])
@@ -28,8 +36,18 @@ export function TabHanMuc() {
   const [formOpen, setFormOpen]         = useState(false)
   const [editing, setEditing]           = useState<HopDongTinDung | null>(null)
   const [coCauOpen, setCoCauOpen]       = useState(false)
+  const [kyMap, setKyMap]               = useState<Record<string, KyTraNo[]>>({})
 
   useEffect(() => subscribeHopDong(setHopDongs, entityFilter), [entityFilter])
+
+  // Lắng nghe lịch trả nợ của TẤT CẢ hợp đồng đang hiển thị, để show nhanh
+  // số kỳ / gốc / lãi đã trả ngay trên bảng danh sách, không cần bấm vào chi tiết.
+  useEffect(() => {
+    const unsubs = hopDongs.map(h =>
+      subscribeLichTraNo(h.id, rows => setKyMap(prev => ({ ...prev, [h.id]: rows })))
+    )
+    return () => unsubs.forEach(u => u && u())
+  }, [hopDongs])
 
   useEffect(() => {
     if (!selected) { setKyList([]); return }
@@ -191,12 +209,17 @@ export function TabHanMuc() {
                 <th className="r">Hạn mức</th>
                 <th className="r">Giải ngân</th>
                 <th className="r">Lãi suất</th>
+                <th className="r">Số kỳ đã trả</th>
+                <th className="r">Gốc đã trả</th>
+                <th className="r">Lãi đã trả</th>
                 <th>Đáo hạn</th>
                 <th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
-              {hopDongs.map(h => (
+              {hopDongs.map(h => {
+                const ps = getPayStats(kyMap[h.id])
+                return (
                 <tr key={h.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(h)}>
                   <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>{h.soHopDong}</td>
                   <td>{h.entity}</td>
@@ -211,12 +234,22 @@ export function TabHanMuc() {
     </div>
   )}
 </td>
+                  <td className="r" style={{ whiteSpace: 'nowrap' }}>
+                    {ps.tongKy > 0 ? `${ps.soKyDaTra} / ${ps.tongKy}` : '—'}
+                  </td>
+                  <td className="r" style={{ whiteSpace: 'nowrap', color: '#1C3557', fontWeight: 600 }}>
+                    {ps.soKyDaTra > 0 ? fmt(ps.goc) : '—'}
+                  </td>
+                  <td className="r" style={{ whiteSpace: 'nowrap', color: '#b45309', fontWeight: 600 }}>
+                    {ps.soKyDaTra > 0 ? fmt(ps.lai) : '—'}
+                  </td>
                   <td>{h.ngayDaoHan}</td>
                   <td><span className={`nh-badge ${HD_BADGE[h.trangThai]}`}>{HD_LABEL[h.trangThai]}</span></td>
                 </tr>
-              ))}
+                )
+              })}
               {hopDongs.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 24 }}>Chưa có hợp đồng tín dụng nào.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 24 }}>Chưa có hợp đồng tín dụng nào.</td></tr>
               )}
             </tbody>
           </table>
