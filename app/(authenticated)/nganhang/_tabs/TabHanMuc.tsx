@@ -20,12 +20,13 @@ const HD_LABEL: Record<HopDongTinDung['trangThai'], string> = {
 
 const fmt = (n: number) => n.toLocaleString('vi-VN')
 
-const getPayStats = (rows: KyTraNo[] | undefined) => {
+const getPayStats = (rows: KyTraNo[] | undefined, soTienGiaiNgan: number) => {
   const list    = rows ?? []
   const daTra   = list.filter(k => k.trangThai === 'da-tra')
   const goc     = daTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
   const lai     = daTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
-  return { soKyDaTra: daTra.length, tongKy: list.length, goc, lai }
+  const conLai  = Math.max(0, soTienGiaiNgan - goc)
+  return { soKyDaTra: daTra.length, tongKy: list.length, goc, lai, conLai }
 }
 
 export function TabHanMuc() {
@@ -62,6 +63,10 @@ export function TabHanMuc() {
 
   const tongHanMuc = useMemo(() => hopDongs.reduce((s, h) => s + h.hanMuc, 0), [hopDongs])
   const tongDuNo    = useMemo(() => hopDongs.reduce((s, h) => s + h.soTienGiaiNgan, 0), [hopDongs])
+  const tongDuNoConLai = useMemo(
+    () => hopDongs.reduce((s, h) => s + getPayStats(kyMap[h.id], h.soTienGiaiNgan).conLai, 0),
+    [hopDongs, kyMap],
+  )
   const laiSuatBQ   = useMemo(() => {
     if (!hopDongs.length) return 0
     return hopDongs.reduce((s, h) => s + h.laiSuat, 0) / hopDongs.length
@@ -74,6 +79,7 @@ export function TabHanMuc() {
   const tongGocDaTra = kyDaTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
   const tongLaiDaTra = kyDaTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
   const kyConLai  = kyList.filter(k => k.trangThai !== 'da-tra').length
+  const dunNoGocConLai = selected ? Math.max(0, selected.soTienGiaiNgan - tongGocDaTra) : 0
 
   if (selected) {
     return (
@@ -129,8 +135,14 @@ export function TabHanMuc() {
                 <PayStat
                   label="Gốc đã trả"
                   value={`${fmt(tongGocDaTra)} đ`}
-                  sub={`Còn: ${fmt(Math.max(0, selected.soTienGiaiNgan - tongGocDaTra))} đ`}
+                  sub={`${((tongGocDaTra / selected.soTienGiaiNgan) * 100 || 0).toFixed(1)}% dư nợ gốc`}
                   color="#1C3557"
+                />
+                <PayStat
+                  label="Dư nợ gốc còn lại"
+                  value={`${fmt(dunNoGocConLai)} đ`}
+                  sub={`Trên tổng ${fmt(selected.soTienGiaiNgan)} đ`}
+                  color="#b91c1c"
                 />
                 <PayStat
                   label="Lãi đã trả"
@@ -175,6 +187,11 @@ export function TabHanMuc() {
           <span className="nh-kpi-sub">Đã giải ngân</span>
         </div>
         <div className="nh-kpi">
+          <span className="nh-kpi-label">Dư nợ gốc còn lại</span>
+          <span className="nh-kpi-val" style={{ color: '#b91c1c' }}>{fmt(tongDuNoConLai)}<span style={{ fontSize: 12 }}> đồng</span></span>
+          <span className="nh-kpi-sub">Sau khi trừ gốc đã trả</span>
+        </div>
+        <div className="nh-kpi">
           <span className="nh-kpi-label">Lãi suất bình quân</span>
           <span className="nh-kpi-val" style={{ color: soQuaHan > 0 ? '#8C1F1F' : undefined }}>
             {laiSuatBQ.toFixed(2)}%
@@ -212,13 +229,14 @@ export function TabHanMuc() {
                 <th className="r">Số kỳ đã trả</th>
                 <th className="r">Gốc đã trả</th>
                 <th className="r">Lãi đã trả</th>
+                <th className="r">Dư nợ gốc còn lại</th>
                 <th>Đáo hạn</th>
                 <th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
               {hopDongs.map(h => {
-                const ps = getPayStats(kyMap[h.id])
+                const ps = getPayStats(kyMap[h.id], h.soTienGiaiNgan)
                 return (
                 <tr key={h.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(h)}>
                   <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>{h.soHopDong}</td>
@@ -243,13 +261,16 @@ export function TabHanMuc() {
                   <td className="r" style={{ whiteSpace: 'nowrap', color: '#b45309', fontWeight: 600 }}>
                     {ps.soKyDaTra > 0 ? fmt(ps.lai) : '—'}
                   </td>
+                  <td className="r" style={{ whiteSpace: 'nowrap', color: '#b91c1c', fontWeight: 700 }}>
+                    {fmt(ps.conLai)}
+                  </td>
                   <td>{h.ngayDaoHan}</td>
                   <td><span className={`nh-badge ${HD_BADGE[h.trangThai]}`}>{HD_LABEL[h.trangThai]}</span></td>
                 </tr>
                 )
               })}
               {hopDongs.length === 0 && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 24 }}>Chưa có hợp đồng tín dụng nào.</td></tr>
+                <tr><td colSpan={12} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 24 }}>Chưa có hợp đồng tín dụng nào.</td></tr>
               )}
             </tbody>
           </table>
