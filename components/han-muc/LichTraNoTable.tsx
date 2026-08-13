@@ -248,7 +248,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
     const totalQuarters = groups.length
 
     return (
-      <div style={{ overflowX: 'auto', overflowY: 'clip', width: '100%' }}>
+      <div style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
         <table style={{ width: '100%', minWidth: 1500, borderCollapse: 'collapse', fontSize: 12 }}>
           <colgroup>
             <col style={{ width: '14%' }} />
@@ -482,7 +482,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
   // CHẾ ĐỘ THÔNG THƯỜNG (monthly / quarterly đồng nhất)
   // ════════════════════════════════════════════════════════════
   return (
-    <div style={{ overflowX: 'auto', overflowY: 'clip' }}>
+    <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
       <table className="w-full text-sm" style={{ minWidth: 1080 }}>
         <thead>
           <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
