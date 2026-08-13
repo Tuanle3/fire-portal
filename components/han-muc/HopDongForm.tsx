@@ -61,8 +61,8 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
           ngayKy: editing.ngayKy, ngayTraGocDauTien: editing.ngayTraGocDauTien ?? '', ngayDaoHan: editing.ngayDaoHan,
           trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
           gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
-          soKyTraGoc: editing.soKyTraGoc != null ? String(editing.soKyTraGoc) : '',
-          soKyAnHan: editing.soKyAnHan != null ? String(editing.soKyAnHan) : '',
+          soKyTraGoc: editing.soKyTraGoc != null && !isNaN(Number(editing.soKyTraGoc)) ? String(editing.soKyTraGoc) : '',
+          soKyAnHan: editing.soKyAnHan != null && !isNaN(Number(editing.soKyAnHan)) ? String(editing.soKyAnHan) : '',
         }
       : emptyForm,
   )
@@ -85,8 +85,8 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       ngayKy: editing.ngayKy, ngayTraGocDauTien: editing.ngayTraGocDauTien ?? '', ngayDaoHan: editing.ngayDaoHan,
       trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
       gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
-      soKyTraGoc: editing.soKyTraGoc != null ? String(editing.soKyTraGoc) : '',
-      soKyAnHan: editing.soKyAnHan != null ? String(editing.soKyAnHan) : '',
+      soKyTraGoc: editing.soKyTraGoc != null && !isNaN(Number(editing.soKyTraGoc)) ? String(editing.soKyTraGoc) : '',
+      soKyAnHan: editing.soKyAnHan != null && !isNaN(Number(editing.soKyAnHan)) ? String(editing.soKyAnHan) : '',
     } : emptyForm)
     setError('')
   }, [open, editing])
@@ -273,9 +273,9 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
             {form.kyTra === 'monthly' && form.kyTraGoc === 'quarterly' && (
               <Field label="Số kỳ trả gốc (theo NH) *">
                 <input
-                  type="number" min={1} className="nh-input"
+                  type="text" inputMode="numeric" pattern="[0-9]*" className="nh-input"
                   value={form.soKyTraGoc}
-                  onChange={e => set('soKyTraGoc', e.target.value)}
+                  onChange={e => set('soKyTraGoc', e.target.value.replace(/\D/g, ''))}
                   placeholder="VD: 12 (mỗi kỳ cách nhau 1 quý)"
                   style={{ borderColor: form.soKyTraGoc ? '#D4A64A' : undefined }}
                 />
@@ -287,9 +287,9 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
             {/* Ân hạn gốc — số kỳ đầu chỉ trả lãi, không trả gốc */}
             <Field label={`Ân hạn gốc (số ${form.kyTra === 'quarterly' ? 'quý' : 'tháng'} đầu chỉ trả lãi)`}>
               <input
-                type="number" min={0} className="nh-input"
+                type="text" inputMode="numeric" pattern="[0-9]*" className="nh-input"
                 value={form.soKyAnHan}
-                onChange={e => set('soKyAnHan', e.target.value)}
+                onChange={e => set('soKyAnHan', e.target.value.replace(/\D/g, ''))}
                 placeholder={`VD: 3 (${form.kyTra === 'quarterly' ? '3 quý' : '3 tháng'} đầu không trả gốc)`}
                 style={{ borderColor: form.soKyAnHan ? '#7c3aed' : undefined }}
               />
