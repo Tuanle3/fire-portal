@@ -563,6 +563,8 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
             const rowBg     = isQuaHan ? '#fff5f5' : idx % 2 === 0 ? '#fff' : '#f8fafc'
             // Kỳ lẻ ngày đầu (chỉ tính lãi, không thu gốc) — luôn là dòng đầu tiên khi hợp đồng có ngayTraGocDauTien
             const isStubKy  = idx === 0 && !!hopDong.ngayTraGocDauTien && ky.gocTra === 0
+            // Số hiển thị: kỳ stub = 0, các kỳ sau = 1, 2, 3... (soKy trong store bắt đầu từ 1 cho stub, 2 cho kỳ 1 thực sự)
+            const soKyHienThi = isStubKy ? 0 : (hopDong.ngayTraGocDauTien ? ky.soKy - 1 : ky.soKy)
 
             return (
               <tr key={ky.id} style={{ background: rowBg, borderBottom: '1px solid #e8ecf0' }}>
@@ -572,7 +574,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                         <div>Kỳ 0</div>
                         <div style={{ fontSize: 9.5, fontWeight: 500, color: '#9ca3af' }}>tính lãi</div>
                       </>
-                    : ky.soKy
+                    : soKyHienThi
                   }
                 </td>
                 <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{ky.ngayTra}</td>
