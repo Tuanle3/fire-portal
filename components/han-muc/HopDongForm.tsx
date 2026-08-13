@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { saveHopDong } from '@/lib/han-muc-store'
 import {
-  HopDongTinDung, EntityType, BankName, PhuongThuc, KyTra, TrangThaiHD, LaiSuatLoai,
+  HopDongTinDung, EntityType, BankName, PhuongThuc, KyTra, KyTraGoc, TrangThaiHD, LaiSuatLoai,
 } from '@/lib/han-muc-types'
 
 const ENTITIES: EntityType[]    = ['SAG', 'SAHS', 'ĐTSA', 'YANA', 'Cá nhân']
@@ -32,10 +32,12 @@ const emptyForm = {
   hanMuc: '', soTienGiaiNgan: '',
   laiSuatLoai: 'co-dinh' as LaiSuatLoai,
   laiSuat: '', soThangUuDai: '', laiSuatSauUuDai: '',
-  phuongThuc: 'giam-dan' as PhuongThuc, kyTra: 'monthly' as KyTra,
+  phuongThuc: 'giam-dan' as PhuongThuc,
+  kyTra: 'monthly' as KyTra,
+  kyTraGoc: '' as KyTraGoc | '',   // để trống = đồng nhất với kyTra
   ngayKy: '', ngayDaoHan: '', trangThai: 'dang-vay' as TrangThaiHD, ghiChu: '',
-  // ── MỚI: gốc làm tròn theo NH ──
-  gocTraCoDinh: '',   // để trống = tự tính theo công thức
+  // ── gốc làm tròn theo NH ──
+  gocTraCoDinh: '',
 }
 
 export default function HopDongForm({ open, onClose, editing }: Props) {
@@ -49,7 +51,9 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
           laiSuat: String(editing.laiSuat),
           soThangUuDai: editing.soThangUuDai != null ? String(editing.soThangUuDai) : '',
           laiSuatSauUuDai: editing.laiSuatSauUuDai != null ? String(editing.laiSuatSauUuDai) : '',
-          phuongThuc: editing.phuongThuc, kyTra: editing.kyTra,
+          phuongThuc: editing.phuongThuc,
+          kyTra: editing.kyTra,
+          kyTraGoc: editing.kyTraGoc ?? '',
           ngayKy: editing.ngayKy, ngayDaoHan: editing.ngayDaoHan,
           trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
           gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
@@ -69,7 +73,9 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       laiSuat: String(editing.laiSuat),
       soThangUuDai: editing.soThangUuDai != null ? String(editing.soThangUuDai) : '',
       laiSuatSauUuDai: editing.laiSuatSauUuDai != null ? String(editing.laiSuatSauUuDai) : '',
-      phuongThuc: editing.phuongThuc, kyTra: editing.kyTra,
+      phuongThuc: editing.phuongThuc,
+      kyTra: editing.kyTra,
+      kyTraGoc: editing.kyTraGoc ?? '',
       ngayKy: editing.ngayKy, ngayDaoHan: editing.ngayDaoHan,
       trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
       gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
@@ -135,6 +141,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       if (form.nguoiVay)    payload.nguoiVay    = form.nguoiVay
       if (form.chiNhanh)    payload.chiNhanh    = form.chiNhanh
       if (form.ghiChu)      payload.ghiChu      = form.ghiChu
+      if (form.kyTraGoc)    payload.kyTraGoc    = form.kyTraGoc
       if (form.laiSuatLoai === 'tha-noi') {
         payload.soThangUuDai    = Number(form.soThangUuDai)
         payload.laiSuatSauUuDai = Number(form.laiSuatSauUuDai)
@@ -204,12 +211,44 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
               </select>
             </Field>
 
-            <Field label="Kỳ trả">
-              <select className="nh-select" value={form.kyTra} onChange={e => set('kyTra', e.target.value)}>
+            <Field label="Kỳ trả lãi">
+              <select className="nh-select" value={form.kyTra} onChange={e => {
+                set('kyTra', e.target.value)
+                // lưu động: phuongThuc luôn là cuoi-ky, kyTraGoc không cần
+                if (e.target.value === 'luu-dong') {
+                  setForm(f => ({ ...f, kyTra: 'luu-dong', phuongThuc: 'giam-dan', kyTraGoc: '' }))
+                }
+              }}>
                 <option value="monthly">Hàng tháng</option>
                 <option value="quarterly">Hàng quý</option>
+                <option value="luu-dong">Lưu động (lãi tháng, gốc cuối kỳ)</option>
               </select>
             </Field>
+            {/* Kỳ trả gốc riêng — chỉ hiện khi kyTra=monthly và không phải lưu động */}
+            {form.kyTra === 'monthly' && (
+              <Field label="Kỳ trả gốc">
+                <select
+                  className="nh-select"
+                  value={form.kyTraGoc}
+                  onChange={e => set('kyTraGoc', e.target.value)}
+                  style={{ borderColor: form.kyTraGoc && form.kyTraGoc !== 'monthly' ? '#D4A64A' : undefined }}
+                >
+                  <option value="">Đồng nhất với kỳ lãi (hàng tháng)</option>
+                  <option value="quarterly">Hàng quý (lãi tháng, gốc quý)</option>
+                  <option value="cuoi-ky">Cuối kỳ (lãi tháng, gốc 1 lần)</option>
+                </select>
+                {form.kyTraGoc === 'quarterly' && (
+                  <div style={{ fontSize: 11, color: '#92600a', marginTop: 4 }}>
+                    ⚡ Lịch sẽ sinh hàng tháng — tháng 3, 6, 9… mới có gốc
+                  </div>
+                )}
+                {form.kyTraGoc === 'cuoi-ky' && (
+                  <div style={{ fontSize: 11, color: '#92600a', marginTop: 4 }}>
+                    ⚡ Mỗi tháng chỉ trả lãi, gốc trả 1 lần cuối hợp đồng
+                  </div>
+                )}
+              </Field>
+            )}
             <Field label="Ngày ký *">
               <input type="date" className="nh-input" value={form.ngayKy} onChange={e => set('ngayKy', e.target.value)} />
             </Field>
@@ -295,9 +334,15 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
 
           {!editing && (
             <p className="nh-hint">
-              Lịch trả nợ sẽ được tự động sinh dựa trên ngày ký, ngày đáo hạn, kỳ trả và phương thức trả gốc.
-              {form.gocTraCoDinh && ' Gốc cứng sẽ áp dụng cho tất cả kỳ, kỳ cuối tự điều chỉnh.'}
-              {form.laiSuatLoai === 'tha-noi' && ' Sau khi hết số tháng ưu đãi, hệ thống tự chuyển sang lãi suất thả nổi.'}
+              {form.kyTra === 'luu-dong'
+                ? 'Lưu động: lãi trả hàng tháng, gốc trả 1 lần khi đáo hạn.'
+                : form.kyTraGoc === 'quarterly'
+                  ? 'Lịch sinh hàng tháng — tháng 3, 6, 9… mới trả gốc, các tháng còn lại chỉ trả lãi.'
+                  : form.kyTraGoc === 'cuoi-ky'
+                    ? 'Lịch sinh hàng tháng — mỗi tháng chỉ trả lãi, gốc trả 1 lần cuối kỳ.'
+                    : 'Lịch trả nợ tự động sinh theo kỳ trả và phương thức trả gốc.'}
+              {form.gocTraCoDinh && ' Gốc cứng áp dụng cho tất cả kỳ trả gốc, kỳ cuối tự điều chỉnh.'}
+              {form.laiSuatLoai === 'tha-noi' && ' Sau ưu đãi hệ thống tự chuyển sang lãi suất thả nổi.'}
             </p>
           )}
           {error && <p className="nh-err">{error}</p>}

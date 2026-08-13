@@ -11,7 +11,8 @@ export type BankName =
   | 'VietBank' | 'VietABank' | 'KienlongBank' | 'Vikki Bank'
   | 'Chailease' | 'Khác'
 export type PhuongThuc  = 'giam-dan' | 'cuoi-ky'
-export type KyTra       = 'monthly'  | 'quarterly'
+export type KyTra       = 'monthly' | 'quarterly' | 'luu-dong'
+export type KyTraGoc    = 'monthly' | 'quarterly' | 'cuoi-ky'
 export type TrangThaiHD =
   | 'dang-vay'
   | 'binh-thuong'
@@ -40,7 +41,8 @@ export interface HopDongTinDung {
   soThangUuDai?:    number        // chỉ dùng khi thả nổi
   laiSuatSauUuDai?: number        // %/năm — chỉ dùng khi thả nổi
   phuongThuc:      PhuongThuc
-  kyTra:           KyTra
+  kyTra:           KyTra          // chu kỳ trả LÃI
+  kyTraGoc?:       KyTraGoc       // chu kỳ trả GỐC — nếu khác kyTra (VD: lãi tháng, gốc quý)
   ngayKy:          string        // ISO date
   ngayDaoHan:      string
   trangThai:       TrangThaiHD

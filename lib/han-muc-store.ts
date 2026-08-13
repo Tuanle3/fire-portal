@@ -230,11 +230,45 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   const ngayKy     = new Date(hd.ngayKy)
   const ngayDaoHan = new Date(hd.ngayDaoHan)
   const diffM      = monthDiff(ngayKy, ngayDaoHan)
-  const period     = hd.kyTra === 'monthly' ? 1 : 3
-  const numKy      = Math.max(1, Math.floor(diffM / period))
   const todayD     = new Date()
 
-  // Gốc mỗi kỳ: ưu tiên số NH làm tròn, fallback tự tính đều
+  // ── Trường hợp đặc biệt: lưu động ────────────────────────
+  // kyTra='luu-dong': lãi trả HÀNG THÁNG, gốc trả 1 lần CUỐI KỲ
+  if (hd.kyTra === 'luu-dong') {
+    const numThang = Math.max(1, diffM)
+    const rows: KyTraNo[] = []
+    let dunNo = hd.soTienGiaiNgan
+    for (let i = 1; i <= numThang; i++) {
+      const ngayTra  = addMonths(ngayKy, i)
+      const isLast   = i === numThang
+      const lsThang  = laiSuatChoKy(hd, ngayTra) / 100 / 12
+      const laiTra   = Math.round(dunNo * lsThang)
+      const gocTra   = isLast ? dunNo : 0
+      const dunNoCuoi = Math.max(0, dunNo - gocTra)
+      const dLeft    = daysDiff(todayD, ngayTra)
+      const trangThai: KyTraNo['trangThai'] =
+        dLeft < 0 ? 'qua-han' : dLeft <= 7 ? 'gan-han' : 'chua-tra'
+      rows.push({
+        id: `ky-${i}-${hd.id}`, hopDongId: hd.id, soKy: i,
+        ngayTra: ngayTra.toISOString().slice(0, 10),
+        dunNoDauKy: dunNo, gocTra, laiTra, tongTra: gocTra + laiTra,
+        dunNoCuoiKy: dunNoCuoi, trangThai,
+      })
+    }
+    return rows
+  }
+
+  // ── Trường hợp: lãi hàng tháng, gốc theo quý (kyTraGoc riêng) ──
+  // Điều kiện: kyTra='monthly' + kyTraGoc='quarterly'
+  if (hd.kyTra === 'monthly' && hd.kyTraGoc === 'quarterly') {
+    return buildScheduleLaiThangGocQuy(hd, diffM, todayD)
+  }
+
+  // ── Trường hợp thông thường (monthly / quarterly đồng nhất) ──
+  const period = hd.kyTra === 'quarterly' ? 3 : 1
+  const numKy  = Math.max(1, Math.floor(diffM / period))
+  const kyPerYear = hd.kyTra === 'quarterly' ? 4 : 12
+
   const gocCung = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
   const gocKy   = gocCung ?? Math.round(hd.soTienGiaiNgan / numKy)
 
@@ -244,16 +278,12 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   for (let i = 1; i <= numKy; i++) {
     const ngayTra  = addMonths(ngayKy, i * period)
     const isLastKy = i === numKy
-    const lsKy     = laiSuatChoKy(hd, ngayTra) / 100 / (hd.kyTra === 'monthly' ? 12 : 4)
+    const lsKy     = laiSuatChoKy(hd, ngayTra) / 100 / kyPerYear
 
     const laiTra = hd.phuongThuc === 'giam-dan'
       ? Math.round(dunNo * lsKy)
       : Math.round(hd.soTienGiaiNgan * lsKy)
 
-    // Gốc kỳ này:
-    // - cuoi-ky: 0 mọi kỳ, kỳ cuối = toàn bộ dư nợ
-    // - giam-dan: kỳ cuối = dư nợ còn lại (xử lý sai số làm tròn)
-    //             kỳ giữa = gocKy (cứng hoặc tự tính)
     let gocTra: number
     if (hd.phuongThuc === 'cuoi-ky') {
       gocTra = isLastKy ? dunNo : 0
@@ -275,6 +305,58 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
     })
 
     if (hd.phuongThuc === 'giam-dan') dunNo = dunNoCuoi
+  }
+  return rows
+}
+
+// ── Lãi trả hàng tháng, gốc trả hàng quý ───────────────────
+// Mỗi tháng đều có 1 row trong lịch:
+//   - Tháng không trả gốc: gocTra = 0, chỉ có laiTra
+//   - Tháng trả gốc (tháng 3, 6, 9…): gocTra > 0
+function buildScheduleLaiThangGocQuy(
+  hd: HopDongTinDung,
+  diffM: number,
+  todayD: Date,
+): KyTraNo[] {
+  const ngayKy  = new Date(hd.ngayKy)
+  const numThang = Math.max(1, diffM)
+  // Số kỳ trả gốc = số quý
+  const numKyGoc = Math.max(1, Math.floor(diffM / 3))
+  const gocCung  = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
+  const gocQuy   = gocCung ?? Math.round(hd.soTienGiaiNgan / numKyGoc)
+
+  let dunNo = hd.soTienGiaiNgan
+  let kyGocDaTra = 0
+  const rows: KyTraNo[] = []
+
+  for (let i = 1; i <= numThang; i++) {
+    const ngayTra   = addMonths(ngayKy, i)
+    const isLastThang = i === numThang
+    // Trả gốc khi là tháng 3, 6, 9... hoặc tháng cuối
+    const laThangTraGoc = (i % 3 === 0) || isLastThang
+    const lsThang   = laiSuatChoKy(hd, ngayTra) / 100 / 12
+    const laiTra    = Math.round(dunNo * lsThang)
+
+    let gocTra = 0
+    if (laThangTraGoc) {
+      kyGocDaTra++
+      const isLastGoc = kyGocDaTra === numKyGoc || isLastThang
+      gocTra = isLastGoc ? dunNo : Math.min(gocQuy, dunNo)
+    }
+
+    const dunNoCuoi = Math.max(0, dunNo - gocTra)
+    const dLeft     = daysDiff(todayD, ngayTra)
+    const trangThai: KyTraNo['trangThai'] =
+      dLeft < 0 ? 'qua-han' : dLeft <= 7 ? 'gan-han' : 'chua-tra'
+
+    rows.push({
+      id: `ky-${i}-${hd.id}`, hopDongId: hd.id, soKy: i,
+      ngayTra: ngayTra.toISOString().slice(0, 10),
+      dunNoDauKy: dunNo, gocTra, laiTra, tongTra: gocTra + laiTra,
+      dunNoCuoiKy: dunNoCuoi, trangThai,
+    })
+
+    dunNo = dunNoCuoi
   }
   return rows
 }
