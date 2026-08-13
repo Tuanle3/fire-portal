@@ -304,14 +304,42 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   const kyPerYear = hd.kyTra === 'quarterly' ? 4 : 12
 
   // Có kỳ lẻ ngày đầu: ngày trả gốc đầu tiên khác với chu kỳ đều đặn tính từ ngày ký
-  // (VD: ký 02/12/2025 nhưng kỳ trả gốc đầu tiên là 25/01 — kỳ 1 chỉ tính lãi lẻ ngày)
+  // (VD: ký 02/12/2025 nhưng ngày neo = 25 → kỳ lẻ kết thúc 25/12/2025, các kỳ sau: 25/01, 25/02…)
+  //
+  // Logic neo ngày-trong-tháng (giống buildScheduleLaiThangGocQuy):
+  //   1. Lấy ankerDay = ngày-trong-tháng của ngayTraGocDauTien (VD: 25)
+  //   2. candidate = ankerDay trong CÙNG tháng ký
+  //      - Nếu candidate == ngayKy  → không có kỳ lẻ, bắt đầu chu kỳ đều đặn từ ngày ký
+  //      - Nếu candidate < ngayKy   → kỳ lẻ kéo dài đến ankerDay tháng SAU
+  //      - Nếu candidate > ngayKy   → kỳ lẻ ngắn, kết thúc ngay trong tháng ký
+  //   3. Các kỳ tiếp theo: addMonths(ankerDate, period), addMonths(ankerDate, 2*period), ...
   const coKyLe = !!hd.ngayTraGocDauTien
-  const ngayGocDauTien = coKyLe ? new Date(hd.ngayTraGocDauTien!) : null
+  const ngayGocDauTienRaw = coKyLe ? new Date(hd.ngayTraGocDauTien!) : null
+  const ankerDay = coKyLe ? ngayGocDauTienRaw!.getDate() : ngayKy.getDate()
 
-  const numKySau = coKyLe && ngayGocDauTien
-    ? Math.max(1, Math.floor(monthDiff(ngayGocDauTien, ngayDaoHan) / period))
+  // Xác định ankerDate (ngày kết thúc kỳ lẻ, đồng thời là neo cố định các kỳ sau)
+  let ankerDate: Date = ngayKy
+  let coKyLeThuc = false
+  if (coKyLe) {
+    const candidate = new Date(ngayKy.getFullYear(), ngayKy.getMonth(), ankerDay)
+    if (candidate.getTime() === ngayKy.getTime()) {
+      // Trùng đúng ngày ký — không có kỳ lẻ
+      ankerDate = ngayKy
+    } else if (candidate.getTime() < ngayKy.getTime()) {
+      // Ngày neo đã qua trong tháng ký → kỳ lẻ kéo đến tháng sau
+      ankerDate = addMonths(candidate, 1)
+      coKyLeThuc = true
+    } else {
+      // Ngày neo còn phía trước trong tháng ký → kỳ lẻ ngắn
+      ankerDate = candidate
+      coKyLeThuc = true
+    }
+  }
+
+  const numKySau = coKyLeThuc
+    ? Math.max(1, Math.floor(monthDiff(ankerDate, ngayDaoHan) / period))
     : Math.max(1, Math.floor(diffM / period))
-  const numKy = coKyLe ? numKySau + 1 : numKySau
+  const numKy = coKyLeThuc ? numKySau + 1 : numKySau
 
   const gocCung = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
   // Chia đều gốc theo SỐ KỲ THỰC SỰ TRẢ GỐC (numKySau) — kỳ lẻ ngày (stub) không trả gốc
@@ -322,11 +350,11 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   const rows: KyTraNo[] = []
 
   for (let i = 1; i <= numKy; i++) {
-    const isStub   = coKyLe && i === 1
+    const isStub   = coKyLeThuc && i === 1
     const isLastKy = i === numKy
     const ngayTra: Date = isStub
-      ? ngayGocDauTien!
-      : addMonths(coKyLe ? ngayGocDauTien! : ngayKy, coKyLe ? (i - 1) * period : i * period)
+      ? ankerDate
+      : addMonths(coKyLeThuc ? ankerDate : ngayKy, coKyLeThuc ? (i - 1) * period : i * period)
 
     const lsNam = laiSuatChoKy(hd, ngayTra) / 100
 
@@ -369,26 +397,88 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
 // Mỗi tháng đều có 1 row trong lịch:
 //   - Tháng không trả gốc: gocTra = 0, chỉ có laiTra
 //   - Tháng trả gốc (tháng 3, 6, 9…): gocTra > 0
+//
+// Kỳ lẻ ngày (nếu có ngayTraGocDauTien):
+//   - Ngày-trong-tháng của ngayTraGocDauTien = ngày thu lãi CỐ ĐỊNH hàng tháng,
+//     áp dụng cho cả kỳ lẻ đầu và MỌI kỳ lãi hàng tháng sau đó.
+//   - Kỳ 0 (soKy=1, hiển thị "Kỳ 0: tính lãi"): từ ngayKy → ngày thu lãi cố định
+//     gần nhất sau ngayKy. Chỉ tính lãi theo số ngày thực/365, KHÔNG thu gốc.
+//   - Các kỳ sau neo theo đúng ngày cố định đó, đều đặn mỗi tháng.
+//
+// Số kỳ trả gốc: ưu tiên hd.soKyTraGoc (NH quy định, nhập tay). Nếu không có,
+// fallback tự suy ra theo diffM (tương thích hợp đồng cũ chưa nhập field này).
 function buildScheduleLaiThangGocQuy(
   hd: HopDongTinDung,
   diffM: number,
   todayD: Date,
 ): KyTraNo[] {
-  const ngayKy  = new Date(hd.ngayKy)
-  const numThang = Math.max(1, diffM)
-  // Số kỳ trả gốc = số quý
-  const numKyGoc = Math.max(1, Math.floor(diffM / 3))
-  const gocCung  = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
-  const gocQuy   = gocCung ?? Math.round(hd.soTienGiaiNgan / numKyGoc)
+  const ngayKy = new Date(hd.ngayKy)
+
+  const coKyLe = !!hd.ngayTraGocDauTien
+  const ngayGocDauTien = coKyLe ? new Date(hd.ngayTraGocDauTien!) : null
+  const ankerDay = coKyLe ? ngayGocDauTien!.getDate() : ngayKy.getDate()
+
+  // ── Ngày thu lãi cố định hàng tháng đầu tiên (mốc neo cho mọi kỳ sau) ──
+  // Case biên: nếu ngày-trong-tháng của mốc neo TRÙNG ĐÚNG ngày ký (VD ký 25/12,
+  // ngày trả gốc đầu tiên cũng nhập 25/12) → KHÔNG có kỳ lẻ nào cả (0 ngày lãi lẻ),
+  // vào thẳng chu kỳ tháng bình thường — không được đẩy sang tháng sau rồi tính
+  // "kỳ lẻ" ảo gần 1 tháng (lỗi cũ khiến ngày bị lùi 1 tháng và lãi bị thổi phồng).
+  let ankerDate: Date
+  let coKyLeThuc = false
+  if (coKyLe) {
+    const candidate = new Date(ngayKy.getFullYear(), ngayKy.getMonth(), ankerDay)
+    if (candidate.getTime() === ngayKy.getTime()) {
+      // Trùng đúng ngày ký — không có kỳ lẻ, bắt đầu chu kỳ tháng bình thường từ ngày ký
+      ankerDate = ngayKy
+    } else if (candidate.getTime() < ngayKy.getTime()) {
+      // Ngày neo trong tháng ký đã trôi qua trước ngày ký — kỳ lẻ kéo dài đến ngày neo tháng sau
+      ankerDate = addMonths(candidate, 1)
+      coKyLeThuc = true
+    } else {
+      // Ngày neo còn ở phía sau trong cùng tháng ký — kỳ lẻ ngắn, gọn trong tháng ký
+      ankerDate = candidate
+      coKyLeThuc = true
+    }
+  } else {
+    ankerDate = ngayKy
+  }
+
+  // ── Số kỳ trả gốc: ưu tiên nhập tay ──
+  const numKyGoc = hd.soKyTraGoc && hd.soKyTraGoc > 0
+    ? hd.soKyTraGoc
+    : Math.max(1, Math.floor(diffM / 3))
+  const numThangSau = numKyGoc * 3   // tổng số kỳ lãi hàng tháng SAU kỳ lẻ
+
+  const gocCung = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
+  const gocQuy  = gocCung ?? Math.round(hd.soTienGiaiNgan / numKyGoc)
 
   let dunNo = hd.soTienGiaiNgan
   let kyGocDaTra = 0
+  let soKy = 1
   const rows: KyTraNo[] = []
 
-  for (let i = 1; i <= numThang; i++) {
-    const ngayTra   = addMonths(ngayKy, i)
-    const isLastThang = i === numThang
-    // Trả gốc khi là tháng 3, 6, 9... hoặc tháng cuối
+  // ── Kỳ 0: tính lãi (kỳ lẻ ngày) ──
+  if (coKyLeThuc) {
+    const soNgayLe = daysDiff(ngayKy, ankerDate)
+    const lsNam    = laiSuatChoKy(hd, ankerDate) / 100
+    const laiTra   = Math.round(dunNo * lsNam * (soNgayLe / 365))
+    const dLeft    = daysDiff(todayD, ankerDate)
+    const trangThai: KyTraNo['trangThai'] =
+      dLeft < 0 ? 'qua-han' : dLeft <= 7 ? 'gan-han' : 'chua-tra'
+
+    rows.push({
+      id: `ky-${soKy}-${hd.id}`, hopDongId: hd.id, soKy,
+      ngayTra: ankerDate.toISOString().slice(0, 10),
+      dunNoDauKy: dunNo, gocTra: 0, laiTra, tongTra: laiTra,
+      dunNoCuoiKy: dunNo, trangThai,
+    })
+    soKy++
+  }
+
+  for (let i = 1; i <= numThangSau; i++) {
+    const ngayTra      = addMonths(ankerDate, i)
+    const isLastThang  = i === numThangSau
+    // Trả gốc khi là tháng thứ 3, 6, 9... trong dãy kỳ lãi (sau kỳ lẻ), hoặc tháng cuối
     const laThangTraGoc = (i % 3 === 0) || isLastThang
     const lsThang   = laiSuatChoKy(hd, ngayTra) / 100 / 12
     const laiTra    = Math.round(dunNo * lsThang)
@@ -406,13 +496,14 @@ function buildScheduleLaiThangGocQuy(
       dLeft < 0 ? 'qua-han' : dLeft <= 7 ? 'gan-han' : 'chua-tra'
 
     rows.push({
-      id: `ky-${i}-${hd.id}`, hopDongId: hd.id, soKy: i,
+      id: `ky-${soKy}-${hd.id}`, hopDongId: hd.id, soKy,
       ngayTra: ngayTra.toISOString().slice(0, 10),
       dunNoDauKy: dunNo, gocTra, laiTra, tongTra: gocTra + laiTra,
       dunNoCuoiKy: dunNoCuoi, trangThai,
     })
 
     dunNo = dunNoCuoi
+    soKy++
   }
   return rows
 }

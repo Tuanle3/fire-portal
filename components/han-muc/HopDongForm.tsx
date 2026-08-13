@@ -38,6 +38,8 @@ const emptyForm = {
   ngayKy: '', ngayTraGocDauTien: '', ngayDaoHan: '', trangThai: 'dang-vay' as TrangThaiHD, ghiChu: '',
   // ── gốc làm tròn theo NH ──
   gocTraCoDinh: '',
+  // ── số kỳ trả gốc (chỉ dùng khi kyTraGoc='quarterly') ──
+  soKyTraGoc: '',
 }
 
 export default function HopDongForm({ open, onClose, editing }: Props) {
@@ -57,6 +59,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
           ngayKy: editing.ngayKy, ngayTraGocDauTien: editing.ngayTraGocDauTien ?? '', ngayDaoHan: editing.ngayDaoHan,
           trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
           gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
+          soKyTraGoc: editing.soKyTraGoc != null ? String(editing.soKyTraGoc) : '',
         }
       : emptyForm,
   )
@@ -79,6 +82,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       ngayKy: editing.ngayKy, ngayTraGocDauTien: editing.ngayTraGocDauTien ?? '', ngayDaoHan: editing.ngayDaoHan,
       trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
       gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
+      soKyTraGoc: editing.soKyTraGoc != null ? String(editing.soKyTraGoc) : '',
     } : emptyForm)
     setError('')
   }, [open, editing])
@@ -109,7 +113,8 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
   const handleSubmit = async () => {
     const thieuCoBan  = !form.soHopDong || !form.hanMuc || !form.soTienGiaiNgan || !form.laiSuat || !form.ngayKy || !form.ngayDaoHan
     const thieuThaNoi = form.laiSuatLoai === 'tha-noi' && (!form.soThangUuDai || !form.laiSuatSauUuDai)
-    if (thieuCoBan || thieuThaNoi) {
+    const thieuSoKyGoc = form.kyTra === 'monthly' && form.kyTraGoc === 'quarterly' && !form.soKyTraGoc
+    if (thieuCoBan || thieuThaNoi || thieuSoKyGoc) {
       setError('Vui lòng điền đủ các trường bắt buộc (đánh dấu *).')
       return
     }
@@ -143,6 +148,11 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       if (form.ghiChu)      payload.ghiChu      = form.ghiChu
       if (form.kyTraGoc)    payload.kyTraGoc    = form.kyTraGoc
       if (form.ngayTraGocDauTien) payload.ngayTraGocDauTien = form.ngayTraGocDauTien
+      // ── Số kỳ trả gốc: chỉ áp dụng khi chọn "Hàng quý" ──
+      if (form.kyTraGoc === 'quarterly' && form.soKyTraGoc) {
+        const soKyNum = Number(form.soKyTraGoc)
+        if (!isNaN(soKyNum) && soKyNum > 0) payload.soKyTraGoc = soKyNum
+      }
       if (form.laiSuatLoai === 'tha-noi') {
         payload.soThangUuDai    = Number(form.soThangUuDai)
         payload.laiSuatSauUuDai = Number(form.laiSuatSauUuDai)
@@ -248,6 +258,21 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
                     ⚡ Mỗi tháng chỉ trả lãi, gốc trả 1 lần cuối hợp đồng
                   </div>
                 )}
+              </Field>
+            )}
+            {/* Số kỳ trả gốc — chỉ hiện khi chọn Kỳ trả gốc = Hàng quý */}
+            {form.kyTra === 'monthly' && form.kyTraGoc === 'quarterly' && (
+              <Field label="Số kỳ trả gốc (theo NH) *">
+                <input
+                  type="number" min={1} className="nh-input"
+                  value={form.soKyTraGoc}
+                  onChange={e => set('soKyTraGoc', e.target.value)}
+                  placeholder="VD: 12 (mỗi kỳ cách nhau 1 quý)"
+                  style={{ borderColor: form.soKyTraGoc ? '#D4A64A' : undefined }}
+                />
+                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, lineHeight: 1.4 }}>
+                  Tổng gốc giải ngân sẽ chia đều cho đúng số kỳ này (mỗi kỳ cách nhau 3 tháng). Nhập theo hợp đồng ngân hàng, hệ thống không tự suy ra từ ngày đáo hạn nữa.
+                </div>
               </Field>
             )}
             <Field label="Ngày ký *">

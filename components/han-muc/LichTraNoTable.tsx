@@ -29,15 +29,19 @@ interface QuarterGroup {
   kyGoc: KyTraNo         // kỳ tháng cuối quý (có gốc)
 }
 
-function groupByQuarter(rows: KyTraNo[]): QuarterGroup[] {
+// hasStub: hợp đồng có kỳ lẻ ngày đầu (Kỳ 0: chỉ tính lãi) — dòng đầu tiên
+// của rows không tính vào nhóm quý, hiển thị riêng ở trên.
+function groupByQuarter(rows: KyTraNo[], hasStub: boolean): { stub: KyTraNo | null; groups: QuarterGroup[] } {
+  const stub = hasStub ? (rows[0] ?? null) : null
+  const monthRows = hasStub ? rows.slice(1) : rows
   const groups: QuarterGroup[] = []
-  for (let i = 0; i < rows.length; i += 3) {
-    const thang = rows.slice(i, i + 3)
+  for (let i = 0; i < monthRows.length; i += 3) {
+    const thang = monthRows.slice(i, i + 3)
     if (!thang.length) break
     const kyGoc = thang[thang.length - 1]
     groups.push({ soQuy: groups.length + 1, thang, kyGoc })
   }
-  return groups
+  return { stub, groups }
 }
 
 interface Props {
@@ -244,7 +248,14 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
   // CHẾ ĐỘ: Lãi tháng + Gốc quý → bảng nhóm quý
   // ════════════════════════════════════════════════════════════
   if (isLaiThangGocQuy) {
-    const groups = groupByQuarter(rows)
+    // hasStub phải khớp CHÍNH XÁC với logic backend (buildScheduleLaiThangGocQuy):
+    // nếu ngày-trong-tháng của "ngày trả gốc đầu tiên" TRÙNG ngày-trong-tháng của
+    // "ngày ký" thì không có kỳ lẻ nào cả — rows[0] là kỳ thường, không phải Kỳ 0.
+    const ngayKyDate = hopDong.ngayKy ? new Date(hopDong.ngayKy) : null
+    const ankerDayFE = hopDong.ngayTraGocDauTien ? new Date(hopDong.ngayTraGocDauTien).getDate() : null
+    const hasStub = !!hopDong.ngayTraGocDauTien && !!ngayKyDate && rows.length > 0
+      && ankerDayFE !== ngayKyDate.getDate()
+    const { stub, groups } = groupByQuarter(rows, hasStub)
     const totalQuarters = groups.length
 
     return (
@@ -278,6 +289,50 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
             </tr>
           </thead>
           <tbody>
+            {stub && (
+              <tr style={{ background: stub.trangThai === 'da-tra' ? '#f0fdf4' : '#fafbff', borderBottom: '2px solid #cbd5e1' }}>
+                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 32, height: 32, borderRadius: '50%',
+                      background: '#EEF3FA', color: '#1C3557',
+                      fontSize: 11, fontWeight: 800, flexShrink: 0,
+                    }}>
+                      0
+                    </span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#1C3557' }}>Kỳ 0</div>
+                      <div style={{ fontSize: 10.5, color: '#9ca3af' }}>tính lãi (kỳ lẻ ngày)</div>
+                    </div>
+                  </div>
+                </td>
+                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: 11.5, color: '#6b7280' }}>{stub.ngayTra}</td>
+                <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 12.5, color: '#374151' }}>
+                  {fmt(stub.dunNoDauKy)}
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 12, color: '#d1d5db' }}>—</span>
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 13, color: '#D4A64A', fontWeight: 700 }}>{fmt(stub.laiTra)}</div>
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: '#111' }}>
+                  {fmt(stub.tongTra)}
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 12.5, color: '#374151' }}>
+                  {fmt(stub.dunNoCuoiKy)}
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                  <span className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-medium ${STATUS_STYLE[stub.trangThai]}`}>
+                    {STATUS_LABEL[stub.trangThai]}
+                  </span>
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                  {renderActionLaiOnly(stub)}
+                </td>
+              </tr>
+            )}
             {groups.map((grp) => {
               const isExpanded = expandedQuy.has(grp.soQuy)
               // Trạng thái tổng quý: ưu tiên qua-han > gan-han > da-tra (nếu tất cả đã trả) > chua-tra
