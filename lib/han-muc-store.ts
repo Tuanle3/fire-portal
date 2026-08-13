@@ -197,7 +197,7 @@ function laiSuatChoKy(hd: HopDongTinDung, ngayTraKy: Date): number {
   if (hd.laiSuatLoai !== 'tha-noi' || !hd.soThangUuDai || hd.laiSuatSauUuDai == null) {
     return hd.laiSuat
   }
-  const soThangDaTrai = monthDiff(new Date(hd.ngayKy), ngayTraKy)
+  const soThangDaTrai = monthDiff(parseDate(hd.ngayKy), ngayTraKy)
   return soThangDaTrai > hd.soThangUuDai ? hd.laiSuatSauUuDai : hd.laiSuat
 }
 
@@ -238,7 +238,7 @@ export async function markKyDaTraThucTe(
 
     cacKySau.forEach((k, idx) => {
       const isLast = idx === cacKySau.length - 1
-      const lsKy   = laiSuatChoKy(hopDong, new Date(k.ngayTra)) / 100 / (hopDong.kyTra === 'monthly' ? 12 : 4)
+      const lsKy   = laiSuatChoKy(hopDong, parseDate(k.ngayTra)) / 100 / (hopDong.kyTra === 'monthly' ? 12 : 4)
 
       const laiTra = hopDong.phuongThuc === 'giam-dan'
         ? Math.round(dunNo * lsKy)
@@ -299,8 +299,8 @@ export async function saveCoCauNo(
 
 // ── Tính lịch trả nợ (client-side) ─────────────────────────
 export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
-  const ngayKy     = new Date(hd.ngayKy)
-  const ngayDaoHan = new Date(hd.ngayDaoHan)
+  const ngayKy     = parseDate(hd.ngayKy)
+  const ngayDaoHan = parseDate(hd.ngayDaoHan)
   const diffM      = monthDiff(ngayKy, ngayDaoHan)
   const todayD     = new Date()
 
@@ -328,7 +328,7 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
         dLeft < 0 ? 'qua-han' : dLeft <= 7 ? 'gan-han' : 'chua-tra'
       rows.push({
         id: `ky-${i}-${hd.id}`, hopDongId: hd.id, soKy: i,
-        ngayTra: ngayTra.toISOString().slice(0, 10),
+        ngayTra: fmtDate(ngayTra),
         dunNoDauKy: dunNo, gocTra, laiTra, tongTra: gocTra + laiTra,
         dunNoCuoiKy: dunNoCuoi, trangThai,
       })
@@ -357,7 +357,7 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   //      - Nếu candidate > ngayKy   → kỳ lẻ ngắn, kết thúc ngay trong tháng ký
   //   3. Các kỳ tiếp theo: addMonths(ankerDate, period), addMonths(ankerDate, 2*period), ...
   const coKyLe = !!hd.ngayTraGocDauTien
-  const ngayGocDauTienRaw = coKyLe ? new Date(hd.ngayTraGocDauTien!) : null
+  const ngayGocDauTienRaw = coKyLe ? parseDate(hd.ngayTraGocDauTien!) : null
   const ankerDay = coKyLe ? ngayGocDauTienRaw!.getDate() : ngayKy.getDate()
 
   // Xác định ankerDate (ngày kết thúc kỳ lẻ, đồng thời là neo cố định các kỳ sau)
@@ -431,7 +431,7 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
 
     rows.push({
       id: `ky-${i}-${hd.id}`, hopDongId: hd.id, soKy: i,
-      ngayTra: ngayTra.toISOString().slice(0, 10),
+      ngayTra: fmtDate(ngayTra),
       dunNoDauKy: dunNo, gocTra, laiTra, tongTra,
       dunNoCuoiKy: dunNoCuoi, trangThai,
     })
@@ -458,10 +458,10 @@ function buildScheduleLaiThangGocQuy(
   diffM: number,
   todayD: Date,
 ): KyTraNo[] {
-  const ngayKy         = new Date(hd.ngayKy)
-  const ngayDaoHan     = new Date(hd.ngayDaoHan)
+  const ngayKy         = parseDate(hd.ngayKy)
+  const ngayDaoHan     = parseDate(hd.ngayDaoHan)
   const coKyLe         = !!hd.ngayTraGocDauTien
-  const ngayGocDauTien = coKyLe ? new Date(hd.ngayTraGocDauTien!) : null
+  const ngayGocDauTien = coKyLe ? parseDate(hd.ngayTraGocDauTien!) : null
   const ankerDay       = coKyLe ? ngayGocDauTien!.getDate() : ngayKy.getDate()
 
   // ── Xác định ankerDate: cuối kỳ lẻ = mốc neo ngày cố định hàng tháng ──
@@ -516,7 +516,7 @@ function buildScheduleLaiThangGocQuy(
       dLeft < 0 ? 'qua-han' : dLeft <= 7 ? 'gan-han' : 'chua-tra'
     rows.push({
       id: `ky-0-${hd.id}`, hopDongId: hd.id, soKy: 0,
-      ngayTra: ankerDate.toISOString().slice(0, 10),
+      ngayTra: fmtDate(ankerDate),
       dunNoDauKy: dunNo, gocTra: 0, laiTra, tongTra: laiTra,
       dunNoCuoiKy: dunNo, trangThai,
     })
@@ -554,7 +554,7 @@ function buildScheduleLaiThangGocQuy(
 
     rows.push({
       id: `ky-${i}-${hd.id}`, hopDongId: hd.id, soKy: i,
-      ngayTra: ngayTra.toISOString().slice(0, 10),
+      ngayTra: fmtDate(ngayTra),
       dunNoDauKy: dunNo, gocTra, laiTra, tongTra: gocTra + laiTra,
       dunNoCuoiKy: dunNoCuoi, trangThai,
     })
@@ -573,6 +573,20 @@ function applyCC(hd: HopDongTinDung, cc: CoCauNo): HopDongTinDung {
 }
 
 // ── Date helpers ─────────────────────────────────────────────
+// Parse ISO date string (YYYY-MM-DD) thành local Date — tránh timezone UTC offset
+// new Date('2025-10-28') trả về UTC midnight → getDate() ở UTC+7 = 27 (SAI)
+// parseDate('2025-10-28') → new Date(2025, 9, 28) local → getDate() = 28 (ĐÚNG)
+function parseDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+// Format local Date → 'YYYY-MM-DD' (tránh UTC offset của toISOString)
+function fmtDate(d: Date): string {
+  const y  = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${y}-${mo}-${dd}`
+}
 function monthDiff(a: Date, b: Date): number {
   return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth())
 }
