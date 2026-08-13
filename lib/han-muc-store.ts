@@ -132,9 +132,11 @@ export async function saveHopDong(
 
   // Nếu đang EDIT: lấy các kỳ đã trả để merge lại, không ghi đè dữ liệu thực tế
   const daTraMap: Record<number, Partial<KyTraNo>> = {}
+  const oldKyIds: string[] = []
   if (id) {
     const lichSnaps = await getDocs(query(kyCol(id), orderBy('soKy', 'asc')))
     lichSnaps.forEach(d => {
+      oldKyIds.push(d.id)
       const k = d.data() as KyTraNo
       if (k.trangThai === 'da-tra') {
         daTraMap[k.soKy] = {
@@ -148,7 +150,23 @@ export async function saveHopDong(
     })
   }
 
+  // Tập hợp id của lịch mới để biết kỳ nào đã bị xóa
+  const newKyIds = new Set(schedule.map(k => k.id))
+  // Kỳ cũ không còn trong lịch mới → cần xóa (VD: rút ngắn thời hạn)
+  const kyIdsToDelete = oldKyIds.filter(kid => !newKyIds.has(kid))
+
   const BATCH_SIZE = 400
+
+  // Xóa kỳ thừa (theo chunk, tránh vượt 500 ops/batch)
+  for (let i = 0; i < kyIdsToDelete.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db())
+    kyIdsToDelete.slice(i, i + BATCH_SIZE).forEach(kid => {
+      batch.delete(doc(kyCol(ref.id), kid))
+    })
+    await batch.commit()
+  }
+
+  // Ghi lịch mới
   for (let i = 0; i < schedule.length; i += BATCH_SIZE) {
     const batch = writeBatch(db())
     schedule.slice(i, i + BATCH_SIZE).forEach(ky => {
@@ -285,6 +303,12 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   const ngayDaoHan = new Date(hd.ngayDaoHan)
   const diffM      = monthDiff(ngayKy, ngayDaoHan)
   const todayD     = new Date()
+
+  // Guard: ngày đáo hạn không hợp lệ
+  if (diffM <= 0) {
+    console.warn('[buildSchedule] ngayDaoHan phải sau ngayKy — schedule rỗng trả về')
+    return []
+  }
 
   // ── Trường hợp đặc biệt: lưu động ────────────────────────
   // kyTra='luu-dong': lãi trả HÀNG THÁNG, gốc trả 1 lần CUỐI KỲ

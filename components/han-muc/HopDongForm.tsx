@@ -154,8 +154,8 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       if (form.ghiChu)      payload.ghiChu      = form.ghiChu
       if (form.kyTraGoc)    payload.kyTraGoc    = form.kyTraGoc
       if (form.ngayTraGocDauTien) payload.ngayTraGocDauTien = form.ngayTraGocDauTien
-      // ── Số kỳ trả gốc: chỉ áp dụng khi chọn "Hàng quý" ──
-      if (form.kyTraGoc === 'quarterly' && form.soKyTraGoc) {
+      // ── Số kỳ trả gốc: lưu khi đã nhập (kyTraGoc quarterly hoặc kyTra quarterly) ──
+      if (form.soKyTraGoc) {
         const soKyNum = Number(form.soKyTraGoc)
         if (!isNaN(soKyNum) && soKyNum > 0) payload.soKyTraGoc = soKyNum
       }
@@ -176,9 +176,10 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
 
       await saveHopDong(payload, editing?.id)
       onClose()
-    } catch (e) {
-      setError('Lưu thất bại, vui lòng thử lại.')
-      console.error(e)
+    } catch (e: any) {
+      const msg = e?.message ?? String(e)
+      setError(`Lưu thất bại: ${msg}`)
+      console.error('[HopDongForm] saveHopDong error:', e)
     } finally {
       setSaving(false)
     }
@@ -238,7 +239,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
                 set('kyTra', e.target.value)
                 // lưu động: phuongThuc luôn là cuoi-ky, kyTraGoc không cần
                 if (e.target.value === 'luu-dong') {
-                  setForm(f => ({ ...f, kyTra: 'luu-dong', phuongThuc: 'giam-dan', kyTraGoc: '' }))
+                  setForm(f => ({ ...f, kyTra: 'luu-dong', phuongThuc: 'cuoi-ky', kyTraGoc: '' }))
                 }
               }}>
                 <option value="monthly">Hàng tháng</option>
