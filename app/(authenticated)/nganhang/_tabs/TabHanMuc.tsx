@@ -285,9 +285,6 @@ export function TabHanMuc() {
         </div>
 
         <div className="nh-card">
-          <div className="nh-card-head" style={{ position: 'sticky', top: 45, zIndex: 30, background: '#EEF3FA' }}>
-            <span className="nh-card-title">Lịch trả nợ</span>
-          </div>
           <div className="nh-card-body" style={{ padding: 0 }}>
             <LichTraNoTable hopDong={selected} rows={kyList} />
           </div>

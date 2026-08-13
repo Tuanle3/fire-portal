@@ -262,24 +262,19 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
             <col style={{ width: '14%' }} />
           </colgroup>
           <thead>
-            <tr>
-              <th colSpan={9} style={{ position: 'sticky', top: 45, zIndex: 21, background: '#EEF3FA', padding: '10px 14px', textAlign: 'left', fontSize: 13, fontWeight: 700, color: '#1C3557', letterSpacing: '0.03em', borderBottom: '1px solid #d1d9e6' }}>
-                Lịch trả nợ
-              </th>
-            </tr>
             <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
-              <th style={{ position: 'sticky', top: 78, zIndex: 20, padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.03em', background: 'var(--nh-navy, #1C3557)' }}>Kỳ gốc</th>
-              <th style={{ position: 'sticky', top: 78, zIndex: 20, padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Tháng / Ngày trả</th>
-              <th style={{ position: 'sticky', top: 78, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Dư nợ đầu kỳ</th>
-              <th style={{ position: 'sticky', top: 78, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>
+              <th style={{ position: 'sticky', top: 45, zIndex: 20, padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.03em', background: 'var(--nh-navy, #1C3557)' }}>Kỳ gốc</th>
+              <th style={{ position: 'sticky', top: 45, zIndex: 20, padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Tháng / Ngày trả</th>
+              <th style={{ position: 'sticky', top: 45, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Dư nợ đầu kỳ</th>
+              <th style={{ position: 'sticky', top: 45, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>
                 <div>Gốc trả</div>
                 <div style={{ fontWeight: 400, opacity: 0.65, fontSize: 10 }}>chỉ cuối quý</div>
               </th>
-              <th style={{ position: 'sticky', top: 78, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Lãi tháng</th>
-              <th style={{ position: 'sticky', top: 78, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Tổng trả</th>
-              <th style={{ position: 'sticky', top: 78, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Dư nợ cuối kỳ</th>
-              <th style={{ position: 'sticky', top: 78, zIndex: 20, padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Trạng thái</th>
-              <th style={{ position: 'sticky', top: 78, zIndex: 20, padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Thao tác</th>
+              <th style={{ position: 'sticky', top: 45, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Lãi tháng</th>
+              <th style={{ position: 'sticky', top: 45, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Tổng trả</th>
+              <th style={{ position: 'sticky', top: 45, zIndex: 20, padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Dư nợ cuối kỳ</th>
+              <th style={{ position: 'sticky', top: 45, zIndex: 20, padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Trạng thái</th>
+              <th style={{ position: 'sticky', top: 45, zIndex: 20, padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--nh-navy, #1C3557)' }}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -490,23 +485,18 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
     <div style={{ overflowX: 'auto', overflowY: 'clip' }}>
       <table className="w-full text-sm" style={{ minWidth: 1080 }}>
         <thead>
-          <tr>
-            <th colSpan={8} style={{ position: 'sticky', top: 45, zIndex: 21, background: '#EEF3FA', padding: '10px 14px', textAlign: 'left', fontSize: 13, fontWeight: 700, color: '#1C3557', letterSpacing: '0.03em', borderBottom: '1px solid #d1d9e6' }}>
-              Lịch trả nợ
-            </th>
-          </tr>
           <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
-            <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 78, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Kỳ</th>
-            <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 78, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Ngày trả</th>
-            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 78, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Dư nợ đầu kỳ</th>
-            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 78, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>
+            <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 45, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Kỳ</th>
+            <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 45, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Ngày trả</th>
+            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 45, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Dư nợ đầu kỳ</th>
+            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 45, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>
               <div>Gốc</div>
               <div className="font-normal opacity-60">Lãi</div>
             </th>
-            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 78, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Tổng trả</th>
-            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 78, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Dư nợ cuối kỳ</th>
-            <th className="px-4 py-3 text-center font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 78, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Trạng thái</th>
-            <th className="px-4 py-3 text-center font-medium text-xs opacity-80" style={{ position: 'sticky', top: 78, zIndex: 20, background: 'var(--nh-navy, #1C3557)', minWidth: 220 }}>Thao tác</th>
+            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 45, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Tổng trả</th>
+            <th className="px-4 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 45, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Dư nợ cuối kỳ</th>
+            <th className="px-4 py-3 text-center font-medium text-xs opacity-80 whitespace-nowrap" style={{ position: 'sticky', top: 45, zIndex: 20, background: 'var(--nh-navy, #1C3557)' }}>Trạng thái</th>
+            <th className="px-4 py-3 text-center font-medium text-xs opacity-80" style={{ position: 'sticky', top: 45, zIndex: 20, background: 'var(--nh-navy, #1C3557)', minWidth: 220 }}>Thao tác</th>
           </tr>
         </thead>
         <tbody>
