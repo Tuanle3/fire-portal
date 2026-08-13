@@ -117,7 +117,7 @@ export async function saveHopDong(
     optionalFields.forEach(f => {
       if (dataToWrite[f] === undefined || dataToWrite[f] === null) dataToWrite[f] = deleteField()
     })
-    await setDoc(ref, dataToWrite)
+    await setDoc(ref, dataToWrite, { merge: true })
   } else {
     // TẠO MỚI: deleteField() không dùng được khi create — xóa key undefined khỏi object
     const dataToWrite: any = { ...data }
