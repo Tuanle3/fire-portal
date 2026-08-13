@@ -32,7 +32,7 @@ interface QuarterGroup {
 // hasStub: hợp đồng có kỳ lẻ ngày đầu (Kỳ 0: chỉ tính lãi) — dòng đầu tiên
 // của rows không tính vào nhóm quý, hiển thị riêng ở trên.
 function groupByQuarter(rows: KyTraNo[], hasStub: boolean): { stub: KyTraNo | null; groups: QuarterGroup[] } {
-  const stub = hasStub ? (rows[0] ?? null) : null
+  const stubRow = hasStub ? (rows[0] ?? null) : null
   const monthRows = hasStub ? rows.slice(1) : rows
   const groups: QuarterGroup[] = []
   let current: KyTraNo[] = []
@@ -50,6 +50,15 @@ function groupByQuarter(rows: KyTraNo[], hasStub: boolean): { stub: KyTraNo | nu
   if (current.length) {
     groups.push({ soQuy: groups.length + 1, thang: current, kyGoc: current[current.length - 1] })
   }
+
+  // Kỳ lẻ ngày (Kỳ 0) → gộp làm kỳ đầu Quý 1 nếu tổng không vượt quá 3 kỳ.
+  // Chỉ tách riêng dòng "Kỳ 0" khi Quý 1 đã đủ 3 tháng (gộp vào sẽ vượt 3 kỳ/quý).
+  let stub: KyTraNo | null = stubRow
+  if (stubRow && groups.length > 0 && groups[0].thang.length < 3) {
+    groups[0] = { ...groups[0], thang: [stubRow, ...groups[0].thang] }
+    stub = null
+  }
+
   return { stub, groups }
 }
 
@@ -385,7 +394,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                           Quý {grp.soQuy}<span style={{ color: '#9ca3af', fontWeight: 400 }}> / {totalQuarters}</span>
                         </div>
                         <div style={{ fontSize: 10.5, color: '#6b7280' }}>
-                          {grp.thang.length} tháng lãi
+                          {grp.thang.length} kỳ lãi{grp.thang[0]?.soKy === 0 ? ' (gồm kỳ lẻ)' : ''}
                         </div>
                       </div>
                       <span style={{ marginLeft: 4, fontSize: 11, color: '#9ca3af', transform: isExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform .15s' }}>▶</span>
@@ -471,9 +480,11 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                           <span style={{ width: 3, height: 22, background: '#D4A64A', borderRadius: 2, display: 'inline-block', flexShrink: 0 }} />
                           <div>
                             <div style={{ fontSize: 11.5, fontWeight: 600, color: '#374151' }}>
-                              Tháng {mIdx + 1}
+                              {ky.soKy === 0 ? 'Kỳ 0' : `Tháng ${mIdx + (grp.thang[0]?.soKy === 0 ? 0 : 1)}`}
                             </div>
-                            <div style={{ fontSize: 10, color: '#9ca3af' }}>kỳ #{ky.soKy}</div>
+                            <div style={{ fontSize: 10, color: '#9ca3af' }}>
+                              {ky.soKy === 0 ? 'lãi lẻ ngày' : `kỳ #${ky.soKy}`}
+                            </div>
                           </div>
                         </div>
                       </td>
