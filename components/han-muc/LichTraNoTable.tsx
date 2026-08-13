@@ -506,10 +506,20 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
             const isDaTra   = ky.trangThai === 'da-tra'
             const isQuaHan  = ky.trangThai === 'qua-han'
             const rowBg     = isQuaHan ? '#fff5f5' : idx % 2 === 0 ? '#fff' : '#f8fafc'
+            // Kỳ lẻ ngày đầu (chỉ tính lãi, không thu gốc) — luôn là dòng đầu tiên khi hợp đồng có ngayTraGocDauTien
+            const isStubKy  = idx === 0 && !!hopDong.ngayTraGocDauTien && ky.gocTra === 0
 
             return (
               <tr key={ky.id} style={{ background: rowBg, borderBottom: '1px solid #e8ecf0' }}>
-                <td className="px-4 py-3 font-semibold text-center whitespace-nowrap" style={{ color: 'var(--nh-navy, #1C3557)' }}>{ky.soKy}</td>
+                <td className="px-4 py-3 font-semibold text-center whitespace-nowrap" style={{ color: 'var(--nh-navy, #1C3557)' }}>
+                  {isStubKy
+                    ? <>
+                        <div>Kỳ 0</div>
+                        <div style={{ fontSize: 9.5, fontWeight: 500, color: '#9ca3af' }}>tính lãi</div>
+                      </>
+                    : ky.soKy
+                  }
+                </td>
                 <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{ky.ngayTra}</td>
                 <td className="px-4 py-3 text-right text-gray-700 tabular-nums whitespace-nowrap">{fmt(ky.dunNoDauKy)}</td>
                 <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
