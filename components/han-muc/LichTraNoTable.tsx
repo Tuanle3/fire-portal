@@ -175,22 +175,33 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
     const totalQuarters = groups.length
 
     return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ minWidth: 1000 }}>
-          <thead>
+      <div style={{ overflowX: 'auto', width: '100%' }}>
+        <table style={{ width: '100%', minWidth: 1500, borderCollapse: 'collapse', fontSize: 12 }}>
+          <colgroup>
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '8%'  }} />
+            <col style={{ width: '14%' }} />
+          </colgroup>
+          <thead style={{ position: 'sticky', top: 82, zIndex: 20 }}>
             <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
-              <th className="px-3 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap" style={{ width: 80 }}>Kỳ gốc</th>
-              <th className="px-3 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap" style={{ width: 120 }}>Tháng / Ngày trả</th>
-              <th className="px-3 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap">Dư nợ đầu kỳ</th>
-              <th className="px-3 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap">
+              <th style={{ padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>Kỳ gốc</th>
+              <th style={{ padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Tháng / Ngày trả</th>
+              <th style={{ padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Dư nợ đầu kỳ</th>
+              <th style={{ padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
                 <div>Gốc trả</div>
-                <div className="font-normal opacity-60 text-[10px]">chỉ cuối quý</div>
+                <div style={{ fontWeight: 400, opacity: 0.65, fontSize: 10 }}>chỉ cuối quý</div>
               </th>
-              <th className="px-3 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap">Lãi tháng</th>
-              <th className="px-3 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap">Tổng trả</th>
-              <th className="px-3 py-3 text-right font-medium text-xs opacity-80 whitespace-nowrap">Dư nợ cuối kỳ</th>
-              <th className="px-3 py-3 text-center font-medium text-xs opacity-80 whitespace-nowrap">Trạng thái</th>
-              <th className="px-3 py-3 text-center font-medium text-xs opacity-80" style={{ minWidth: 180 }}>Thao tác</th>
+              <th style={{ padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Lãi tháng</th>
+              <th style={{ padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Tổng trả</th>
+              <th style={{ padding: '10px 14px', textAlign: 'right',  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Dư nợ cuối kỳ</th>
+              <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Trạng thái</th>
+              <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -221,22 +232,22 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                   onClick={() => toggleQuy(grp.soQuy)}
                 >
                   {/* Kỳ gốc */}
-                  <td className="px-3 py-2.5 whitespace-nowrap">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: 28, height: 28, borderRadius: '50%',
+                        width: 32, height: 32, borderRadius: '50%',
                         background: allDaTra ? '#d1fae5' : '#EEF3FA',
                         color: allDaTra ? '#065f46' : '#1C3557',
-                        fontSize: 11, fontWeight: 800, flexShrink: 0,
+                        fontSize: 12, fontWeight: 800, flexShrink: 0,
                       }}>
                         {grp.soQuy}
                       </span>
                       <div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: '#1C3557' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#1C3557' }}>
                           Quý {grp.soQuy}<span style={{ color: '#9ca3af', fontWeight: 400 }}> / {totalQuarters}</span>
                         </div>
-                        <div style={{ fontSize: 9.5, color: '#6b7280' }}>
+                        <div style={{ fontSize: 10.5, color: '#6b7280' }}>
                           {grp.thang.length} tháng lãi
                         </div>
                       </div>
@@ -245,62 +256,62 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                   </td>
 
                   {/* Tháng / Ngày trả gốc */}
-                  <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">
-                    <div style={{ fontSize: 11, color: '#374151' }}>
+                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 11.5, color: '#374151' }}>
                       {grp.thang[0]?.ngayTra?.slice(0, 7)} →
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#1C3557' }}>
-                      {kyGoc.ngayTra} <span style={{ fontSize: 9.5, color: '#9ca3af', fontWeight: 400 }}>(gốc)</span>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1C3557' }}>
+                      {kyGoc.ngayTra} <span style={{ fontSize: 10, color: '#9ca3af', fontWeight: 400 }}>(gốc)</span>
                     </div>
                   </td>
 
                   {/* Dư nợ đầu quý */}
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-gray-600" style={{ fontSize: 12 }}>
+                  <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 12.5, color: '#374151' }}>
                     {fmt(grp.thang[0].dunNoDauKy)}
                   </td>
 
                   {/* Gốc trả */}
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
+                  <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: '#1C3557' }}>
                       {kyGoc.gocTra > 0 ? fmt(kyGoc.gocTra) : <span style={{ color: '#d1d5db' }}>—</span>}
                     </div>
                     {allDaTra && kyGoc.gocThucTra != null && kyGoc.gocThucTra !== kyGoc.gocTra && (
-                      <div style={{ fontSize: 10, color: '#d97706' }}>→ {fmt(kyGoc.gocThucTra)}</div>
+                      <div style={{ fontSize: 10.5, color: '#d97706' }}>→ {fmt(kyGoc.gocThucTra)}</div>
                     )}
                   </td>
 
                   {/* Tổng lãi quý */}
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
-                    <div style={{ fontSize: 12, color: '#D4A64A', fontWeight: 600 }}>{fmt(tongLaiQuy)}</div>
-                    <div style={{ fontSize: 9.5, color: '#9ca3af' }}>3 tháng cộng dồn</div>
+                  <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                    <div style={{ fontSize: 13, color: '#D4A64A', fontWeight: 700 }}>{fmt(tongLaiQuy)}</div>
+                    <div style={{ fontSize: 10, color: '#9ca3af' }}>3 tháng cộng dồn</div>
                   </td>
 
                   {/* Tổng trả quý */}
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
+                  <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: anyQuaHan ? '#b91c1c' : '#111' }}>
                       {fmt(tongTraQuy)}
                     </div>
                     {lech !== null && (
-                      <div style={{ fontSize: 10, color: lech > 0 ? '#ef4444' : '#10b981' }}>
+                      <div style={{ fontSize: 10.5, color: lech > 0 ? '#ef4444' : '#10b981' }}>
                         {lech > 0 ? '+' : ''}{fmt(lech)}
                       </div>
                     )}
                   </td>
 
                   {/* Dư nợ cuối quý */}
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-gray-600" style={{ fontSize: 12 }}>
+                  <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 12.5, color: '#374151' }}>
                     {fmt(kyGoc.dunNoCuoiKy)}
                   </td>
 
                   {/* Trạng thái quý */}
-                  <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                  <td style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                     <span className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-medium ${STATUS_STYLE[quyTrangThai as KyTraNo['trangThai']]}`}>
                       {STATUS_LABEL[quyTrangThai as KyTraNo['trangThai']]}
                     </span>
                   </td>
 
                   {/* Thao tác gốc quý */}
-                  <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                  <td style={{ padding: '10px 14px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                     {renderAction(kyGoc)}
                   </td>
                 </tr>,
@@ -318,61 +329,61 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                       }}
                     >
                       {/* Tháng label */}
-                      <td className="px-3 py-2 whitespace-nowrap" style={{ paddingLeft: 40 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ width: 2, height: 20, background: '#D4A64A', borderRadius: 2, display: 'inline-block', flexShrink: 0 }} />
+                      <td style={{ padding: '7px 14px 7px 40px', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 3, height: 22, background: '#D4A64A', borderRadius: 2, display: 'inline-block', flexShrink: 0 }} />
                           <div>
-                            <div style={{ fontSize: 10.5, fontWeight: 600, color: '#374151' }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 600, color: '#374151' }}>
                               Tháng {mIdx + 1}
                             </div>
-                            <div style={{ fontSize: 9.5, color: '#9ca3af' }}>kỳ #{ky.soKy}</div>
+                            <div style={{ fontSize: 10, color: '#9ca3af' }}>kỳ #{ky.soKy}</div>
                           </div>
                         </div>
                       </td>
 
                       {/* Ngày trả tháng */}
-                      <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{ky.ngayTra}</td>
+                      <td style={{ padding: '7px 14px', whiteSpace: 'nowrap', fontSize: 11.5, color: '#6b7280' }}>{ky.ngayTra}</td>
 
                       {/* Dư nợ đầu tháng */}
-                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap" style={{ fontSize: 11.5, color: '#4b5563' }}>
+                      <td style={{ padding: '7px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: '#4b5563' }}>
                         {fmt(ky.dunNoDauKy)}
                       </td>
 
                       {/* Gốc tháng: chỉ tháng 3 mới có */}
-                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                      <td style={{ padding: '7px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                         {isLast && ky.gocTra > 0
                           ? <span style={{ fontSize: 12, fontWeight: 700, color: '#1C3557' }}>{fmt(ky.gocTra)}</span>
-                          : <span style={{ fontSize: 11, color: '#d1d5db' }}>—</span>
+                          : <span style={{ fontSize: 12, color: '#d1d5db' }}>—</span>
                         }
                       </td>
 
                       {/* Lãi tháng */}
-                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap" style={{ fontSize: 11.5, color: '#b45309', fontWeight: 600 }}>
+                      <td style={{ padding: '7px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: '#b45309', fontWeight: 600 }}>
                         {fmt(ky.laiTra)}
                       </td>
 
                       {/* Tổng trả tháng */}
-                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap" style={{ fontSize: 11.5, fontWeight: 600, color: '#374151' }}>
+                      <td style={{ padding: '7px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 600, color: '#374151' }}>
                         {fmt(ky.tongTra)}
                       </td>
 
                       {/* Dư nợ cuối tháng */}
-                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap" style={{ fontSize: 11.5, color: '#4b5563' }}>
+                      <td style={{ padding: '7px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: '#4b5563' }}>
                         {fmt(ky.dunNoCuoiKy)}
                       </td>
 
                       {/* Trạng thái tháng */}
-                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                      <td style={{ padding: '7px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[ky.trangThai]}`}>
                           {STATUS_LABEL[ky.trangThai]}
                         </span>
                       </td>
 
-                      {/* Thao tác tháng (chỉ tháng cuối quý = tháng có gốc) */}
-                      <td className="px-3 py-2 text-center">
+                      {/* Thao tác tháng */}
+                      <td style={{ padding: '7px 14px', textAlign: 'center' }}>
                         {isLast
-                          ? <span style={{ fontSize: 10, color: '#9ca3af' }}>↑ xác nhận trên</span>
-                          : <span style={{ fontSize: 10, color: '#d1d5db' }}>lãi only</span>
+                          ? <span style={{ fontSize: 10.5, color: '#9ca3af' }}>↑ xác nhận trên</span>
+                          : <span style={{ fontSize: 10.5, color: '#d1d5db' }}>lãi only</span>
                         }
                       </td>
                     </tr>
@@ -400,7 +411,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm" style={{ minWidth: 1080 }}>
-        <thead>
+        <thead style={{ position: 'sticky', top: 82, zIndex: 20 }}>
           <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
             <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap">Kỳ</th>
             <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap">Ngày trả</th>

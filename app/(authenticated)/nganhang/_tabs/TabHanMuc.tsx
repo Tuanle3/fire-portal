@@ -184,13 +184,14 @@ export function TabHanMuc() {
   if (selected) {
     return (
       <div>
-        <button className="btn-ghost" style={{ marginBottom: 14 }} onClick={() => setSelected(null)}>
-          ← Quay lại danh sách
-        </button>
-
         <div className="nh-card">
           <div className="nh-card-head">
-            <span className="nh-card-title">{selected.soHopDong}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button className="btn-ghost" onClick={() => setSelected(null)} style={{ fontSize: 12, padding: '5px 10px' }}>
+                ← Quay lại
+              </button>
+              <span className="nh-card-title">{selected.soHopDong}</span>
+            </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               {/* ── Widget gốc cứng ── */}
               <GocCungEditor
@@ -263,7 +264,9 @@ export function TabHanMuc() {
         </div>
 
         <div className="nh-card">
-          <div className="nh-card-head"><span className="nh-card-title">Lịch trả nợ</span></div>
+          <div className="nh-card-head" style={{ position: 'sticky', top: 45, zIndex: 30, background: '#EEF3FA' }}>
+            <span className="nh-card-title">Lịch trả nợ</span>
+          </div>
           <div className="nh-card-body" style={{ padding: 0 }}>
             <LichTraNoTable hopDong={selected} rows={kyList} />
           </div>
