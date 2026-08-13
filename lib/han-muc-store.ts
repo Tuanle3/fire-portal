@@ -97,13 +97,48 @@ export async function saveHopDong(
   await ensureTasksAuth()
   const ref  = id ? doc(hdCol(), id) : doc(hdCol())
   const now  = Date.now()
-  const data: HopDongTinDung = { ...hd, id: ref.id, createdAt: now, updatedAt: now }
+
+  // Lấy createdAt gốc nếu đang edit (không ghi đè)
+  let createdAt = now
+  if (id) {
+    const existing = await getDoc(ref)
+    if (existing.exists()) createdAt = (existing.data() as HopDongTinDung).createdAt ?? now
+  }
+
+  const data: HopDongTinDung = { ...hd, id: ref.id, createdAt, updatedAt: now }
   await setDoc(ref, data)
 
+  // Build schedule mới
   const schedule = buildSchedule(data)
-  const batch    = writeBatch(db())
-  schedule.forEach(ky => batch.set(doc(kyCol(ref.id), ky.id), ky))
-  await batch.commit()
+
+  // Nếu đang EDIT: lấy các kỳ đã trả để merge lại, không ghi đè dữ liệu thực tế
+  const daTraMap: Record<number, Partial<KyTraNo>> = {}
+  if (id) {
+    const lichSnaps = await getDocs(query(kyCol(id), orderBy('soKy', 'asc')))
+    lichSnaps.forEach(d => {
+      const k = d.data() as KyTraNo
+      if (k.trangThai === 'da-tra') {
+        daTraMap[k.soKy] = {
+          trangThai:     k.trangThai,
+          ngayThucTra:   k.ngayThucTra,
+          gocThucTra:    k.gocThucTra,
+          laiThucTra:    k.laiThucTra,
+          soTienThucTra: k.soTienThucTra,
+        }
+      }
+    })
+  }
+
+  const BATCH_SIZE = 400
+  for (let i = 0; i < schedule.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db())
+    schedule.slice(i, i + BATCH_SIZE).forEach(ky => {
+      const merged = { ...ky, ...(daTraMap[ky.soKy] ?? {}) }
+      batch.set(doc(kyCol(ref.id), ky.id), merged)
+    })
+    await batch.commit()
+  }
+
   return ref.id
 }
 
