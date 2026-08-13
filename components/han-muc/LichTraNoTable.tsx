@@ -167,6 +167,79 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
     )
   }
 
+  // ── Render thao tác cho kỳ CHỈ TRẢ LÃI (tháng con trong quý) ──
+  const renderActionLaiOnly = (ky: KyTraNo) => {
+    const isDaTra   = ky.trangThai === 'da-tra'
+    const isMarking = markingId === ky.id
+    if (isMarking) {
+      // Form rút gọn: chỉ ngày + lãi (gốc = 0 cố định)
+      return (
+        <div style={{
+          background: '#f8fafc', border: '1px solid #dde3ea',
+          borderRadius: 8, padding: '8px 10px',
+          minWidth: 180, textAlign: 'left',
+        }}>
+          <div style={{ marginBottom: 5 }}>
+            <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>Ngày thực trả</div>
+            <input
+              type="date" value={ngayThucTra}
+              onChange={e => setNgayThucTra(e.target.value)}
+              style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #d1d5db', borderRadius: 5, background: '#fff', color: '#111' }}
+            />
+          </div>
+          <div style={{ marginBottom: 6 }}>
+            <div style={{ fontSize: 10, marginBottom: 2, color: '#b45309', fontWeight: 600 }}>Lãi thực trả (₫)</div>
+            <input type="number" value={laiThucTra} onChange={e => setLaiThucTra(e.target.value)}
+              style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #D4A64A55', borderRadius: 5, background: '#fff', color: '#b45309' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <button onClick={() => setMarkingId(null)}
+              style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 5, background: '#fff', color: '#6b7280', cursor: 'pointer' }}>
+              Hủy
+            </button>
+            <button onClick={async () => {
+              setSaving(true)
+              try {
+                // gocThucTra = 0 (kỳ này chỉ trả lãi)
+                await markKyDaTraThucTe(hopDong, ky, rows, ngayThucTra, 0, Number(laiThucTra) || 0)
+                setMarkingId(null)
+              } finally { setSaving(false) }
+            }} disabled={saving}
+              style={{ fontSize: 11, padding: '3px 8px', border: 'none', borderRadius: 5, background: saving ? '#93aec8' : '#1C3557', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer' }}>
+              {saving ? '…' : isDaTra ? 'Cập nhật' : 'Xác nhận'}
+            </button>
+          </div>
+        </div>
+      )
+    }
+    if (isDaTra) {
+      return (
+        <button onClick={() => {
+          setMarkingId(ky.id)
+          setNgayThucTra(ky.ngayThucTra ?? new Date().toISOString().slice(0, 10))
+          setGocThucTra('0')
+          setLaiThucTra(String(ky.laiThucTra ?? ky.laiTra))
+        }}
+          style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#fff', color: '#475569', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          title="Sửa lãi đã trả">
+          <Pencil size={11} /> {ky.ngayThucTra ?? ''}
+        </button>
+      )
+    }
+    return (
+      <button onClick={() => {
+        setMarkingId(ky.id)
+        setNgayThucTra(new Date().toISOString().slice(0, 10))
+        setGocThucTra('0')
+        setLaiThucTra(String(ky.laiTra))
+      }}
+        style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #D4A64A', borderRadius: 6, background: '#fffbf0', color: '#92600a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <Banknote size={11} /> Đánh dấu lãi
+      </button>
+    )
+  }
+
   // ════════════════════════════════════════════════════════════
   // CHẾ ĐỘ: Lãi tháng + Gốc quý → bảng nhóm quý
   // ════════════════════════════════════════════════════════════
@@ -175,7 +248,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
     const totalQuarters = groups.length
 
     return (
-      <div style={{ overflowX: 'auto', width: '100%' }}>
+      <div style={{ overflowX: 'auto', overflowY: 'auto', width: '100%', maxHeight: 'calc(100vh - 260px)' }}>
         <table style={{ width: '100%', minWidth: 1500, borderCollapse: 'collapse', fontSize: 12 }}>
           <colgroup>
             <col style={{ width: '14%' }} />
@@ -188,7 +261,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
             <col style={{ width: '8%'  }} />
             <col style={{ width: '14%' }} />
           </colgroup>
-          <thead style={{ position: 'sticky', top: 82, zIndex: 20 }}>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 20 }}>
             <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
               <th style={{ padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>Kỳ gốc</th>
               <th style={{ padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Tháng / Ngày trả</th>
@@ -380,10 +453,10 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
                       </td>
 
                       {/* Thao tác tháng */}
-                      <td style={{ padding: '7px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '7px 14px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                         {isLast
                           ? <span style={{ fontSize: 10.5, color: '#9ca3af' }}>↑ xác nhận trên</span>
-                          : <span style={{ fontSize: 10.5, color: '#d1d5db' }}>lãi only</span>
+                          : renderActionLaiOnly(ky)
                         }
                       </td>
                     </tr>
@@ -409,9 +482,9 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
   // CHẾ ĐỘ THÔNG THƯỜNG (monthly / quarterly đồng nhất)
   // ════════════════════════════════════════════════════════════
   return (
-    <div className="overflow-x-auto">
+    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
       <table className="w-full text-sm" style={{ minWidth: 1080 }}>
-        <thead style={{ position: 'sticky', top: 82, zIndex: 20 }}>
+        <thead style={{ position: 'sticky', top: 0, zIndex: 20 }}>
           <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
             <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap">Kỳ</th>
             <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap">Ngày trả</th>

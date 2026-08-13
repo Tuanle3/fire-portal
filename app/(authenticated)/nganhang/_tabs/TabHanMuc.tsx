@@ -26,13 +26,31 @@ const fmtInput = (v: string) => {
 }
 const parseInput = (v: string) => v.replace(/\D/g, '')
 
-const getPayStats = (rows: KyTraNo[] | undefined, soTienGiaiNgan: number) => {
+// ── Tính tổng kỳ gốc / kỳ lãi từ hợp đồng + rows ──────────
+function calcTongKy(hd: HopDongTinDung, rows: KyTraNo[]) {
+  const isLaiThangGocQuy = hd.kyTra === 'monthly' && hd.kyTraGoc === 'quarterly'
+  if (isLaiThangGocQuy) {
+    // lãi: mỗi tháng 1 kỳ → tongKyLai = tổng rows
+    // gốc: mỗi quý 1 kỳ  → tongKyGoc = rows có gocTra > 0
+    const tongKyLai = rows.length
+    const tongKyGoc = rows.filter(k => k.gocTra > 0).length
+    return { tongKyGoc, tongKyLai }
+  }
+  // Chế độ bình thường: mỗi kỳ đều có gốc
+  return { tongKyGoc: rows.length, tongKyLai: rows.length }
+}
+
+const getPayStats = (rows: KyTraNo[] | undefined, hd: HopDongTinDung) => {
   const list   = rows ?? []
   const daTra  = list.filter(k => k.trangThai === 'da-tra')
   const goc    = daTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
   const lai    = daTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
-  const conLai = Math.max(0, soTienGiaiNgan - goc)
-  return { soKyDaTra: daTra.length, tongKy: list.length, goc, lai, conLai }
+  const conLai = Math.max(0, hd.soTienGiaiNgan - goc)
+  // Đếm kỳ đã trả: gốc (kỳ có gocTra > 0) và lãi (mọi kỳ da-tra)
+  const soKyGocDaTra = daTra.filter(k => (k.gocThucTra ?? k.gocTra) > 0).length
+  const soKyLaiDaTra = daTra.length
+  const { tongKyGoc, tongKyLai } = calcTongKy(hd, list)
+  return { soKyGocDaTra, soKyLaiDaTra, tongKyGoc, tongKyLai, tongKy: list.length, goc, lai, conLai }
 }
 
 // ── Widget chỉnh gốc cứng inline ─────────────────────────────
@@ -165,7 +183,7 @@ export function TabHanMuc() {
   const tongHanMuc     = useMemo(() => hopDongs.reduce((s, h) => s + h.hanMuc, 0), [hopDongs])
   const tongDuNo       = useMemo(() => hopDongs.reduce((s, h) => s + h.soTienGiaiNgan, 0), [hopDongs])
   const tongDuNoConLai = useMemo(
-    () => hopDongs.reduce((s, h) => s + getPayStats(kyMap[h.id], h.soTienGiaiNgan).conLai, 0),
+    () => hopDongs.reduce((s, h) => s + getPayStats(kyMap[h.id], h).conLai, 0),
     [hopDongs, kyMap],
   )
   const laiSuatBQ = useMemo(() => {
@@ -175,11 +193,14 @@ export function TabHanMuc() {
   const soQuaHan = hopDongs.filter(h => h.trangThai === 'qua-han').length
 
   const kyDaTra        = kyList.filter(k => k.trangThai === 'da-tra')
-  const soKyDaTra      = kyDaTra.length
+  const soKyLaiDaTra   = kyDaTra.length
+  const soKyGocDaTra   = kyDaTra.filter(k => (k.gocThucTra ?? k.gocTra) > 0).length
   const tongGocDaTra   = kyDaTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
   const tongLaiDaTra   = kyDaTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
   const kyConLai       = kyList.filter(k => k.trangThai !== 'da-tra').length
   const dunNoGocConLai = selected ? Math.max(0, selected.soTienGiaiNgan - tongGocDaTra) : 0
+  const { tongKyGoc: detailTongKyGoc, tongKyLai: detailTongKyLai } =
+    selected ? calcTongKy(selected, kyList) : { tongKyGoc: 0, tongKyLai: 0 }
 
   if (selected) {
     return (
@@ -236,8 +257,8 @@ export function TabHanMuc() {
               }}>
                 <PayStat
                   label="Số kỳ đã trả"
-                  value={`${soKyDaTra} / ${kyList.length} kỳ`}
-                  sub={kyConLai > 0 ? `Còn ${kyConLai} kỳ` : 'Đã trả hết'}
+                  value={`Gốc: ${soKyGocDaTra} / ${detailTongKyGoc}`}
+                  sub={`Lãi: ${soKyLaiDaTra} / ${detailTongKyLai} kỳ${kyConLai > 0 ? ` · còn ${kyConLai}` : ' · hết'}`}
                   color="#1C3557"
                 />
                 <PayStat
@@ -326,9 +347,9 @@ export function TabHanMuc() {
           </div>
           <button className="btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }}>+ Thêm hợp đồng</button>
         </div>
-        <div className="nh-card-body">
-          <table className="nh-tbl">
-            <thead>
+        <div className="nh-card-body" style={{ padding: 0, overflowX: 'auto' }}>
+          <table className="nh-tbl" style={{ minWidth: 1100 }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 20 }}>
               <tr>
                 <th>Số hợp đồng</th>
                 <th>Pháp nhân</th>
@@ -336,7 +357,10 @@ export function TabHanMuc() {
                 <th className="r">Hạn mức</th>
                 <th className="r">Giải ngân</th>
                 <th className="r">Lãi suất</th>
-                <th className="r">Số kỳ đã trả</th>
+                <th className="r" style={{ whiteSpace: 'nowrap' }}>
+                  <div>Kỳ gốc đã trả</div>
+                  <div style={{ fontWeight: 400, opacity: 0.7, fontSize: 10 }}>/ Kỳ lãi đã trả</div>
+                </th>
                 <th className="r">Gốc đã trả</th>
                 <th className="r">Lãi đã trả</th>
                 <th className="r">Dư nợ gốc còn lại</th>
@@ -346,7 +370,7 @@ export function TabHanMuc() {
             </thead>
             <tbody>
               {hopDongs.map(h => {
-                const ps = getPayStats(kyMap[h.id], h.soTienGiaiNgan)
+                const ps = getPayStats(kyMap[h.id], h)
                 return (
                   <tr key={h.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(h)}>
                     <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>
@@ -370,7 +394,16 @@ export function TabHanMuc() {
                       )}
                     </td>
                     <td className="r" style={{ whiteSpace: 'nowrap' }}>
-                      {ps.tongKy > 0 ? `${ps.soKyDaTra} / ${ps.tongKy}` : '—'}
+                      {ps.tongKy > 0 ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: '#1C3557', fontSize: 12 }}>
+                            {ps.soKyGocDaTra} / {ps.tongKyGoc}
+                          </div>
+                          <div style={{ fontSize: 10.5, color: '#6b7280' }}>
+                            lãi: {ps.soKyLaiDaTra} / {ps.tongKyLai}
+                          </div>
+                        </>
+                      ) : '—'}
                     </td>
                     <td className="r" style={{ whiteSpace: 'nowrap', color: '#1C3557', fontWeight: 600 }}>
                       {ps.soKyDaTra > 0 ? fmt(ps.goc) : '—'}
