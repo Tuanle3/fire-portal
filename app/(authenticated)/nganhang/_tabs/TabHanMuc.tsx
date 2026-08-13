@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { subscribeHopDong, subscribeLichTraNo } from '@/lib/han-muc-store'
+import { subscribeHopDong, subscribeLichTraNo, setGocTraCoDinh } from '@/lib/han-muc-store'
 import { HopDongTinDung, KyTraNo, EntityType } from '@/lib/han-muc-types'
 import HopDongForm from '@/components/han-muc/HopDongForm'
 import LichTraNoTable from '@/components/han-muc/LichTraNoTable'
 import CoCauDialog from '@/components/han-muc/CoCauDialog'
+import { Pencil, Check, X } from 'lucide-react'
 
 const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAG', 'SAHS', 'ĐTSA', 'YANA', 'Cá nhân']
 
@@ -19,14 +20,116 @@ const HD_LABEL: Record<HopDongTinDung['trangThai'], string> = {
 }
 
 const fmt = (n: number) => n.toLocaleString('vi-VN')
+const fmtInput = (v: string) => {
+  const num = v.replace(/\D/g, '')
+  return num ? Number(num).toLocaleString('vi-VN') : ''
+}
+const parseInput = (v: string) => v.replace(/\D/g, '')
 
 const getPayStats = (rows: KyTraNo[] | undefined, soTienGiaiNgan: number) => {
-  const list    = rows ?? []
-  const daTra   = list.filter(k => k.trangThai === 'da-tra')
-  const goc     = daTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
-  const lai     = daTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
-  const conLai  = Math.max(0, soTienGiaiNgan - goc)
+  const list   = rows ?? []
+  const daTra  = list.filter(k => k.trangThai === 'da-tra')
+  const goc    = daTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
+  const lai    = daTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
+  const conLai = Math.max(0, soTienGiaiNgan - goc)
   return { soKyDaTra: daTra.length, tongKy: list.length, goc, lai, conLai }
+}
+
+// ── Widget chỉnh gốc cứng inline ─────────────────────────────
+function GocCungEditor({ hopDong, onSaved }: { hopDong: HopDongTinDung; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal]         = useState(hopDong.gocTraCoDinh ? String(hopDong.gocTraCoDinh) : '')
+  const [saving, setSaving]   = useState(false)
+
+  // Tính gốc lý thuyết
+  const gocLyThuyet = useMemo(() => {
+    const d1 = new Date(hopDong.ngayKy)
+    const d2 = new Date(hopDong.ngayDaoHan)
+    const months = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth())
+    if (months <= 0) return null
+    const n = hopDong.kyTra === 'quarterly' ? Math.ceil(months / 3) : months
+    return Math.floor(hopDong.soTienGiaiNgan / n)
+  }, [hopDong])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const num = Number(val) || null
+      await setGocTraCoDinh(hopDong.id, num)
+      setEditing(false)
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        background: hopDong.gocTraCoDinh ? '#fffbf0' : '#f8fafc',
+        border: `1px solid ${hopDong.gocTraCoDinh ? '#D4A64A' : '#e2e8f0'}`,
+        borderRadius: 6, padding: '4px 10px', fontSize: 12,
+      }}>
+        <span style={{ color: '#6b7280' }}>Gốc/kỳ (NH):</span>
+        <span style={{ fontWeight: 700, color: hopDong.gocTraCoDinh ? '#92600a' : '#94a3b8' }}>
+          {hopDong.gocTraCoDinh ? `${fmt(hopDong.gocTraCoDinh)} đ` : 'Tự tính'}
+        </span>
+        <button
+          onClick={() => { setVal(hopDong.gocTraCoDinh ? String(hopDong.gocTraCoDinh) : ''); setEditing(true) }}
+          style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6b7280', padding: 0, display: 'flex', alignItems: 'center' }}
+          title="Chỉnh gốc cứng theo NH"
+        >
+          <Pencil size={12} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      background: '#fffbf0', border: '1px solid #D4A64A',
+      borderRadius: 6, padding: '4px 10px',
+    }}>
+      <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>Gốc/kỳ (NH):</span>
+      <input
+        autoFocus
+        value={fmtInput(val)}
+        onChange={e => setVal(parseInput(e.target.value))}
+        placeholder={gocLyThuyet ? `LT: ${fmt(gocLyThuyet)}` : 'nhập số tiền'}
+        style={{
+          width: 140, fontSize: 12, padding: '3px 6px',
+          border: '1px solid #D4A64A77', borderRadius: 4,
+          background: '#fff', color: '#92600a', fontWeight: 600,
+        }}
+      />
+      {gocLyThuyet && val && (
+        <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>
+          {(Number(val) - gocLyThuyet > 0 ? '+' : '')}{fmt(Number(val) - gocLyThuyet)}
+        </span>
+      )}
+      <button
+        onClick={() => { setEditing(false) }}
+        style={{ border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', padding: '2px 6px', display: 'flex', alignItems: 'center' }}
+      >
+        <X size={11} />
+      </button>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        style={{
+          border: 'none', borderRadius: 4,
+          background: saving ? '#93aec8' : '#1C3557',
+          color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
+          padding: '2px 8px', fontSize: 11, fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: 3,
+        }}
+      >
+        <Check size={11} /> {saving ? '…' : 'Lưu & tính lại'}
+      </button>
+    </div>
+  )
 }
 
 export function TabHanMuc() {
@@ -41,8 +144,6 @@ export function TabHanMuc() {
 
   useEffect(() => subscribeHopDong(setHopDongs, entityFilter), [entityFilter])
 
-  // Lắng nghe lịch trả nợ của TẤT CẢ hợp đồng đang hiển thị, để show nhanh
-  // số kỳ / gốc / lãi đã trả ngay trên bảng danh sách, không cần bấm vào chi tiết.
   useEffect(() => {
     const unsubs = hopDongs.map(h =>
       subscribeLichTraNo(h.id, rows => setKyMap(prev => ({ ...prev, [h.id]: rows })))
@@ -61,24 +162,23 @@ export function TabHanMuc() {
     if (fresh) setSelected(fresh)
   }, [hopDongs]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const tongHanMuc = useMemo(() => hopDongs.reduce((s, h) => s + h.hanMuc, 0), [hopDongs])
-  const tongDuNo    = useMemo(() => hopDongs.reduce((s, h) => s + h.soTienGiaiNgan, 0), [hopDongs])
+  const tongHanMuc     = useMemo(() => hopDongs.reduce((s, h) => s + h.hanMuc, 0), [hopDongs])
+  const tongDuNo       = useMemo(() => hopDongs.reduce((s, h) => s + h.soTienGiaiNgan, 0), [hopDongs])
   const tongDuNoConLai = useMemo(
     () => hopDongs.reduce((s, h) => s + getPayStats(kyMap[h.id], h.soTienGiaiNgan).conLai, 0),
     [hopDongs, kyMap],
   )
-  const laiSuatBQ   = useMemo(() => {
+  const laiSuatBQ = useMemo(() => {
     if (!hopDongs.length) return 0
     return hopDongs.reduce((s, h) => s + h.laiSuat, 0) / hopDongs.length
   }, [hopDongs])
   const soQuaHan = hopDongs.filter(h => h.trangThai === 'qua-han').length
 
-  // ── Thống kê kỳ đã trả ─────────────────────────────────────
-  const kyDaTra   = kyList.filter(k => k.trangThai === 'da-tra')
-  const soKyDaTra = kyDaTra.length
-  const tongGocDaTra = kyDaTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
-  const tongLaiDaTra = kyDaTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
-  const kyConLai  = kyList.filter(k => k.trangThai !== 'da-tra').length
+  const kyDaTra        = kyList.filter(k => k.trangThai === 'da-tra')
+  const soKyDaTra      = kyDaTra.length
+  const tongGocDaTra   = kyDaTra.reduce((s, k) => s + (k.gocThucTra ?? k.gocTra), 0)
+  const tongLaiDaTra   = kyDaTra.reduce((s, k) => s + (k.laiThucTra ?? k.laiTra), 0)
+  const kyConLai       = kyList.filter(k => k.trangThai !== 'da-tra').length
   const dunNoGocConLai = selected ? Math.max(0, selected.soTienGiaiNgan - tongGocDaTra) : 0
 
   if (selected) {
@@ -91,7 +191,12 @@ export function TabHanMuc() {
         <div className="nh-card">
           <div className="nh-card-head">
             <span className="nh-card-title">{selected.soHopDong}</span>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* ── Widget gốc cứng ── */}
+              <GocCungEditor
+                hopDong={selected}
+                onSaved={() => {/* Firestore listener tự refresh */}}
+              />
               <button className="btn-ghost" onClick={() => { setEditing(selected); setFormOpen(true) }}>Sửa hợp đồng</button>
               <button className="btn-primary" onClick={() => setCoCauOpen(true)}>↻ Cơ cấu nợ</button>
             </div>
@@ -105,20 +210,22 @@ export function TabHanMuc() {
               <Stat label="Hạn mức" value={`${fmt(selected.hanMuc)} đ`} />
               <Stat label="Giải ngân" value={`${fmt(selected.soTienGiaiNgan)} đ`} />
               {selected.laiSuatLoai === 'tha-noi' ? (
-             <>
-            <Stat label="Lãi ưu đãi" value={`${selected.laiSuat}%/năm`} />
-            <Stat label="Số tháng ưu đãi" value={`${selected.soThangUuDai} tháng`} />
-           <Stat label="Lãi sau ưu đãi" value={`${selected.laiSuatSauUuDai}%/năm (thả nổi)`} />
-          </>
-) : (
-  <Stat label="Lãi suất" value={`${selected.laiSuat}%/năm (cố định)`} />
-)}
+                <>
+                  <Stat label="Lãi ưu đãi" value={`${selected.laiSuat}%/năm`} />
+                  <Stat label="Số tháng ưu đãi" value={`${selected.soThangUuDai} tháng`} />
+                  <Stat label="Lãi sau ưu đãi" value={`${selected.laiSuatSauUuDai}%/năm (thả nổi)`} />
+                </>
+              ) : (
+                <Stat label="Lãi suất" value={`${selected.laiSuat}%/năm (cố định)`} />
+              )}
               <Stat label="Kỳ trả" value={selected.kyTra === 'monthly' ? 'Hàng tháng' : 'Hàng quý'} />
               <Stat label="Đáo hạn" value={selected.ngayDaoHan} />
               <Stat label="Trạng thái" badge={<span className={`nh-badge ${HD_BADGE[selected.trangThai]}`}>{HD_LABEL[selected.trangThai]}</span>} />
+              {selected.gocTraCoDinh && (
+                <Stat label="Gốc cứng/kỳ (NH)" value={`${fmt(selected.gocTraCoDinh)} đ`} />
+              )}
             </div>
 
-            {/* ── Tóm tắt thanh toán ── */}
             {kyList.length > 0 && (
               <div style={{
                 marginTop: 14,
@@ -238,35 +345,42 @@ export function TabHanMuc() {
               {hopDongs.map(h => {
                 const ps = getPayStats(kyMap[h.id], h.soTienGiaiNgan)
                 return (
-                <tr key={h.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(h)}>
-                  <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>{h.soHopDong}</td>
-                  <td>{h.entity}</td>
-                  <td>{h.nganHang}{h.chiNhanh ? ` · ${h.chiNhanh}` : ''}</td>
-                  <td className="r">{fmt(h.hanMuc)}</td>
-                  <td className="r">{fmt(h.soTienGiaiNgan)}</td>
-                  <td className="r">
-  {h.laiSuat}%
-  {h.laiSuatLoai === 'tha-noi' && h.laiSuatSauUuDai != null && (
-    <div style={{ fontSize: 10, color: 'var(--nh-muted)', whiteSpace: 'nowrap' }}>
-      → {h.laiSuatSauUuDai}% sau {h.soThangUuDai}th
-    </div>
-  )}
-</td>
-                  <td className="r" style={{ whiteSpace: 'nowrap' }}>
-                    {ps.tongKy > 0 ? `${ps.soKyDaTra} / ${ps.tongKy}` : '—'}
-                  </td>
-                  <td className="r" style={{ whiteSpace: 'nowrap', color: '#1C3557', fontWeight: 600 }}>
-                    {ps.soKyDaTra > 0 ? fmt(ps.goc) : '—'}
-                  </td>
-                  <td className="r" style={{ whiteSpace: 'nowrap', color: '#b45309', fontWeight: 600 }}>
-                    {ps.soKyDaTra > 0 ? fmt(ps.lai) : '—'}
-                  </td>
-                  <td className="r" style={{ whiteSpace: 'nowrap', color: '#b91c1c', fontWeight: 700 }}>
-                    {fmt(ps.conLai)}
-                  </td>
-                  <td>{h.ngayDaoHan}</td>
-                  <td><span className={`nh-badge ${HD_BADGE[h.trangThai]}`}>{HD_LABEL[h.trangThai]}</span></td>
-                </tr>
+                  <tr key={h.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(h)}>
+                    <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>
+                      {h.soHopDong}
+                      {h.gocTraCoDinh && (
+                        <span style={{ marginLeft: 4, fontSize: 10, color: '#92600a', background: '#fffbf0', border: '1px solid #D4A64A55', borderRadius: 4, padding: '1px 4px' }}>
+                          🏦 cứng
+                        </span>
+                      )}
+                    </td>
+                    <td>{h.entity}</td>
+                    <td>{h.nganHang}{h.chiNhanh ? ` · ${h.chiNhanh}` : ''}</td>
+                    <td className="r">{fmt(h.hanMuc)}</td>
+                    <td className="r">{fmt(h.soTienGiaiNgan)}</td>
+                    <td className="r">
+                      {h.laiSuat}%
+                      {h.laiSuatLoai === 'tha-noi' && h.laiSuatSauUuDai != null && (
+                        <div style={{ fontSize: 10, color: 'var(--nh-muted)', whiteSpace: 'nowrap' }}>
+                          → {h.laiSuatSauUuDai}% sau {h.soThangUuDai}th
+                        </div>
+                      )}
+                    </td>
+                    <td className="r" style={{ whiteSpace: 'nowrap' }}>
+                      {ps.tongKy > 0 ? `${ps.soKyDaTra} / ${ps.tongKy}` : '—'}
+                    </td>
+                    <td className="r" style={{ whiteSpace: 'nowrap', color: '#1C3557', fontWeight: 600 }}>
+                      {ps.soKyDaTra > 0 ? fmt(ps.goc) : '—'}
+                    </td>
+                    <td className="r" style={{ whiteSpace: 'nowrap', color: '#b45309', fontWeight: 600 }}>
+                      {ps.soKyDaTra > 0 ? fmt(ps.lai) : '—'}
+                    </td>
+                    <td className="r" style={{ whiteSpace: 'nowrap', color: '#b91c1c', fontWeight: 700 }}>
+                      {fmt(ps.conLai)}
+                    </td>
+                    <td>{h.ngayDaoHan}</td>
+                    <td><span className={`nh-badge ${HD_BADGE[h.trangThai]}`}>{HD_LABEL[h.trangThai]}</span></td>
+                  </tr>
                 )
               })}
               {hopDongs.length === 0 && (

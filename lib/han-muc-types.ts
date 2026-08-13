@@ -45,6 +45,7 @@ export interface HopDongTinDung {
   ngayDaoHan:      string
   trangThai:       TrangThaiHD
   ghiChu?:         string
+  gocTraCoDinh?:   number        // gốc làm tròn do NH quy định — nếu có sẽ override gốc tự tính
   createdAt:       number
   updatedAt:       number
 }

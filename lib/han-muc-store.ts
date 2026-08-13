@@ -8,6 +8,7 @@
 import {
   collection, doc, onSnapshot, setDoc, deleteDoc,
   query, orderBy, where, writeBatch,
+  getDoc, updateDoc, deleteField, getDocs,
   QuerySnapshot, DocumentData,
 } from 'firebase/firestore'
 import { tasksDb, ensureTasksAuth } from '@/lib/firebase-tasks'
@@ -231,20 +232,35 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   const diffM      = monthDiff(ngayKy, ngayDaoHan)
   const period     = hd.kyTra === 'monthly' ? 1 : 3
   const numKy      = Math.max(1, Math.floor(diffM / period))
-  const gocKy      = Math.round(hd.soTienGiaiNgan / numKy)
   const todayD     = new Date()
-  let dunNo        = hd.soTienGiaiNgan
+
+  // Gốc mỗi kỳ: ưu tiên số NH làm tròn, fallback tự tính đều
+  const gocCung = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
+  const gocKy   = gocCung ?? Math.round(hd.soTienGiaiNgan / numKy)
+
+  let dunNo = hd.soTienGiaiNgan
   const rows: KyTraNo[] = []
 
   for (let i = 1; i <= numKy; i++) {
-    const ngayTra = addMonths(ngayKy, i * period)
-    const lsKy    = laiSuatChoKy(hd, ngayTra) / 100 / (hd.kyTra === 'monthly' ? 12 : 4)
+    const ngayTra  = addMonths(ngayKy, i * period)
+    const isLastKy = i === numKy
+    const lsKy     = laiSuatChoKy(hd, ngayTra) / 100 / (hd.kyTra === 'monthly' ? 12 : 4)
 
-    const laiTra    = hd.phuongThuc === 'giam-dan'
+    const laiTra = hd.phuongThuc === 'giam-dan'
       ? Math.round(dunNo * lsKy)
       : Math.round(hd.soTienGiaiNgan * lsKy)
-    const gocTra    = (hd.phuongThuc === 'cuoi-ky' && i < numKy) ? 0
-      : (i === numKy ? dunNo : gocKy)
+
+    // Gốc kỳ này:
+    // - cuoi-ky: 0 mọi kỳ, kỳ cuối = toàn bộ dư nợ
+    // - giam-dan: kỳ cuối = dư nợ còn lại (xử lý sai số làm tròn)
+    //             kỳ giữa = gocKy (cứng hoặc tự tính)
+    let gocTra: number
+    if (hd.phuongThuc === 'cuoi-ky') {
+      gocTra = isLastKy ? dunNo : 0
+    } else {
+      gocTra = isLastKy ? dunNo : Math.min(gocKy, dunNo)
+    }
+
     const tongTra   = gocTra + laiTra
     const dunNoCuoi = Math.max(0, dunNo - gocTra)
     const dLeft     = daysDiff(todayD, ngayTra)
@@ -282,4 +298,62 @@ function daysDiff(a: Date, b: Date): number {
   return Math.floor((b.getTime() - a.getTime()) / 86400000)
 }
 
-export { buildSchedule as previewSchedule } 
+export { buildSchedule as previewSchedule }
+
+// ── Cập nhật gốc cứng + rebuild toàn bộ lịch trả nợ ────────
+// gocMoi = null → xóa gốc cứng (trở về tự tính)
+// gocMoi > 0   → set số NH làm tròn, rebuild, giữ kỳ da-tra
+export async function setGocTraCoDinh(
+  hopDongId: string,
+  gocMoi: number | null,
+): Promise<void> {
+  await ensureTasksAuth()
+
+  // 1. Lấy hợp đồng hiện tại
+  const hdRef  = doc(hdCol(), hopDongId)
+  const hdSnap = await getDoc(hdRef)
+  if (!hdSnap.exists()) throw new Error('Hợp đồng không tồn tại')
+  const hopDong = { id: hdSnap.id, ...hdSnap.data() } as HopDongTinDung
+
+  // 2. Cập nhật field gocTraCoDinh
+  if (gocMoi == null) {
+    await updateDoc(hdRef, { gocTraCoDinh: deleteField() })
+  } else {
+    await updateDoc(hdRef, { gocTraCoDinh: gocMoi })
+  }
+
+  // 3. Rebuild lịch với gocTraCoDinh mới
+  const hopDongMoi: HopDongTinDung = {
+    ...hopDong,
+    ...(gocMoi != null ? { gocTraCoDinh: gocMoi } : { gocTraCoDinh: undefined }),
+  }
+  const lichMoi = buildSchedule(hopDongMoi)
+
+  // 4. Lấy các kỳ đã trả để merge lại (không ghi đè dữ liệu thực tế)
+  const lichSnaps = await getDocs(query(kyCol(hopDongId), orderBy('soKy', 'asc')))
+  const daTraMap: Record<number, Partial<KyTraNo>> = {}
+  lichSnaps.forEach(d => {
+    const data = d.data() as KyTraNo
+    if (data.trangThai === 'da-tra') {
+      daTraMap[data.soKy] = {
+        trangThai:    data.trangThai,
+        ngayThucTra:  data.ngayThucTra,
+        gocThucTra:   data.gocThucTra,
+        laiThucTra:   data.laiThucTra,
+        soTienThucTra: data.soTienThucTra,
+      }
+    }
+  })
+
+  // 5. Batch write toàn bộ lịch mới (merge kỳ da-tra)
+  const BATCH_SIZE = 400
+  for (let i = 0; i < lichMoi.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db())
+    lichMoi.slice(i, i + BATCH_SIZE).forEach(ky => {
+      const kyRef  = doc(kyCol(hopDongId), ky.id)
+      const merged = { ...ky, ...(daTraMap[ky.soKy] ?? {}) }
+      batch.set(kyRef, merged)
+    })
+    await batch.commit()
+  }
+}

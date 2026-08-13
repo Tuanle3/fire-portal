@@ -34,6 +34,8 @@ const emptyForm = {
   laiSuat: '', soThangUuDai: '', laiSuatSauUuDai: '',
   phuongThuc: 'giam-dan' as PhuongThuc, kyTra: 'monthly' as KyTra,
   ngayKy: '', ngayDaoHan: '', trangThai: 'dang-vay' as TrangThaiHD, ghiChu: '',
+  // ── MỚI: gốc làm tròn theo NH ──
+  gocTraCoDinh: '',   // để trống = tự tính theo công thức
 }
 
 export default function HopDongForm({ open, onClose, editing }: Props) {
@@ -50,41 +52,53 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
           phuongThuc: editing.phuongThuc, kyTra: editing.kyTra,
           ngayKy: editing.ngayKy, ngayDaoHan: editing.ngayDaoHan,
           trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
+          gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
         }
       : emptyForm,
   )
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
-  
-  useEffect(() => {
-  if (!open) return
-  setForm(editing ? {
-    soHopDong: editing.soHopDong, entity: editing.entity, nguoiVay: editing.nguoiVay ?? '',
-    nganHang: editing.nganHang, chiNhanh: editing.chiNhanh ?? '',
-    hanMuc: String(editing.hanMuc), soTienGiaiNgan: String(editing.soTienGiaiNgan),
-    laiSuatLoai: editing.laiSuatLoai ?? 'co-dinh',
-    laiSuat: String(editing.laiSuat),
-    soThangUuDai: editing.soThangUuDai != null ? String(editing.soThangUuDai) : '',
-    laiSuatSauUuDai: editing.laiSuatSauUuDai != null ? String(editing.laiSuatSauUuDai) : '',
-    phuongThuc: editing.phuongThuc, kyTra: editing.kyTra,
-    ngayKy: editing.ngayKy, ngayDaoHan: editing.ngayDaoHan,
-    trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
-  } : emptyForm)
-  setError('')
-}, [open, editing])
 
-// Luôn lưu vào state dạng digits thuần (không có dấu phân cách)
-  // fmtInput: hiển thị có dấu phân cách vi-VN
-  // parseInput: strip mọi ký tự không phải số trước khi lưu vào state
+  useEffect(() => {
+    if (!open) return
+    setForm(editing ? {
+      soHopDong: editing.soHopDong, entity: editing.entity, nguoiVay: editing.nguoiVay ?? '',
+      nganHang: editing.nganHang, chiNhanh: editing.chiNhanh ?? '',
+      hanMuc: String(editing.hanMuc), soTienGiaiNgan: String(editing.soTienGiaiNgan),
+      laiSuatLoai: editing.laiSuatLoai ?? 'co-dinh',
+      laiSuat: String(editing.laiSuat),
+      soThangUuDai: editing.soThangUuDai != null ? String(editing.soThangUuDai) : '',
+      laiSuatSauUuDai: editing.laiSuatSauUuDai != null ? String(editing.laiSuatSauUuDai) : '',
+      phuongThuc: editing.phuongThuc, kyTra: editing.kyTra,
+      ngayKy: editing.ngayKy, ngayDaoHan: editing.ngayDaoHan,
+      trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
+      gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
+    } : emptyForm)
+    setError('')
+  }, [open, editing])
+
   const fmtInput = (v: string) => {
     const num = v.replace(/\D/g, '')
     return num ? Number(num).toLocaleString('vi-VN') : ''
   }
-  const parseInput = (v: string) => v.replace(/\D/g, '') // chỉ giữ digits
-  
-if (!open) return null
+  const parseInput = (v: string) => v.replace(/\D/g, '')
+
+  if (!open) return null
 
   const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }))
+
+  // ── Preview: tính gốc lý thuyết để hiển thị gợi ý ──
+  const gocLyThuyet = (() => {
+    const gn  = Number(form.soTienGiaiNgan)
+    const nk  = form.ngayKy
+    const ndh = form.ngayDaoHan
+    if (!gn || !nk || !ndh) return null
+    const d1 = new Date(nk), d2 = new Date(ndh)
+    const months = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth())
+    if (months <= 0) return null
+    const n = form.kyTra === 'quarterly' ? Math.ceil(months / 3) : months
+    return Math.floor(gn / n)
+  })()
 
   const handleSubmit = async () => {
     const thieuCoBan  = !form.soHopDong || !form.hanMuc || !form.soTienGiaiNgan || !form.laiSuat || !form.ngayKy || !form.ngayDaoHan
@@ -96,13 +110,9 @@ if (!open) return null
     setSaving(true)
     setError('')
     try {
-      // QUAN TRỌNG: chỉ đưa vào payload các trường có giá trị.
-      // Firestore không cho phép field value là undefined.
-      // form.hanMuc / form.soTienGiaiNgan đã là digits thuần (parseInput strip hết ký tự lạ)
-      // → Number() sẽ cho kết quả đúng, không bao giờ NaN
-      const hanMucNum        = Number(form.hanMuc)
+      const hanMucNum         = Number(form.hanMuc)
       const soTienGiaiNganNum = Number(form.soTienGiaiNgan)
-      const laiSuatNum       = Number(form.laiSuat)
+      const laiSuatNum        = Number(form.laiSuat)
       if (isNaN(hanMucNum) || isNaN(soTienGiaiNganNum) || isNaN(laiSuatNum)) {
         setError('Giá trị số không hợp lệ, vui lòng kiểm tra lại.')
         setSaving(false)
@@ -122,12 +132,17 @@ if (!open) return null
         ngayDaoHan: form.ngayDaoHan,
         trangThai: form.trangThai,
       }
-      if (form.nguoiVay) payload.nguoiVay = form.nguoiVay
-      if (form.chiNhanh) payload.chiNhanh = form.chiNhanh
-      if (form.ghiChu)   payload.ghiChu   = form.ghiChu
+      if (form.nguoiVay)    payload.nguoiVay    = form.nguoiVay
+      if (form.chiNhanh)    payload.chiNhanh    = form.chiNhanh
+      if (form.ghiChu)      payload.ghiChu      = form.ghiChu
       if (form.laiSuatLoai === 'tha-noi') {
         payload.soThangUuDai    = Number(form.soThangUuDai)
         payload.laiSuatSauUuDai = Number(form.laiSuatSauUuDai)
+      }
+      // ── Gốc cứng: chỉ lưu nếu có nhập ──
+      const gocCung = Number(form.gocTraCoDinh)
+      if (form.gocTraCoDinh && !isNaN(gocCung) && gocCung > 0) {
+        payload.gocTraCoDinh = gocCung
       }
 
       await saveHopDong(payload, editing?.id)
@@ -203,6 +218,7 @@ if (!open) return null
             </Field>
           </div>
 
+          {/* ── Loại lãi suất ── */}
           <span className="nh-label">Loại lãi suất</span>
           <div className="nh-radio-row">
             <label>
@@ -235,14 +251,53 @@ if (!open) return null
             )}
           </div>
 
+          {/* ══════════════════════════════════════════
+              Gốc làm tròn theo ngân hàng (TÙY CHỌN)
+          ══════════════════════════════════════════ */}
+          <div style={{
+            marginTop: 14,
+            background: '#fffbf0',
+            border: '1px solid #D4A64A55',
+            borderRadius: 8,
+            padding: '10px 14px',
+          }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#92600a', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>🏦</span> Gốc trả mỗi kỳ theo ngân hàng (tùy chọn)
+            </div>
+            <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 10, lineHeight: 1.5 }}>
+              Nếu ngân hàng đã làm tròn số gốc cố định, nhập vào đây. Hệ thống sẽ dùng số này thay vì tự tính.
+              Lãi vẫn tính theo dư nợ đầu kỳ. Kỳ cuối tự động điều chỉnh số dư còn lại.
+              {gocLyThuyet && (
+                <span style={{ color: '#1C3557', fontWeight: 600 }}>
+                  {' '}(Gốc lý thuyết: {gocLyThuyet.toLocaleString('vi-VN')} đ/kỳ)
+                </span>
+              )}
+            </div>
+            <Field label="">
+              <input
+                className="nh-input"
+                value={fmtInput(form.gocTraCoDinh)}
+                onChange={e => set('gocTraCoDinh', parseInput(e.target.value))}
+                placeholder={gocLyThuyet ? `Lý thuyết: ${gocLyThuyet.toLocaleString('vi-VN')} — nhập số NH làm tròn` : 'VD: 56.041.672'}
+                style={{ borderColor: form.gocTraCoDinh ? '#D4A64A' : undefined }}
+              />
+            </Field>
+            {form.gocTraCoDinh && gocLyThuyet && (
+              <div style={{ fontSize: 11, marginTop: 6, color: '#92600a' }}>
+                Lệch so lý thuyết: {(Number(form.gocTraCoDinh) - gocLyThuyet).toLocaleString('vi-VN')} đ/kỳ
+              </div>
+            )}
+          </div>
+
           <Field label="Ghi chú">
-            <textarea className="nh-textarea" rows={2} value={form.ghiChu} onChange={e => set('ghiChu', e.target.value)} />
+            <textarea className="nh-textarea" rows={2} value={form.ghiChu} onChange={e => set('ghiChu', e.target.value)} style={{ marginTop: 10 }} />
           </Field>
 
           {!editing && (
             <p className="nh-hint">
               Lịch trả nợ sẽ được tự động sinh dựa trên ngày ký, ngày đáo hạn, kỳ trả và phương thức trả gốc.
-              {form.laiSuatLoai === 'tha-noi' && ' Sau khi hết số tháng ưu đãi, hệ thống tự chuyển sang lãi suất thả nổi cho các kỳ tiếp theo.'}
+              {form.gocTraCoDinh && ' Gốc cứng sẽ áp dụng cho tất cả kỳ, kỳ cuối tự điều chỉnh.'}
+              {form.laiSuatLoai === 'tha-noi' && ' Sau khi hết số tháng ưu đãi, hệ thống tự chuyển sang lãi suất thả nổi.'}
             </p>
           )}
           {error && <p className="nh-err">{error}</p>}
@@ -262,7 +317,7 @@ if (!open) return null
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: 'block' }}>
-      <span className="nh-label">{label}</span>
+      {label && <span className="nh-label">{label}</span>}
       {children}
     </label>
   )
