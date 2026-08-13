@@ -106,7 +106,19 @@ export async function saveHopDong(
   }
 
   const data: HopDongTinDung = { ...hd, id: ref.id, createdAt, updatedAt: now }
-  await setDoc(ref, data)
+  // Xóa explicit các optional field không có trong payload
+  const optionalFields: (keyof HopDongTinDung)[] = [
+    'nguoiVay', 'chiNhanh', 'ghiChu', 'kyTraGoc',
+    'ngayTraGocDauTien', 'soKyTraGoc', 'soKyAnHan',
+    'gocTraCoDinh', 'soThangUuDai', 'laiSuatSauUuDai',
+  ]
+  const dataToWrite: any = { ...data }
+  optionalFields.forEach(f => {
+    if (dataToWrite[f] === undefined || dataToWrite[f] === null) {
+      dataToWrite[f] = deleteField()
+    }
+  })
+  await setDoc(ref, dataToWrite)
 
   // Build schedule mới
   const schedule = buildSchedule(data)
