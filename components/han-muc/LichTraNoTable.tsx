@@ -35,11 +35,20 @@ function groupByQuarter(rows: KyTraNo[], hasStub: boolean): { stub: KyTraNo | nu
   const stub = hasStub ? (rows[0] ?? null) : null
   const monthRows = hasStub ? rows.slice(1) : rows
   const groups: QuarterGroup[] = []
-  for (let i = 0; i < monthRows.length; i += 3) {
-    const thang = monthRows.slice(i, i + 3)
-    if (!thang.length) break
-    const kyGoc = thang[thang.length - 1]
-    groups.push({ soQuy: groups.length + 1, thang, kyGoc })
+  let current: KyTraNo[] = []
+  // Đóng nhóm tại đúng kỳ có gocTra > 0 (khớp gocOffset từ backend) —
+  // nhóm đầu tiên có thể ngắn hơn 3 tháng nếu gocOffset < 3.
+  monthRows.forEach(row => {
+    current.push(row)
+    if (row.gocTra > 0) {
+      groups.push({ soQuy: groups.length + 1, thang: current, kyGoc: row })
+      current = []
+    }
+  })
+  // Kỳ dư cuối chưa tới lượt trả gốc (VD đang ân hạn) — vẫn hiển thị 1 nhóm,
+  // kyGoc = kỳ cuối cùng (gocTra = 0, UI tự hiện dấu "—")
+  if (current.length) {
+    groups.push({ soQuy: groups.length + 1, thang: current, kyGoc: current[current.length - 1] })
   }
   return { stub, groups }
 }
