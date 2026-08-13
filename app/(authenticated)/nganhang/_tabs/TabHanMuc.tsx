@@ -406,10 +406,10 @@ export function TabHanMuc() {
                       ) : '—'}
                     </td>
                     <td className="r" style={{ whiteSpace: 'nowrap', color: '#1C3557', fontWeight: 600 }}>
-                      {ps.soKyDaTra > 0 ? fmt(ps.goc) : '—'}
+                      {ps.soKyGocDaTra > 0 ? fmt(ps.goc) : '—'}
                     </td>
                     <td className="r" style={{ whiteSpace: 'nowrap', color: '#b45309', fontWeight: 600 }}>
-                      {ps.soKyDaTra > 0 ? fmt(ps.lai) : '—'}
+                      {ps.soKyLaiDaTra > 0 ? fmt(ps.lai) : '—'}
                     </td>
                     <td className="r" style={{ whiteSpace: 'nowrap', color: '#b91c1c', fontWeight: 700 }}>
                       {fmt(ps.conLai)}
