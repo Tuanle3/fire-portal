@@ -40,6 +40,8 @@ const emptyForm = {
   gocTraCoDinh: '',
   // ── số kỳ trả gốc (chỉ dùng khi kyTraGoc='quarterly') ──
   soKyTraGoc: '',
+  // ── ân hạn gốc ──
+  soKyAnHan: '',
 }
 
 export default function HopDongForm({ open, onClose, editing }: Props) {
@@ -60,6 +62,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
           trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
           gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
           soKyTraGoc: editing.soKyTraGoc != null ? String(editing.soKyTraGoc) : '',
+          soKyAnHan: editing.soKyAnHan != null ? String(editing.soKyAnHan) : '',
         }
       : emptyForm,
   )
@@ -83,6 +86,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
       gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
       soKyTraGoc: editing.soKyTraGoc != null ? String(editing.soKyTraGoc) : '',
+      soKyAnHan: editing.soKyAnHan != null ? String(editing.soKyAnHan) : '',
     } : emptyForm)
     setError('')
   }, [open, editing])
@@ -156,6 +160,11 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       if (form.laiSuatLoai === 'tha-noi') {
         payload.soThangUuDai    = Number(form.soThangUuDai)
         payload.laiSuatSauUuDai = Number(form.laiSuatSauUuDai)
+      }
+      // ── Ân hạn gốc: chỉ lưu nếu có nhập ──
+      const soKyAnHanNum = Number(form.soKyAnHan)
+      if (form.soKyAnHan && !isNaN(soKyAnHanNum) && soKyAnHanNum > 0) {
+        payload.soKyAnHan = soKyAnHanNum
       }
       // ── Gốc cứng: chỉ lưu nếu có nhập ──
       const gocCung = Number(form.gocTraCoDinh)
@@ -275,6 +284,21 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
                 </div>
               </Field>
             )}
+            {/* Ân hạn gốc — số kỳ đầu chỉ trả lãi, không trả gốc */}
+            <Field label={`Ân hạn gốc (số ${form.kyTra === 'quarterly' ? 'quý' : 'tháng'} đầu chỉ trả lãi)`}>
+              <input
+                type="number" min={0} className="nh-input"
+                value={form.soKyAnHan}
+                onChange={e => set('soKyAnHan', e.target.value)}
+                placeholder={`VD: 3 (${form.kyTra === 'quarterly' ? '3 quý' : '3 tháng'} đầu không trả gốc)`}
+                style={{ borderColor: form.soKyAnHan ? '#7c3aed' : undefined }}
+              />
+              {form.soKyAnHan && Number(form.soKyAnHan) > 0 && (
+                <div style={{ fontSize: 11, color: '#5b21b6', marginTop: 4, lineHeight: 1.4 }}>
+                  ⏳ {Number(form.soKyAnHan)} {form.kyTra === 'quarterly' ? 'quý' : 'tháng'} đầu chỉ trả lãi — gốc bắt đầu trả từ kỳ {Number(form.soKyAnHan) + 1}
+                </div>
+              )}
+            </Field>
             <Field label="Ngày ký *">
               <input type="date" className="nh-input" value={form.ngayKy} onChange={e => set('ngayKy', e.target.value)} />
             </Field>
@@ -379,6 +403,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
                   : form.kyTraGoc === 'cuoi-ky'
                     ? 'Lịch sinh hàng tháng — mỗi tháng chỉ trả lãi, gốc trả 1 lần cuối kỳ.'
                     : 'Lịch trả nợ tự động sinh theo kỳ trả và phương thức trả gốc.'}
+              {form.soKyAnHan && Number(form.soKyAnHan) > 0 && ` Ân hạn ${form.soKyAnHan} ${form.kyTra === 'quarterly' ? 'quý' : 'tháng'} đầu — chỉ trả lãi, chưa thu gốc.`}
               {form.gocTraCoDinh && ' Gốc cứng áp dụng cho tất cả kỳ trả gốc, kỳ cuối tự điều chỉnh.'}
               {form.laiSuatLoai === 'tha-noi' && ' Sau ưu đãi hệ thống tự chuyển sang lãi suất thả nổi.'}
             </p>

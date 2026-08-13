@@ -46,6 +46,7 @@ export interface HopDongTinDung {
   ngayKy:          string        // ISO date
   ngayTraGocDauTien?: string     // ISO date — nếu có: kỳ 1 là kỳ LẺ NGÀY (chỉ tính lãi, từ ngayKy → ngày này), các kỳ sau neo theo ngày-trong-tháng của field này (áp dụng cho MỌI kỳ thu lãi hàng tháng, kể cả kỳ lẻ)
   soKyTraGoc?:     number        // chỉ dùng khi kyTraGoc='quarterly' — số kỳ trả gốc do NH quy định, nhập tay (không tự suy ra từ diffM nữa)
+  soKyAnHan?:      number        // số kỳ đầu được ân hạn (chỉ trả lãi, không trả gốc) — tính theo kyTra (monthly→tháng, quarterly→quý)
   ngayDaoHan:      string
   trangThai:       TrangThaiHD
   ghiChu?:         string

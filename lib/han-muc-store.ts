@@ -341,10 +341,12 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
     : Math.max(1, Math.floor(diffM / period))
   const numKy = coKyLeThuc ? numKySau + 1 : numKySau
 
-  const gocCung = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
-  // Chia đều gốc theo SỐ KỲ THỰC SỰ TRẢ GỐC (numKySau) — kỳ lẻ ngày (stub) không trả gốc
-  // nên không được tính vào mẫu số, nếu không mỗi kỳ sau sẽ bị trả thiếu gốc.
-  const gocKy   = gocCung ?? Math.round(hd.soTienGiaiNgan / numKySau)
+  const anHan    = hd.soKyAnHan && hd.soKyAnHan > 0 ? hd.soKyAnHan : 0
+  // Số kỳ THỰC SỰ trả gốc = tổng kỳ thường - kỳ ân hạn (kỳ stub không tính)
+  const numKyTraGoc = Math.max(1, numKySau - anHan)
+  const gocCung  = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
+  // Chia đều gốc theo SỐ KỲ THỰC SỰ TRẢ GỐC — kỳ lẻ ngày (stub) và kỳ ân hạn không trả gốc
+  const gocKy    = gocCung ?? Math.round(hd.soTienGiaiNgan / numKyTraGoc)
 
   let dunNo = hd.soTienGiaiNgan
   const rows: KyTraNo[] = []
@@ -352,6 +354,9 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   for (let i = 1; i <= numKy; i++) {
     const isStub   = coKyLeThuc && i === 1
     const isLastKy = i === numKy
+    // Chỉ số kỳ thường (bỏ stub): kỳ thường đầu tiên = 1, kỳ ân hạn cuối = anHan
+    const kyThuong = coKyLeThuc ? i - 1 : i  // vị trí trong dãy kỳ thường (0-based: stub)
+    const isAnHan  = !isStub && kyThuong <= anHan
     const ngayTra: Date = isStub
       ? ankerDate
       : addMonths(coKyLeThuc ? ankerDate : ngayKy, coKyLeThuc ? (i - 1) * period : i * period)
@@ -366,8 +371,8 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
           : Math.round(hd.soTienGiaiNgan * lsNam / kyPerYear))
 
     let gocTra: number
-    if (isStub) {
-      // Kỳ lẻ ngày: CHỈ tính lãi, chưa thu gốc (đúng như comment/ghi chú UI đã mô tả)
+    if (isStub || isAnHan) {
+      // Kỳ lẻ ngày hoặc kỳ ân hạn: CHỈ trả lãi, không thu gốc
       gocTra = 0
     } else if (hd.phuongThuc === 'cuoi-ky') {
       gocTra = isLastKy ? dunNo : 0
@@ -444,10 +449,13 @@ function buildScheduleLaiThangGocQuy(
   }
 
   // ── Số kỳ trả gốc: ưu tiên nhập tay ──
-  const numKyGoc = hd.soKyTraGoc && hd.soKyTraGoc > 0
+  const numKyGocTotal = hd.soKyTraGoc && hd.soKyTraGoc > 0
     ? hd.soKyTraGoc
     : Math.max(1, Math.floor(diffM / 3))
-  const numThangSau = numKyGoc * 3   // tổng số kỳ lãi hàng tháng SAU kỳ lẻ
+  // Ân hạn: số quý đầu không trả gốc (tính theo kỳ quý — mỗi 3 tháng là 1 kỳ)
+  const anHanQuy   = hd.soKyAnHan && hd.soKyAnHan > 0 ? hd.soKyAnHan : 0
+  const numKyGoc   = Math.max(1, numKyGocTotal - anHanQuy)   // số quý THỰC SỰ trả gốc
+  const numThangSau = numKyGocTotal * 3   // tổng số kỳ lãi hàng tháng SAU kỳ lẻ (giữ nguyên = tổng thời hạn)
 
   const gocCung = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
   const gocQuy  = gocCung ?? Math.round(hd.soTienGiaiNgan / numKyGoc)
@@ -483,8 +491,13 @@ function buildScheduleLaiThangGocQuy(
     const lsThang   = laiSuatChoKy(hd, ngayTra) / 100 / 12
     const laiTra    = Math.round(dunNo * lsThang)
 
+    // soQuyHienTai: quý thứ mấy (đếm từ 1, mỗi 3 tháng = 1 quý)
+    const soQuyHienTai = Math.ceil(i / 3)
+    // Kỳ quý nằm trong ân hạn → chỉ trả lãi, không thu gốc
+    const isAnHanQuy   = laThangTraGoc && soQuyHienTai <= anHanQuy
+
     let gocTra = 0
-    if (laThangTraGoc) {
+    if (laThangTraGoc && !isAnHanQuy) {
       kyGocDaTra++
       const isLastGoc = kyGocDaTra === numKyGoc || isLastThang
       gocTra = isLastGoc ? dunNo : Math.min(gocQuy, dunNo)
