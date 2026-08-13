@@ -14,14 +14,14 @@ import { TabHanMuc } from './_tabs/TabHanMuc'
 type TabId = 'ngan-hang' | 'so-sanh' | 'han-muc'
 
 const TABS: { id: TabId; label: string }[] = [
+  { id: 'han-muc',   label: 'Hạn mức tín dụng' },
   { id: 'ngan-hang', label: 'Ngân hàng' },
   { id: 'so-sanh',   label: 'So sánh' },
-  { id: 'han-muc',   label: 'Hạn mức tín dụng' },
 ]
 
 export default function NganHangPage() {
   const { loading: sessLoading, can } = useUserSession()
-  const [activeTab, setActiveTab] = useState<TabId>('ngan-hang')
+  const [activeTab, setActiveTab] = useState<TabId>('han-muc')
 
   const [relations, setRelations] = useState<BankRelation[]>([])
   const [proposals, setProposals] = useState<BankProposal[]>([])
@@ -87,7 +87,7 @@ export default function NganHangPage() {
         .nh-card-title { font-size:11px; font-weight:700; letter-spacing:.07em; color:#4B6A8A; text-transform:uppercase; }
         .nh-card-body { padding:14px 16px; }
 
-        .nh-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+        .nh-kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:16px; }
         .nh-kpi { background:var(--nh-surf); border-radius:10px; overflow:hidden; border:1px solid var(--nh-border3); }
         .nh-kpi-label { display:block; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; padding:8px 14px; background:#EEF3FA; border-bottom:1px solid #D0DCE8; color:#4B6A8A; }
         .nh-kpi-val   { display:block; font-size:19px; font-weight:800; color:var(--nh-navy); line-height:1.1; padding:10px 14px 0; }
@@ -150,6 +150,7 @@ export default function NganHangPage() {
         .nh-step-label.current { color:var(--nh-navy); font-weight:700; }
         .nh-step-line { width:16px; height:2px; margin:0 5px; }
 
+        @media (max-width:1280px) { .nh-kpi-row { grid-template-columns:repeat(3,1fr) } }
         @media (max-width:1024px) { .nh-kpi-row { grid-template-columns:1fr 1fr } }
         @media (max-width:600px)  { .nh-content { padding:12px } .nh-kpi-row { grid-template-columns:1fr 1fr } }
       `}</style>
