@@ -35,7 +35,7 @@ const emptyForm = {
   phuongThuc: 'giam-dan' as PhuongThuc,
   kyTra: 'monthly' as KyTra,
   kyTraGoc: '' as KyTraGoc | '',   // để trống = đồng nhất với kyTra
-  ngayKy: '', ngayDaoHan: '', trangThai: 'dang-vay' as TrangThaiHD, ghiChu: '',
+  ngayKy: '', ngayTraGocDauTien: '', ngayDaoHan: '', trangThai: 'dang-vay' as TrangThaiHD, ghiChu: '',
   // ── gốc làm tròn theo NH ──
   gocTraCoDinh: '',
 }
@@ -54,7 +54,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
           phuongThuc: editing.phuongThuc,
           kyTra: editing.kyTra,
           kyTraGoc: editing.kyTraGoc ?? '',
-          ngayKy: editing.ngayKy, ngayDaoHan: editing.ngayDaoHan,
+          ngayKy: editing.ngayKy, ngayTraGocDauTien: editing.ngayTraGocDauTien ?? '', ngayDaoHan: editing.ngayDaoHan,
           trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
           gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
         }
@@ -76,7 +76,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       phuongThuc: editing.phuongThuc,
       kyTra: editing.kyTra,
       kyTraGoc: editing.kyTraGoc ?? '',
-      ngayKy: editing.ngayKy, ngayDaoHan: editing.ngayDaoHan,
+      ngayKy: editing.ngayKy, ngayTraGocDauTien: editing.ngayTraGocDauTien ?? '', ngayDaoHan: editing.ngayDaoHan,
       trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
       gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
     } : emptyForm)
@@ -142,6 +142,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       if (form.chiNhanh)    payload.chiNhanh    = form.chiNhanh
       if (form.ghiChu)      payload.ghiChu      = form.ghiChu
       if (form.kyTraGoc)    payload.kyTraGoc    = form.kyTraGoc
+      if (form.ngayTraGocDauTien) payload.ngayTraGocDauTien = form.ngayTraGocDauTien
       if (form.laiSuatLoai === 'tha-noi') {
         payload.soThangUuDai    = Number(form.soThangUuDai)
         payload.laiSuatSauUuDai = Number(form.laiSuatSauUuDai)
@@ -251,6 +252,18 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
             )}
             <Field label="Ngày ký *">
               <input type="date" className="nh-input" value={form.ngayKy} onChange={e => set('ngayKy', e.target.value)} />
+            </Field>
+            <Field label="Ngày trả gốc đầu tiên (nếu có kỳ lẻ ngày)">
+              <input
+                type="date" className="nh-input"
+                value={form.ngayTraGocDauTien}
+                onChange={e => set('ngayTraGocDauTien', e.target.value)}
+                style={{ borderColor: form.ngayTraGocDauTien ? '#D4A64A' : undefined }}
+              />
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, lineHeight: 1.4 }}>
+                Để trống nếu kỳ trả đều đặn từ ngày ký. Nếu ngày ký lệch với ngày trả định kỳ (VD: ký 02/12 nhưng trả gốc đầu vào 25/01),
+                nhập ngày này — kỳ 1 sẽ tự tính lãi lẻ theo số ngày thực từ ngày ký đến ngày này, các kỳ sau neo theo ngày này hàng {form.kyTra === 'quarterly' ? 'quý' : 'tháng'}.
+              </div>
             </Field>
             <Field label="Ngày đáo hạn *">
               <input type="date" className="nh-input" value={form.ngayDaoHan} onChange={e => set('ngayDaoHan', e.target.value)} />

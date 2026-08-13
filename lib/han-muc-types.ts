@@ -44,6 +44,7 @@ export interface HopDongTinDung {
   kyTra:           KyTra          // chu kỳ trả LÃI
   kyTraGoc?:       KyTraGoc       // chu kỳ trả GỐC — nếu khác kyTra (VD: lãi tháng, gốc quý)
   ngayKy:          string        // ISO date
+  ngayTraGocDauTien?: string     // ISO date — nếu có: kỳ 1 là kỳ LẺ NGÀY (chỉ tính lãi, từ ngayKy → ngày này), các kỳ sau neo theo ngày này
   ngayDaoHan:      string
   trangThai:       TrangThaiHD
   ghiChu?:         string

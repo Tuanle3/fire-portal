@@ -301,8 +301,17 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
 
   // ── Trường hợp thông thường (monthly / quarterly đồng nhất) ──
   const period = hd.kyTra === 'quarterly' ? 3 : 1
-  const numKy  = Math.max(1, Math.floor(diffM / period))
   const kyPerYear = hd.kyTra === 'quarterly' ? 4 : 12
+
+  // Có kỳ lẻ ngày đầu: ngày trả gốc đầu tiên khác với chu kỳ đều đặn tính từ ngày ký
+  // (VD: ký 02/12/2025 nhưng kỳ trả gốc đầu tiên là 25/01 — kỳ 1 chỉ tính lãi lẻ ngày)
+  const coKyLe = !!hd.ngayTraGocDauTien
+  const ngayGocDauTien = coKyLe ? new Date(hd.ngayTraGocDauTien!) : null
+
+  const numKySau = coKyLe && ngayGocDauTien
+    ? Math.max(1, Math.floor(monthDiff(ngayGocDauTien, ngayDaoHan) / period))
+    : Math.max(1, Math.floor(diffM / period))
+  const numKy = coKyLe ? numKySau + 1 : numKySau
 
   const gocCung = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
   const gocKy   = gocCung ?? Math.round(hd.soTienGiaiNgan / numKy)
@@ -311,13 +320,20 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   const rows: KyTraNo[] = []
 
   for (let i = 1; i <= numKy; i++) {
-    const ngayTra  = addMonths(ngayKy, i * period)
+    const isStub   = coKyLe && i === 1
     const isLastKy = i === numKy
-    const lsKy     = laiSuatChoKy(hd, ngayTra) / 100 / kyPerYear
+    const ngayTra: Date = isStub
+      ? ngayGocDauTien!
+      : addMonths(coKyLe ? ngayGocDauTien! : ngayKy, coKyLe ? (i - 1) * period : i * period)
 
-    const laiTra = hd.phuongThuc === 'giam-dan'
-      ? Math.round(dunNo * lsKy)
-      : Math.round(hd.soTienGiaiNgan * lsKy)
+    const lsNam = laiSuatChoKy(hd, ngayTra) / 100
+
+    const laiTra = isStub
+      // Kỳ lẻ ngày: lãi = dư nợ × lãi suất năm × (số ngày thực / 365)
+      ? Math.round(dunNo * lsNam * (daysDiff(ngayKy, ngayTra) / 365))
+      : (hd.phuongThuc === 'giam-dan'
+          ? Math.round(dunNo * lsNam / kyPerYear)
+          : Math.round(hd.soTienGiaiNgan * lsNam / kyPerYear))
 
     let gocTra: number
     if (hd.phuongThuc === 'cuoi-ky') {
