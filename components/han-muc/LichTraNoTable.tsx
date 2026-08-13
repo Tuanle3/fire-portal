@@ -248,7 +248,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
     const totalQuarters = groups.length
 
     return (
-      <div style={{ overflowX: 'auto', overflowY: 'auto', width: '100%', maxHeight: 'calc(100vh - 260px)' }}>
+      <div style={{ overflowX: 'auto', width: '100%' }}>
         <table style={{ width: '100%', minWidth: 1500, borderCollapse: 'collapse', fontSize: 12 }}>
           <colgroup>
             <col style={{ width: '14%' }} />
@@ -261,7 +261,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
             <col style={{ width: '8%'  }} />
             <col style={{ width: '14%' }} />
           </colgroup>
-          <thead style={{ position: 'sticky', top: 0, zIndex: 20 }}>
+          <thead style={{ position: 'sticky', top: 89, zIndex: 20 }}>
             <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
               <th style={{ padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>Kỳ gốc</th>
               <th style={{ padding: '10px 14px', textAlign: 'left',   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Tháng / Ngày trả</th>
@@ -482,9 +482,9 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
   // CHẾ ĐỘ THÔNG THƯỜNG (monthly / quarterly đồng nhất)
   // ════════════════════════════════════════════════════════════
   return (
-    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+    <div style={{ overflowX: 'auto' }}>
       <table className="w-full text-sm" style={{ minWidth: 1080 }}>
-        <thead style={{ position: 'sticky', top: 0, zIndex: 20 }}>
+        <thead style={{ position: 'sticky', top: 89, zIndex: 20 }}>
           <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
             <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap">Kỳ</th>
             <th className="px-4 py-3 text-left font-medium text-xs opacity-80 whitespace-nowrap">Ngày trả</th>
