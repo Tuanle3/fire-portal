@@ -314,7 +314,9 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   const numKy = coKyLe ? numKySau + 1 : numKySau
 
   const gocCung = hd.gocTraCoDinh && hd.gocTraCoDinh > 0 ? hd.gocTraCoDinh : null
-  const gocKy   = gocCung ?? Math.round(hd.soTienGiaiNgan / numKy)
+  // Chia đều gốc theo SỐ KỲ THỰC SỰ TRẢ GỐC (numKySau) — kỳ lẻ ngày (stub) không trả gốc
+  // nên không được tính vào mẫu số, nếu không mỗi kỳ sau sẽ bị trả thiếu gốc.
+  const gocKy   = gocCung ?? Math.round(hd.soTienGiaiNgan / numKySau)
 
   let dunNo = hd.soTienGiaiNgan
   const rows: KyTraNo[] = []
@@ -336,7 +338,10 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
           : Math.round(hd.soTienGiaiNgan * lsNam / kyPerYear))
 
     let gocTra: number
-    if (hd.phuongThuc === 'cuoi-ky') {
+    if (isStub) {
+      // Kỳ lẻ ngày: CHỈ tính lãi, chưa thu gốc (đúng như comment/ghi chú UI đã mô tả)
+      gocTra = 0
+    } else if (hd.phuongThuc === 'cuoi-ky') {
       gocTra = isLastKy ? dunNo : 0
     } else {
       gocTra = isLastKy ? dunNo : Math.min(gocKy, dunNo)
