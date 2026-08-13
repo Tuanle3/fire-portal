@@ -106,19 +106,26 @@ export async function saveHopDong(
   }
 
   const data: HopDongTinDung = { ...hd, id: ref.id, createdAt, updatedAt: now }
-  // Xóa explicit các optional field không có trong payload
   const optionalFields: (keyof HopDongTinDung)[] = [
     'nguoiVay', 'chiNhanh', 'ghiChu', 'kyTraGoc',
     'ngayTraGocDauTien', 'soKyTraGoc', 'soKyAnHan',
     'gocTraCoDinh', 'soThangUuDai', 'laiSuatSauUuDai',
   ]
-  const dataToWrite: any = { ...data }
-  optionalFields.forEach(f => {
-    if (dataToWrite[f] === undefined || dataToWrite[f] === null) {
-      dataToWrite[f] = deleteField()
-    }
-  })
-  await setDoc(ref, dataToWrite)
+  if (id) {
+    // EDIT: deleteField() xóa tường minh field bị bỏ trống khỏi Firestore
+    const dataToWrite: any = { ...data }
+    optionalFields.forEach(f => {
+      if (dataToWrite[f] === undefined || dataToWrite[f] === null) dataToWrite[f] = deleteField()
+    })
+    await setDoc(ref, dataToWrite)
+  } else {
+    // TẠO MỚI: deleteField() không dùng được khi create — xóa key undefined khỏi object
+    const dataToWrite: any = { ...data }
+    optionalFields.forEach(f => {
+      if (dataToWrite[f] === undefined || dataToWrite[f] === null) delete dataToWrite[f]
+    })
+    await setDoc(ref, dataToWrite)
+  }
 
   // Build schedule mới
   const schedule = buildSchedule(data)

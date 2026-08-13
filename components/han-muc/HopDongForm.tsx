@@ -125,8 +125,10 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
     setSaving(true)
     setError('')
     try {
-      const hanMucNum         = Number(form.hanMuc)
-      const soTienGiaiNganNum = Number(form.soTienGiaiNgan)
+      // Bỏ dấu chấm phân cách hàng nghìn (format Việt Nam) trước khi parse số
+      const stripDots = (v: string) => v.replace(/\./g, '').replace(/,/g, '')
+      const hanMucNum         = Number(stripDots(form.hanMuc))
+      const soTienGiaiNganNum = Number(stripDots(form.soTienGiaiNgan))
       const laiSuatNum        = Number(form.laiSuat)
       if (isNaN(hanMucNum) || isNaN(soTienGiaiNganNum) || isNaN(laiSuatNum)) {
         setError('Giá trị số không hợp lệ, vui lòng kiểm tra lại.')
@@ -167,7 +169,7 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
         payload.soKyAnHan = soKyAnHanNum
       }
       // ── Gốc cứng: chỉ lưu nếu có nhập ──
-      const gocCung = Number(form.gocTraCoDinh)
+      const gocCung = Number(stripDots(form.gocTraCoDinh))
       if (form.gocTraCoDinh && !isNaN(gocCung) && gocCung > 0) {
         payload.gocTraCoDinh = gocCung
       }
