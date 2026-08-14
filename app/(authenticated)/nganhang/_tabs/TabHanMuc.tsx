@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { subscribeHopDong, subscribeLichTraNo, setGocTraCoDinh } from '@/lib/han-muc-store'
+import { subscribeHopDong, subscribeLichTraNo, setGocTraCoDinh, tinhHanMucKhaDung, tinhDuNoHienTai } from '@/lib/han-muc-store'
 import { HopDongTinDung, KyTraNo, EntityType } from '@/lib/han-muc-types'
 import HopDongForm from '@/components/han-muc/HopDongForm'
 import LichTraNoTable from '@/components/han-muc/LichTraNoTable'
@@ -159,6 +159,7 @@ export function TabHanMuc() {
   const [editing, setEditing]           = useState<HopDongTinDung | null>(null)
   const [coCauOpen, setCoCauOpen]       = useState(false)
   const [kyMap, setKyMap]               = useState<Record<string, KyTraNo[]>>({})
+  const [presetKhungId, setPresetKhungId] = useState<string | undefined>(undefined)
 
   useEffect(() => subscribeHopDong(setHopDongs, entityFilter), [entityFilter])
 
@@ -180,17 +181,34 @@ export function TabHanMuc() {
     if (fresh) setSelected(fresh)
   }, [hopDongs]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const tongHanMuc     = useMemo(() => hopDongs.reduce((s, h) => s + h.hanMuc, 0), [hopDongs])
-  const tongDuNo       = useMemo(() => hopDongs.reduce((s, h) => s + h.soTienGiaiNgan, 0), [hopDongs])
+  // ── Hạn mức khung: tách riêng, không tính lẫn vào các KPI/bảng của HĐ vay thông thường ──
+  const khungList    = useMemo(() => hopDongs.filter(h => h.loaiHD === 'han-muc-khung'), [hopDongs])
+  const nonKhungList = useMemo(() => hopDongs.filter(h => h.loaiHD !== 'han-muc-khung'), [hopDongs])
+  // khungId → hạn mức khả dụng (tổng / đã dùng / còn lại)
+  const khaDungMap = useMemo(() => {
+    const map: Record<string, ReturnType<typeof tinhHanMucKhaDung>> = {}
+    khungList.forEach(k => {
+      const conCua = hopDongs.filter(h => h.hanMucKhungId === k.id)
+      map[k.id] = tinhHanMucKhaDung(k, conCua, kyMap)
+    })
+    return map
+  }, [khungList, hopDongs, kyMap])
+
+  // Hạn mức tổng = HĐ vay độc lập + hạn mức khung (KHÔNG cộng thêm các bộ hồ sơ con — đã nằm trong khung)
+  const tongHanMuc = useMemo(
+    () => hopDongs.filter(h => !h.hanMucKhungId).reduce((s, h) => s + h.hanMuc, 0),
+    [hopDongs],
+  )
+  const tongDuNo       = useMemo(() => nonKhungList.reduce((s, h) => s + h.soTienGiaiNgan, 0), [nonKhungList])
   const tongDuNoConLai = useMemo(
-    () => hopDongs.reduce((s, h) => s + getPayStats(kyMap[h.id], h).conLai, 0),
-    [hopDongs, kyMap],
+    () => nonKhungList.reduce((s, h) => s + getPayStats(kyMap[h.id], h).conLai, 0),
+    [nonKhungList, kyMap],
   )
   const laiSuatBQ = useMemo(() => {
-    if (!hopDongs.length) return 0
-    return hopDongs.reduce((s, h) => s + h.laiSuat, 0) / hopDongs.length
-  }, [hopDongs])
-  const soQuaHan = hopDongs.filter(h => h.trangThai === 'qua-han').length
+    if (!nonKhungList.length) return 0
+    return nonKhungList.reduce((s, h) => s + h.laiSuat, 0) / nonKhungList.length
+  }, [nonKhungList])
+  const soQuaHan = nonKhungList.filter(h => h.trangThai === 'qua-han').length
 
   const kyDaTra        = kyList.filter(k => k.trangThai === 'da-tra')
   const soKyLaiDaTra   = kyDaTra.length
@@ -228,6 +246,20 @@ export function TabHanMuc() {
               {selected.entity} · {selected.nganHang}{selected.chiNhanh ? ` · ${selected.chiNhanh}` : ''}
               {selected.nguoiVay ? ` · ${selected.nguoiVay}` : ''}
             </div>
+
+            {selected.hanMucKhungId && (() => {
+              const khung = hopDongs.find(h => h.id === selected.hanMucKhungId)
+              const kd    = khung ? khaDungMap[khung.id] : null
+              return khung ? (
+                <div style={{
+                  fontSize: 11.5, color: '#92600a', background: '#fffbf0',
+                  border: '1px solid #D4A64A55', borderRadius: 6, padding: '6px 10px', marginBottom: 10,
+                }}>
+                  🏦 Bộ hồ sơ giải ngân thuộc hạn mức khung <b>{khung.soHopDong}</b>
+                  {kd && ` · khả dụng hiện tại: ${fmt(kd.khaDung)} đ / ${fmt(kd.tongHanMuc)} đ`}
+                </div>
+              ) : null
+            })()}
             <div className="nh-form-grid" style={{ marginBottom: 0 }}>
               <Stat label="Hạn mức" value={`${fmt(selected.hanMuc)} đ`} />
               <Stat label="Giải ngân" value={`${fmt(selected.soTienGiaiNgan)} đ`} />
@@ -290,7 +322,11 @@ export function TabHanMuc() {
           </div>
         </div>
 
-        <HopDongForm key={editing?.id ?? 'new'} open={formOpen} onClose={() => { setFormOpen(false); setEditing(null) }} editing={editing} />
+        <HopDongForm
+          key={editing?.id ?? 'new'} open={formOpen}
+          onClose={() => { setFormOpen(false); setEditing(null); setPresetKhungId(undefined) }}
+          editing={editing} khungList={khungList} khaDungMap={khaDungMap} presetHanMucKhungId={presetKhungId}
+        />
         <CoCauDialog open={coCauOpen} onClose={() => setCoCauOpen(false)} hopDong={selected} kyList={kyList} />
       </div>
     )
@@ -327,6 +363,93 @@ export function TabHanMuc() {
           <span className="nh-kpi-sub">{soQuaHan > 0 ? `${soQuaHan} hợp đồng quá hạn` : 'Trung bình các HĐ'}</span>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════
+          HẠN MỨC KHUNG — giải ngân theo bộ hồ sơ
+      ══════════════════════════════════════════ */}
+      {khungList.length > 0 && (
+        <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
+          {khungList.map(k => {
+            const kd = khaDungMap[k.id] ?? { tongHanMuc: k.hanMuc, daSuDung: 0, khaDung: k.hanMuc, soBoDangVay: 0 }
+            const pct = kd.tongHanMuc > 0 ? Math.min(100, Math.round((kd.daSuDung / kd.tongHanMuc) * 100)) : 0
+            const conCua = hopDongs.filter(h => h.hanMucKhungId === k.id)
+            return (
+              <div key={k.id} className="nh-card">
+                <div className="nh-card-head">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 16 }}>🏦</span>
+                    <span className="nh-card-title">{k.soHopDong} — Hạn mức khung</span>
+                    <span style={{ fontSize: 11.5, color: 'var(--nh-muted)' }}>
+                      {k.entity} · {k.nganHang}{k.chiNhanh ? ` · ${k.chiNhanh}` : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn-ghost" onClick={() => { setEditing(k); setFormOpen(true) }}>Sửa hạn mức</button>
+                    <button
+                      className="btn-primary"
+                      onClick={() => { setPresetKhungId(k.id); setEditing(null); setFormOpen(true) }}
+                    >
+                      + Giải ngân bộ hồ sơ mới
+                    </button>
+                  </div>
+                </div>
+                <div className="nh-card-body">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 10 }}>
+                    <PayStat label="Tổng hạn mức" value={`${fmt(kd.tongHanMuc)} đ`} sub={`Hết hiệu lực: ${k.ngayDaoHan}`} color="#1C3557" />
+                    <PayStat label="Đã sử dụng" value={`${fmt(kd.daSuDung)} đ`} sub={`${kd.soBoDangVay} bộ hồ sơ đang vay`} color="#b45309" />
+                    <PayStat
+                      label="Khả dụng"
+                      value={`${fmt(kd.khaDung)} đ`}
+                      sub={pct >= 90 ? '⚠️ Gần chạm hạn mức' : 'Có thể giải ngân tiếp'}
+                      color={pct >= 90 ? '#b91c1c' : '#15803d'}
+                    />
+                  </div>
+                  <div style={{ height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 12 }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: pct >= 90 ? '#b91c1c' : '#D4A64A', transition: 'width .3s' }} />
+                  </div>
+                  {conCua.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--nh-muted2)', padding: '8px 0' }}>
+                      Chưa có bộ hồ sơ giải ngân nào — bấm “+ Giải ngân bộ hồ sơ mới” để bắt đầu rút vốn.
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="nh-tbl" style={{ minWidth: 640 }}>
+                        <thead>
+                          <tr>
+                            <th>Bộ hồ sơ</th>
+                            <th>Ngày giải ngân</th>
+                            <th>Ngày đáo hạn</th>
+                            <th className="r">Giải ngân</th>
+                            <th className="r">Dư nợ hiện tại</th>
+                            <th>Trạng thái</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {conCua.map(bo => {
+                            const duNo = tinhDuNoHienTai(kyMap[bo.id] ?? [])
+                            return (
+                              <tr key={bo.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(bo)}>
+                                <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>{bo.soBoHoSo || bo.soHopDong}</td>
+                                <td>{bo.ngayKy}</td>
+                                <td>{bo.ngayDaoHan}</td>
+                                <td className="r">{fmt(bo.soTienGiaiNgan)}</td>
+                                <td className="r" style={{ fontWeight: 700, color: duNo > 0 ? '#b91c1c' : '#15803d' }}>
+                                  {fmt(duNo)}
+                                </td>
+                                <td><span className={`nh-badge ${HD_BADGE[bo.trangThai]}`}>{HD_LABEL[bo.trangThai]}</span></td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       <div className="nh-card">
         <div className="nh-card-head">
