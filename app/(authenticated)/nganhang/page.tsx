@@ -9,7 +9,7 @@ import {
 import { BankRelation, BankProposal, BankNote } from '@/lib/bank-types'
 import { TabNganHang } from './_tabs/TabNganHang'
 import { TabSoSanh } from './_tabs/TabSoSanh'
-import { TabHanMuc } from './_tabs/TabHanMuc'
+import { TabHanMucWrapper } from './_tabs/TabHanMucWrapper'
 
 type TabId = 'ngan-hang' | 'so-sanh' | 'han-muc'
 
@@ -181,7 +181,7 @@ export default function NganHangPage() {
                 {activeTab === 'so-sanh' && (
                   <TabSoSanh relations={relations} proposals={proposals} notes={notes} />
                 )}
-                {activeTab === 'han-muc' && <TabHanMuc />}
+                {activeTab === 'han-muc' && <TabHanMucWrapper />}
               </>
             )}
           </div>
