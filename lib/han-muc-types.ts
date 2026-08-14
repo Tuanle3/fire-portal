@@ -27,6 +27,11 @@ export type TrangThaiKy =
   | 'co-cau'
 export type CoCauOption = 'gia-han' | 'giam-ls' | 'von-hoa-lai'
 export type LaiSuatLoai = 'co-dinh' | 'tha-noi'
+/** Phân loại hợp đồng: HĐ vay thông thường, hoặc HĐ đóng vai trò "hạn mức khung"
+ *  (bản thân không giải ngân trực tiếp — các HĐ con trỏ về qua hanMucKhungId
+ *  mới là các bộ hồ sơ thực rút vốn). Không set (undefined) = HĐ thông thường,
+ *  tương đương 'thong-thuong'. */
+export type LoaiHopDong = 'thong-thuong' | 'han-muc-khung'
 export interface HopDongTinDung {
   id:              string
   soHopDong:       string
@@ -51,6 +56,9 @@ export interface HopDongTinDung {
   trangThai:       TrangThaiHD
   ghiChu?:         string
   gocTraCoDinh?:   number        // gốc làm tròn do NH quy định — nếu có sẽ override gốc tự tính
+  loaiHD?:         LoaiHopDong   // 'han-muc-khung' nếu đây là HĐ hạn mức khung, không giải ngân trực tiếp
+  hanMucKhungId?:  string        // FK → HopDongTinDung.id của HĐ hạn mức khung (nếu đây là bộ hồ sơ con thuộc 1 khung)
+  soBoHoSo?:       string        // số bộ hồ sơ giải ngân (chỉ dùng khi hanMucKhungId có giá trị) — hiển thị thay soHopDong nếu có
   createdAt:       number
   updatedAt:       number
 }

@@ -599,6 +599,52 @@ function daysDiff(a: Date, b: Date): number {
 
 export { buildSchedule as previewSchedule }
 
+// ─────────────────────────────────────────────────────────────
+// HẠN MỨC KHUNG (dài hạn) — tính dư nợ hiện tại của 1 bộ hồ sơ
+// và hạn mức khả dụng của 1 HĐ đóng vai trò "khung".
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Dư nợ hiện tại của 1 hợp đồng/bộ hồ sơ, suy ra trực tiếp từ lịch trả nợ:
+ *  - Chưa trả kỳ nào → dư nợ = dư nợ đầu kỳ 1 (= toàn bộ số đã giải ngân)
+ *  - Đã trả ít nhất 1 kỳ → dư nợ = dư nợ cuối kỳ của kỳ đã trả gần nhất
+ *  - Không có kỳ nào (chưa build lịch) → 0
+ */
+export function tinhDuNoHienTai(kyList: KyTraNo[]): number {
+  if (!kyList.length) return 0
+  const sorted = [...kyList].sort((a, b) => a.soKy - b.soKy)
+  const daTra  = sorted.filter(k => k.trangThai === 'da-tra')
+  if (daTra.length === 0) return sorted[0].dunNoDauKy
+  return daTra[daTra.length - 1].dunNoCuoiKy
+}
+
+/**
+ * Hạn mức khả dụng của 1 HĐ "hạn mức khung": tổng hạn mức trừ đi dư nợ
+ * hiện tại của tất cả bộ hồ sơ con (đang vay, chưa tất toán).
+ */
+export function tinhHanMucKhaDung(
+  khung:   HopDongTinDung,
+  conCua:  HopDongTinDung[],
+  kyMap:   Record<string, KyTraNo[]>,
+): { tongHanMuc: number; daSuDung: number; khaDung: number; soBoDangVay: number } {
+  let daSuDung    = 0
+  let soBoDangVay = 0
+
+  conCua.forEach(bo => {
+    if (bo.trangThai === 'tat-toan') return
+    const duNo = tinhDuNoHienTai(kyMap[bo.id] ?? [])
+    if (duNo > 0) {
+      daSuDung += duNo
+      soBoDangVay++
+    }
+  })
+
+  const tongHanMuc = khung.hanMuc
+  const khaDung     = Math.max(0, tongHanMuc - daSuDung)
+  return { tongHanMuc, daSuDung, khaDung, soBoDangVay }
+}
+
+
 // ── Cập nhật gốc cứng + rebuild toàn bộ lịch trả nợ ────────
 // gocMoi = null → xóa gốc cứng (trở về tự tính)
 // gocMoi > 0   → set số NH làm tròn, rebuild, giữ kỳ da-tra
