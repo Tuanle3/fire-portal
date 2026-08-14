@@ -8,14 +8,14 @@
  *   • "Ngắn hạn"  → TabHanMucNganHan (hạn mức khung + bộ hồ sơ giải ngân)
  *
  * Sử dụng:
- *   import { TabHanMucWrapper } from '@/components/han-muc/TabHanMucWrapper'
+ *   import { TabHanMucWrapper } from './_tabs/TabHanMucWrapper'
  *   <TabHanMucWrapper />
  * ─────────────────────────────────────────────────────────────
  */
 
 import { useState } from 'react'
-import { TabHanMuc }         from '@/components/han-muc/TabHanMuc'         // hoặc đường dẫn phù hợp
-import { TabHanMucNganHan }  from '@/components/han-muc/TabHanMucNganHan'  // hoặc đường dẫn phù hợp
+import { TabHanMuc }         from './TabHanMuc'
+import { TabHanMucNganHan }  from './TabHanMucNganHan'
 
 type SubTab = 'dai-han' | 'ngan-han'
 
