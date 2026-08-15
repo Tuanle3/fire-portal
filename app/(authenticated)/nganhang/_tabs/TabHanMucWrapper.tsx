@@ -16,7 +16,6 @@
 import { useState } from 'react'
 import { TabHanMuc }         from './TabHanMuc'
 import { TabHanMucNganHan }  from './TabHanMucNganHan'
-import { MigrateEntityTool } from '@/components/han-muc/MigrateEntityTool' // TẠM — gỡ sau khi chạy migrate 1 lần
 
 type SubTab = 'dai-han' | 'ngan-han'
 
@@ -30,8 +29,6 @@ export function TabHanMucWrapper() {
 
   return (
     <div>
-      <MigrateEntityTool /> {/* TẠM — gỡ dòng này sau khi chạy migrate 1 lần */}
-
       {/* Sub-tab switcher */}
       <div style={{
         display: 'flex', gap: 4, marginBottom: 16,
