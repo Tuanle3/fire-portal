@@ -14,11 +14,11 @@ import type {
   HanMucNganHan, BoHoSoGiaiNgan, KyThuNH, TraGocGiuaKy,
   KhaDungSnapshot, TrangThaiBoHoSo, KyTraLaiNH,
 } from '@/lib/han-muc-ngan-han-types'
-import type { EntityType, BankName } from '@/lib/han-muc-types'
+import type { BankName } from '@/lib/han-muc-types'
+import EntitySelect from '@/components/han-muc/EntitySelect'
 import { Pencil, Trash2, Plus, ChevronLeft, X, Check, AlertCircle, Calendar } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────
-const ENTITY_LIST: EntityType[] = ['SAG', 'SAHS', 'ĐTSA', 'YANA', 'Cá nhân']
 const BANK_LIST: BankName[] = [
   'Agribank','Vietcombank','BIDV','Vietinbank','ACB','MB Bank','Techcombank',
   'VPBank','Sacombank','HDBank','VIB','TPBank','MSB','SeABank','LPBank',
@@ -125,7 +125,7 @@ interface KhungFormProps {
 function KhungForm({ open, editing, onClose }: KhungFormProps) {
   type F = Omit<HanMucNganHan, 'id' | 'createdAt' | 'updatedAt' | 'trangThai'>
   const blank: F = {
-    soHopDong: '', entity: 'SAG', nganHang: 'Vietcombank',
+    soHopDong: '', entity: 'SAP', nganHang: 'Vietcombank',
     chiNhanh: '', nguoiVay: '', tongHanMuc: 0,
     ngayHieuLuc: '', ngayHetHan: '', laiSuatMacDinh: undefined, ghiChu: '',
   }
@@ -193,9 +193,7 @@ function KhungForm({ open, editing, onClose }: KhungFormProps) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {fieldWrapper('Số hợp đồng hạn mức *', textInput('soHopDong', 'VD: HMNH-2025-001'), 2)}
           {fieldWrapper('Pháp nhân *', (
-            <select value={f.entity} onChange={e => setF(p => ({ ...p, entity: e.target.value as EntityType }))} style={inputBaseCls}>
-              {ENTITY_LIST.map(e => <option key={e}>{e}</option>)}
-            </select>
+            <EntitySelect value={f.entity} onChange={v => setF(p => ({ ...p, entity: v }))} style={inputBaseCls} />
           ))}
           {fieldWrapper('Ngân hàng *', (
             <select value={f.nganHang} onChange={e => setF(p => ({ ...p, nganHang: e.target.value as BankName }))} style={inputBaseCls}>

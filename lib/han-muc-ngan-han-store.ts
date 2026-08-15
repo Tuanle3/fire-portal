@@ -637,6 +637,22 @@ async function _rebuildKyThuSauTraGoc(hanMucId: string, boHoSoId: string): Promi
 }
 
 // ─────────────────────────────────────────────────────────────
+// MIGRATE 1 LẦN: đổi pháp nhân "SAG" → "SAP" cho toàn bộ hạn mức khung ngắn hạn
+// ─────────────────────────────────────────────────────────────
+export async function migrateEntitySAGtoSAPNganHan(): Promise<{ updated: number }> {
+  await ensureTasksAuth()
+  const snap_ = await getDocs(query(khungCol(), where('entity', '==', 'SAG')))
+  const ids   = snap_.docs.map(d => d.id)
+  const BATCH = 400
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = writeBatch(db())
+    ids.slice(i, i + BATCH).forEach(id => batch.update(doc(khungCol(), id), { entity: 'SAP' }))
+    await batch.commit()
+  }
+  return { updated: ids.length }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Utility: lấy tất cả kỳ thu trong tháng YYYY-MM (cho calendar)
 // ─────────────────────────────────────────────────────────────
 export function filterKyThuTheoThang(

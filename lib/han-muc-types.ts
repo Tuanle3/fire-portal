@@ -1,7 +1,10 @@
 // ============================================================
 // TYPES — Module Hạn mức tín dụng
 // ============================================================
-export type EntityType  = 'SAG' | 'SAHS' | 'ĐTSA' | 'YANA' | 'Cá nhân'
+// EntityType: liệt kê các pháp nhân đã biết để gợi ý/autocomplete, nhưng
+// vẫn nhận bất kỳ chuỗi nào (pháp nhân tuỳ chỉnh do người dùng thêm qua
+// "+ Thêm pháp nhân khác" — xem han-muc-entities-store.ts).
+export type EntityType = 'SAP' | 'SAHS' | 'ĐTSA' | 'YANA' | 'Sao Việt' | 'Cá nhân' | (string & {})
 export type BankName =
   | 'Agribank' | 'Vietcombank' | 'BIDV' | 'Vietinbank'
   | 'ACB' | 'MB Bank' | 'Techcombank' | 'VPBank' | 'Sacombank'

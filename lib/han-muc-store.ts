@@ -600,6 +600,23 @@ function daysDiff(a: Date, b: Date): number {
 export { buildSchedule as previewSchedule }
 
 // ─────────────────────────────────────────────────────────────
+// MIGRATE 1 LẦN: đổi pháp nhân "SAG" → "SAP" cho toàn bộ HĐ dài hạn
+// (chạy 1 lần duy nhất, dùng qua nút tạm trong MigrateEntityTool)
+// ─────────────────────────────────────────────────────────────
+export async function migrateEntitySAGtoSAP(): Promise<{ updated: number }> {
+  await ensureTasksAuth()
+  const snap_ = await getDocs(query(hdCol(), where('entity', '==', 'SAG')))
+  const ids   = snap_.docs.map(d => d.id)
+  const BATCH = 400
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = writeBatch(db())
+    ids.slice(i, i + BATCH).forEach(id => batch.update(doc(hdCol(), id), { entity: 'SAP' }))
+    await batch.commit()
+  }
+  return { updated: ids.length }
+}
+
+// ─────────────────────────────────────────────────────────────
 // HẠN MỨC KHUNG (dài hạn) — tính dư nợ hiện tại của 1 bộ hồ sơ
 // và hạn mức khả dụng của 1 HĐ đóng vai trò "khung".
 // ─────────────────────────────────────────────────────────────

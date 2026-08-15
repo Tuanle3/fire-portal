@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { saveHopDong } from '@/lib/han-muc-store'
+import EntitySelect from '@/components/han-muc/EntitySelect'
 import {
   HopDongTinDung, EntityType, BankName, PhuongThuc, KyTra, KyTraGoc, TrangThaiHD, LaiSuatLoai,
 } from '@/lib/han-muc-types'
 
-const ENTITIES: EntityType[]    = ['SAG', 'SAHS', 'ĐTSA', 'YANA', 'Cá nhân']
 const BANKS: BankName[] = [
   'Agribank', 'Vietcombank', 'BIDV', 'Vietinbank',
   'ACB', 'MB Bank', 'Techcombank', 'VPBank', 'Sacombank',
@@ -37,7 +37,7 @@ interface Props {
 }
 
 const emptyForm = {
-  soHopDong: '', entity: 'SAG' as EntityType, nguoiVay: '',
+  soHopDong: '', entity: 'SAP' as EntityType, nguoiVay: '',
   nganHang: 'Agribank' as BankName, chiNhanh: '',
   hanMuc: '', soTienGiaiNgan: '',
   laiSuatLoai: 'co-dinh' as LaiSuatLoai,
@@ -270,9 +270,7 @@ export default function HopDongForm({
               <input className="nh-input" value={form.soHopDong} onChange={e => set('soHopDong', e.target.value)} />
             </Field>
             <Field label="Pháp nhân">
-              <select className="nh-select" value={form.entity} onChange={e => set('entity', e.target.value)}>
-                {ENTITIES.map(x => <option key={x} value={x}>{x}</option>)}
-              </select>
+              <EntitySelect value={form.entity} onChange={v => set('entity', v)} className="nh-select" />
             </Field>
             <Field label="Người vay / đứng tên">
               <input className="nh-input" value={form.nguoiVay} onChange={e => set('nguoiVay', e.target.value)} />

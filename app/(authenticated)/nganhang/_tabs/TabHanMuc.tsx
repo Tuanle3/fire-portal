@@ -8,7 +8,7 @@ import LichTraNoTable from '@/components/han-muc/LichTraNoTable'
 import CoCauDialog from '@/components/han-muc/CoCauDialog'
 import { Pencil, Check, X } from 'lucide-react'
 
-const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAG', 'SAHS', 'ĐTSA', 'YANA', 'Cá nhân']
+const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 
 const HD_BADGE: Record<HopDongTinDung['trangThai'], string> = {
   'dang-vay': 'nh-b-blue', 'binh-thuong': 'nh-b-green', 'gan-dao-han': 'nh-b-amber',
