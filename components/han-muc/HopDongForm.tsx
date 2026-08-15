@@ -24,7 +24,17 @@ const TRANG_THAI_LABEL: Record<TrangThaiHD, string> = {
   'qua-han': 'Quá hạn', 'tat-toan': 'Tất toán',
 }
 
-interface Props { open: boolean; onClose: () => void; editing?: HopDongTinDung | null }
+interface Props {
+  open: boolean
+  onClose: () => void
+  editing?: HopDongTinDung | null
+  /** Danh sách các HĐ đóng vai trò "hạn mức khung" — để chọn khung cha khi tạo bộ hồ sơ con */
+  khungList?: HopDongTinDung[]
+  /** khungId → snapshot khả dụng (tongHanMuc/daSuDung/khaDung/soBoDangVay), hiển thị tham khảo khi chọn khung */
+  khaDungMap?: Record<string, { tongHanMuc: number; daSuDung: number; khaDung: number; soBoDangVay: number }>
+  /** Nếu mở form từ nút "+ Giải ngân bộ hồ sơ mới" của 1 khung cụ thể → khoá sẵn khung này */
+  presetHanMucKhungId?: string
+}
 
 const emptyForm = {
   soHopDong: '', entity: 'SAG' as EntityType, nguoiVay: '',
@@ -42,54 +52,56 @@ const emptyForm = {
   soKyTraGoc: '',
   // ── ân hạn gốc ──
   soKyAnHan: '',
+  // ── hạn mức khung ──
+  loaiHD: 'thong-thuong' as 'thong-thuong' | 'han-muc-khung',
+  hanMucKhungId: '',
+  soBoHoSo: '',
 }
 
-export default function HopDongForm({ open, onClose, editing }: Props) {
+/** Form khi thêm mới, có áp preset khung (nếu mở từ nút "+ Giải ngân bộ hồ sơ mới" của 1 khung) */
+function buildEmptyForm(presetHanMucKhungId?: string) {
+  return { ...emptyForm, hanMucKhungId: presetHanMucKhungId ?? '' }
+}
+
+/** Form khi sửa 1 HĐ có sẵn */
+function buildFormFromHopDong(editing: HopDongTinDung) {
+  return {
+    soHopDong: editing.soHopDong, entity: editing.entity, nguoiVay: editing.nguoiVay ?? '',
+    nganHang: editing.nganHang, chiNhanh: editing.chiNhanh ?? '',
+    hanMuc: String(editing.hanMuc), soTienGiaiNgan: String(editing.soTienGiaiNgan),
+    laiSuatLoai: editing.laiSuatLoai ?? 'co-dinh',
+    laiSuat: String(editing.laiSuat),
+    soThangUuDai: editing.soThangUuDai != null ? String(editing.soThangUuDai) : '',
+    laiSuatSauUuDai: editing.laiSuatSauUuDai != null ? String(editing.laiSuatSauUuDai) : '',
+    phuongThuc: editing.phuongThuc,
+    kyTra: editing.kyTra,
+    kyTraGoc: editing.kyTraGoc ?? '',
+    ngayKy: editing.ngayKy, ngayTraGocDauTien: editing.ngayTraGocDauTien ?? '', ngayDaoHan: editing.ngayDaoHan,
+    trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
+    gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
+    soKyTraGoc: editing.soKyTraGoc != null && !isNaN(Number(editing.soKyTraGoc)) ? String(editing.soKyTraGoc) : '',
+    soKyAnHan: editing.soKyAnHan != null && !isNaN(Number(editing.soKyAnHan)) ? String(editing.soKyAnHan) : '',
+    loaiHD: (editing.loaiHD ?? 'thong-thuong') as 'thong-thuong' | 'han-muc-khung',
+    hanMucKhungId: editing.hanMucKhungId ?? '',
+    soBoHoSo: editing.soBoHoSo ?? '',
+  }
+}
+
+export default function HopDongForm({
+  open, onClose, editing,
+  khungList = [], khaDungMap = {}, presetHanMucKhungId,
+}: Props) {
   const [form, setForm] = useState(() =>
-    editing
-      ? {
-          soHopDong: editing.soHopDong, entity: editing.entity, nguoiVay: editing.nguoiVay ?? '',
-          nganHang: editing.nganHang, chiNhanh: editing.chiNhanh ?? '',
-          hanMuc: String(editing.hanMuc), soTienGiaiNgan: String(editing.soTienGiaiNgan),
-          laiSuatLoai: editing.laiSuatLoai ?? 'co-dinh',
-          laiSuat: String(editing.laiSuat),
-          soThangUuDai: editing.soThangUuDai != null ? String(editing.soThangUuDai) : '',
-          laiSuatSauUuDai: editing.laiSuatSauUuDai != null ? String(editing.laiSuatSauUuDai) : '',
-          phuongThuc: editing.phuongThuc,
-          kyTra: editing.kyTra,
-          kyTraGoc: editing.kyTraGoc ?? '',
-          ngayKy: editing.ngayKy, ngayTraGocDauTien: editing.ngayTraGocDauTien ?? '', ngayDaoHan: editing.ngayDaoHan,
-          trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
-          gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
-          soKyTraGoc: editing.soKyTraGoc != null && !isNaN(Number(editing.soKyTraGoc)) ? String(editing.soKyTraGoc) : '',
-          soKyAnHan: editing.soKyAnHan != null && !isNaN(Number(editing.soKyAnHan)) ? String(editing.soKyAnHan) : '',
-        }
-      : emptyForm,
+    editing ? buildFormFromHopDong(editing) : buildEmptyForm(presetHanMucKhungId),
   )
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
   useEffect(() => {
     if (!open) return
-    setForm(editing ? {
-      soHopDong: editing.soHopDong, entity: editing.entity, nguoiVay: editing.nguoiVay ?? '',
-      nganHang: editing.nganHang, chiNhanh: editing.chiNhanh ?? '',
-      hanMuc: String(editing.hanMuc), soTienGiaiNgan: String(editing.soTienGiaiNgan),
-      laiSuatLoai: editing.laiSuatLoai ?? 'co-dinh',
-      laiSuat: String(editing.laiSuat),
-      soThangUuDai: editing.soThangUuDai != null ? String(editing.soThangUuDai) : '',
-      laiSuatSauUuDai: editing.laiSuatSauUuDai != null ? String(editing.laiSuatSauUuDai) : '',
-      phuongThuc: editing.phuongThuc,
-      kyTra: editing.kyTra,
-      kyTraGoc: editing.kyTraGoc ?? '',
-      ngayKy: editing.ngayKy, ngayTraGocDauTien: editing.ngayTraGocDauTien ?? '', ngayDaoHan: editing.ngayDaoHan,
-      trangThai: editing.trangThai, ghiChu: editing.ghiChu ?? '',
-      gocTraCoDinh: editing.gocTraCoDinh != null ? String(editing.gocTraCoDinh) : '',
-      soKyTraGoc: editing.soKyTraGoc != null && !isNaN(Number(editing.soKyTraGoc)) ? String(editing.soKyTraGoc) : '',
-      soKyAnHan: editing.soKyAnHan != null && !isNaN(Number(editing.soKyAnHan)) ? String(editing.soKyAnHan) : '',
-    } : emptyForm)
+    setForm(editing ? buildFormFromHopDong(editing) : buildEmptyForm(presetHanMucKhungId))
     setError('')
-  }, [open, editing])
+  }, [open, editing, presetHanMucKhungId])
 
   const fmtInput = (v: string) => {
     const num = v.replace(/\D/g, '')
@@ -173,6 +185,13 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
       if (form.gocTraCoDinh && !isNaN(gocCung) && gocCung > 0) {
         payload.gocTraCoDinh = gocCung
       }
+      // ── Hạn mức khung: HĐ khung hoặc bộ hồ sơ con thuộc 1 khung ──
+      if (form.loaiHD === 'han-muc-khung') {
+        payload.loaiHD = 'han-muc-khung'
+      } else if (form.hanMucKhungId) {
+        payload.hanMucKhungId = form.hanMucKhungId
+        if (form.soBoHoSo) payload.soBoHoSo = form.soBoHoSo
+      }
 
       await saveHopDong(payload, editing?.id)
       onClose()
@@ -194,6 +213,58 @@ export default function HopDongForm({ open, onClose, editing }: Props) {
         </div>
 
         <div className="nh-modal-body">
+          {/* ══════════════════════════════════════════
+              Hạn mức khung — phân loại HĐ (ẩn khi đang sửa để tránh đổi loại giữa chừng)
+          ══════════════════════════════════════════ */}
+          {!editing && !presetHanMucKhungId && (
+            <div style={{
+              marginBottom: 14, background: '#eff6ff', border: '1px solid #93c5fd88',
+              borderRadius: 8, padding: '10px 14px',
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: '#1d4ed8' }}>
+                <input
+                  type="checkbox"
+                  checked={form.loaiHD === 'han-muc-khung'}
+                  onChange={e => setForm(f => ({
+                    ...f,
+                    loaiHD: e.target.checked ? 'han-muc-khung' : 'thong-thuong',
+                    hanMucKhungId: e.target.checked ? '' : f.hanMucKhungId,
+                    soTienGiaiNgan: e.target.checked ? '0' : f.soTienGiaiNgan,
+                  }))}
+                />
+                🏦 Đây là hạn mức khung (không giải ngân trực tiếp — các bộ hồ sơ con sẽ trỏ về đây)
+              </label>
+            </div>
+          )}
+
+          {form.loaiHD !== 'han-muc-khung' && (khungList.length > 0 || presetHanMucKhungId) && (
+            <div style={{ marginBottom: 14, background: '#fffbf0', border: '1px solid #D4A64A55', borderRadius: 8, padding: '10px 14px' }}>
+              <Field label="Thuộc hạn mức khung (bỏ trống nếu là HĐ vay độc lập)">
+                <select
+                  className="nh-select"
+                  value={form.hanMucKhungId}
+                  disabled={!!presetHanMucKhungId}
+                  onChange={e => set('hanMucKhungId', e.target.value)}
+                >
+                  <option value="">— Không thuộc khung nào (HĐ độc lập) —</option>
+                  {khungList.map(k => {
+                    const kd = khaDungMap[k.id]
+                    return (
+                      <option key={k.id} value={k.id}>
+                        {k.soHopDong}{kd ? ` — khả dụng ${kd.khaDung.toLocaleString('vi-VN')} đ` : ''}
+                      </option>
+                    )
+                  })}
+                </select>
+              </Field>
+              {form.hanMucKhungId && (
+                <Field label="Số bộ hồ sơ (VD: HSTN-001)">
+                  <input className="nh-input" value={form.soBoHoSo} onChange={e => set('soBoHoSo', e.target.value)} placeholder="VD: HSTN-001" style={{ marginTop: 8 }} />
+                </Field>
+              )}
+            </div>
+          )}
+
           <div className="nh-form-grid">
             <Field label="Số hợp đồng *">
               <input className="nh-input" value={form.soHopDong} onChange={e => set('soHopDong', e.target.value)} />
