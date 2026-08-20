@@ -1,7 +1,5 @@
 // ============================================================
-// TYPES — Module Dòng tiền (Phần 1: khoản nhập tay)
-// Các khoản KHÔNG có nguồn hệ thống (hạn mức tín dụng) — xem
-// dong-tien-hanmuc-adapter.ts cho phần tự động lấy từ han-muc.
+// TYPES — Module Dòng tiền
 // ============================================================
 
 import type { EntityType } from '@/lib/han-muc-types'
@@ -10,51 +8,75 @@ export type { EntityType }
 
 export type LoaiDongTien = 'thu' | 'chi'
 
-// ── Nhóm dòng tiền — đúng danh mục báo cáo tháng (7 THU + 15 CHI) ──
-// `nhom` là string tự do: hoặc 1 code chuẩn bên dưới, hoặc TÊN của
-// 1 nhóm tuỳ chỉnh do người dùng tự thêm qua "+ Thêm nhóm mới"
-// (lưu ở collection riêng — xem dong-tien-nhom-store.ts). Vì nhóm
-// tuỳ chỉnh không có code, khi hiển thị LUÔN dùng
-// `NHOM_LABEL[nhom] ?? nhom` để tự fallback về đúng tên đã lưu.
-export type NhomDongTien = string
+// ── Loại khoản: kế hoạch (nhập đầu kỳ) hay thực hiện (nhập dần) ──
+// Khoản cũ không có field này → mặc định 'thuc-hien' khi đọc
+export type LoaiKhoan = 'ke-hoach' | 'thuc-hien'
+
+export type NhomDongTien =
+  // nhóm THU — chuẩn báo cáo SAG
+  | 'cho-goi'           // Thu từ Chợ Gôi
+  | 'nam-pho-chau'      // Thu từ Nam Phố Châu
+  | 'sap'               // Thu từ SAP
+  | 'dtsa'              // Thu từ Đô Thị Sơn An
+  | 'ban-ruou'          // Thu từ bán rượu/cao
+  | 'thu-khac'          // Thu khác (cho thuê MB, lãi gửi...)
+  | 'vay-ngan-hang'     // Thu từ vay / đáo hạn ngân hàng
+  // nhóm CHI — chuẩn báo cáo SAG
+  | 'nha-cung-cap'      // Chi trả nhà cung cấp
+  | 'chi-khac'          // Chi khác
+  | 'goc-vay-dn'        // Trả gốc vay doanh nghiệp
+  | 'lai-vay-dn'        // Trả lãi vay doanh nghiệp
+  | 'goc-vay-cn'        // Gốc vay cá nhân
+  | 'lai-vay-cn'        // Lãi vay cá nhân
+  | 'luong'             // Chi lương
+  | 'thue'              // Chi thuế
+  | 'xdcb'              // Đầu tư XDCB
+  | 'cphd-van-phong'    // CPHĐ văn phòng phẩm / dụng cụ
+  | 'cphd-luong-ld'     // CPHĐ lương lao động thời vụ
+  | 'cphd-sua-chua'     // CPHĐ sửa chữa tài sản
+  | 'cphd-cong-tac'     // CPHĐ công tác
+  | 'cphd-tiep-khach'   // CPHĐ tiếp khách, ngoại giao
+  | 'cphd-marketing'    // CPHĐ marketing, hội nghị, sự kiện
+  | 'cphd-phi-ngan-hang'// CPHĐ phí ngân hàng
+
+// Label ngắn gọn để hiển thị trong form/bảng
+export const NHOM_LABEL: Record<string, string> = {
+  'cho-goi':             'Thu từ Chợ Gôi',
+  'nam-pho-chau':        'Thu từ Nam Phố Châu',
+  'sap':                 'Thu từ SAP',
+  'dtsa':                'Thu từ Đô Thị Sơn An',
+  'ban-ruou':            'Thu từ bán rượu/cao',
+  'thu-khac':            'Thu khác',
+  'vay-ngan-hang':       'Thu từ vay ngân hàng',
+  'nha-cung-cap':        'Chi trả nhà cung cấp',
+  'chi-khac':            'Chi khác',
+  'goc-vay-dn':          'Trả gốc vay doanh nghiệp',
+  'lai-vay-dn':          'Trả lãi vay doanh nghiệp',
+  'goc-vay-cn':          'Gốc vay cá nhân',
+  'lai-vay-cn':          'Lãi vay cá nhân',
+  'luong':               'Chi lương',
+  'thue':                'Chi thuế',
+  'xdcb':                'Đầu tư XDCB',
+  'cphd-van-phong':      'CPHĐ văn phòng phẩm',
+  'cphd-luong-ld':       'CPHĐ lương lao động',
+  'cphd-sua-chua':       'CPHĐ sửa chữa',
+  'cphd-cong-tac':       'CPHĐ công tác',
+  'cphd-tiep-khach':     'CPHĐ tiếp khách',
+  'cphd-marketing':      'CPHĐ marketing',
+  'cphd-phi-ngan-hang':  'CPHĐ phí ngân hàng',
+}
 
 export const NHOM_THEO_LOAI: Record<LoaiDongTien, NhomDongTien[]> = {
-  thu: ['cho-goi', 'nam-pho-chau', 'sap', 'dtsa', 'ban-ruou', 'thu-khac', 'vay-nh-dao-han'],
+  thu: ['cho-goi', 'nam-pho-chau', 'sap', 'dtsa', 'ban-ruou', 'thu-khac', 'vay-ngan-hang'],
   chi: [
-    'chi-tra-ncc', 'chi-khac', 'goc-vay-dn', 'lai-vay-dn',
-    'goc-vay-ca-nhan', 'lai-vay-ca-nhan', 'goc-lai-vay-ngoai',
-    'cphd-luong', 'cphd-hanh-chinh', 'cphd-sinh-hoat', 'cphd-thue-phi',
+    'nha-cung-cap', 'chi-khac', 'goc-vay-dn', 'lai-vay-dn', 'goc-vay-cn', 'lai-vay-cn',
+    'luong', 'thue', 'xdcb',
+    'cphd-van-phong', 'cphd-luong-ld', 'cphd-sua-chua',
     'cphd-cong-tac', 'cphd-tiep-khach', 'cphd-marketing', 'cphd-phi-ngan-hang',
   ],
 }
 
-export const NHOM_LABEL: Record<string, string> = {
-  'cho-goi':           'Thu từ Chợ Gôi',
-  'nam-pho-chau':      'Thu từ Nam Phố Châu',
-  'sap':               'Thu từ SAP',
-  'dtsa':              'Thu từ Đô Thị Sơn An',
-  'ban-ruou':          'Thu từ bán rượu',
-  'thu-khac':          'Thu khác',
-  'vay-nh-dao-han':    'Thu từ vay ngân hàng (đáo hạn)',
-
-  'chi-tra-ncc':        'Chi trả nhà cung cấp',
-  'chi-khac':           'Chi khác',
-  'goc-vay-dn':         'Trả gốc vay doanh nghiệp',
-  'lai-vay-dn':         'Trả lãi vay doanh nghiệp',
-  'goc-vay-ca-nhan':    'Gốc vay cá nhân',
-  'lai-vay-ca-nhan':    'Lãi vay cá nhân',
-  'goc-lai-vay-ngoai':  'Gốc lãi vay cá nhân/tổ chức bên ngoài',
-  'cphd-luong':         'CPHĐ - Lương & các khoản theo lương',
-  'cphd-hanh-chinh':    'CPHĐ - Hành chính',
-  'cphd-sinh-hoat':     'CPHĐ - Sinh hoạt',
-  'cphd-thue-phi':      'CPHĐ - Thuế, phí, lệ phí',
-  'cphd-cong-tac':      'CPHĐ - Công tác',
-  'cphd-tiep-khach':    'CPHĐ - Tiếp khách, ngoại giao',
-  'cphd-marketing':     'CPHĐ - Marketing, hội nghị, sự kiện',
-  'cphd-phi-ngan-hang': 'CPHĐ - Phí ngân hàng',
-}
-
-/** Độ tin cậy — chỉ áp dụng cho khoản THU dự kiến, dùng để tính kịch bản rủi ro */
+/** Độ tin cậy — chỉ áp dụng cho khoản THU dự kiến */
 export type DoTinCay = 'chac-chan' | 'du-kien' | 'rui-ro'
 
 export const DO_TIN_CAY_LABEL: Record<DoTinCay, string> = {
@@ -63,23 +85,35 @@ export const DO_TIN_CAY_LABEL: Record<DoTinCay, string> = {
   'rui-ro':    'Rủi ro',
 }
 
-/** Chu kỳ lặp lại — sinh nhiều bản ghi cùng lúc (VD: tiền thuê văn phòng hàng tháng) */
+/** Chu kỳ lặp lại — sinh nhiều bản ghi cùng lúc */
 export type ChuKyLap = 'mot-lan' | 'hang-thang' | 'hang-quy'
 
+// ─────────────────────────────────────────────────────────
+// KhoanDongTien — NHẬP TAY (Phần 1)
+// Thêm 3 field mới (optional) — backward compatible 100%:
+//   loaiKhoan:    'ke-hoach' | 'thuc-hien'  (undefined = 'thuc-hien')
+//   nhomCha:      key nhóm cha — dùng để group trong báo cáo
+//   nhomChaLabel: label hiển thị của nhóm cha (lưu cùng để report không phụ thuộc code)
+// ─────────────────────────────────────────────────────────
 export interface KhoanDongTien {
   id:             string
   entity:         EntityType
   loai:           LoaiDongTien
-  nhom:           NhomDongTien
-  ngayDuKien:     string          // ISO date (YYYY-MM-DD)
-  soTien:         number          // VNĐ, luôn số dương
-  doTinCay?:      DoTinCay        // chỉ dùng khi loai === 'thu'
+  nhom:           NhomDongTien | string   // string để tương thích nhóm tuỳ chỉnh cũ
+  ngayDuKien:     string                  // ISO date (YYYY-MM-DD)
+  soTien:         number                  // VNĐ, luôn dương
+
+  // ── MỚI (Bước A) — optional để tương thích dữ liệu cũ ──
+  loaiKhoan?:     LoaiKhoan              // undefined → coi là 'thuc-hien'
+  nhomCha?:       string                 // key nhóm cha — VD 'cho-goi'
+  nhomChaLabel?:  string                 // label nhóm cha — VD 'Thu từ Chợ Gôi'
+
+  doTinCay?:      DoTinCay
   moTa:           string
 
-  // Khoản lặp lại: khi tạo, sinh ra nhiều bản ghi độc lập cùng nhóm `lapNhomId`
   lap?:           ChuKyLap
-  soKyLap?:       number          // số kỳ sinh ra (kể cả kỳ đầu)
-  lapNhomId?:     string          // liên kết các bản ghi cùng 1 lần tạo lặp, để sửa/xoá hàng loạt
+  soKyLap?:       number
+  lapNhomId?:     string
 
   // Đối chiếu thực tế
   daThucHien?:    boolean
@@ -91,44 +125,68 @@ export interface KhoanDongTien {
   updatedAt:      number
 }
 
+// ── Helper: lấy loaiKhoan an toàn (dữ liệu cũ không có field này) ──
+export function getLoaiKhoan(k: KhoanDongTien): LoaiKhoan {
+  return k.loaiKhoan ?? 'thuc-hien'
+}
+
 // ─────────────────────────────────────────────────────────
-// Type hợp nhất dùng ở tầng Engine (Phần 3) — nhập tay + tự động
-// đặt sẵn ở đây để Phần 1 export ra dùng chung ngay từ đầu.
+// Type hợp nhất (Phần 3) — nhập tay + tự động hạn mức
 // ─────────────────────────────────────────────────────────
 export type NguonDongTien = 'nhap-tay' | 'kytra-no' | 'kythu-nh' | 'giai-ngan'
 
 export interface DongTienItem {
-  id:          string
-  entity:      EntityType
-  loai:        LoaiDongTien
-  ngay:        string
-  soTien:      number
-  nguon:       NguonDongTien
-  nhom:        NhomDongTien | 'tra-no' | 'giai-ngan'
-  nhanNhan:    string
-  trangThai:   'du-kien' | 'thuc-te'
-  refId?:      string
-  doTinCay?:   DoTinCay
-  /** Tên ngân hàng — chỉ có ở khoản TỰ ĐỘNG từ hạn mức tín dụng,
-   *  dùng để gộp nhóm nhiều khoản cùng ngày + cùng ngân hàng ở
-   *  chế độ Tổng hợp/Timeline cho gọn (Phần 4 nâng cấp). */
-  nganHang?:   string
+  id:           string
+  entity:       EntityType
+  loai:         LoaiDongTien
+  ngay:         string
+  soTien:       number
+  nguon:        NguonDongTien
+  nhom:         NhomDongTien | string
+  nhanNhan:     string
+  trangThai:    'du-kien' | 'thuc-te'
+  refId?:       string
+  doTinCay?:    DoTinCay
+  nganHang?:    string   // chỉ có ở khoản TỰ ĐỘNG từ hạn mức — dùng để gộp nhóm ở engine
+
+  // ── MỚI — truyền xuống để báo cáo/engine dùng ──
+  loaiKhoan?:   LoaiKhoan
+  nhomCha?:     string
+  nhomChaLabel?: string
 }
 
-/** Chuyển 1 KhoanDongTien (nhập tay) → DongTienItem (chuẩn hợp nhất) */
+/** Chuyển 1 KhoanDongTien (nhập tay) → DongTienItem */
 export function tuKhoanDongTienRaItem(k: KhoanDongTien): DongTienItem {
-  const daXongThucTe = !!k.daThucHien
+  const daXong = !!k.daThucHien
   return {
-    id:        `kt-${k.id}`,
-    entity:    k.entity,
-    loai:      k.loai,
-    ngay:      daXongThucTe && k.ngayThucHien ? k.ngayThucHien : k.ngayDuKien,
-    soTien:    daXongThucTe && k.soTienThucTe != null ? k.soTienThucTe : k.soTien,
-    nguon:     'nhap-tay',
-    nhom:      k.nhom,
-    nhanNhan:  k.moTa,
-    trangThai: daXongThucTe ? 'thuc-te' : 'du-kien',
-    refId:     k.id,
-    doTinCay:  k.doTinCay,
+    id:           `kt-${k.id}`,
+    entity:       k.entity,
+    loai:         k.loai,
+    ngay:         daXong && k.ngayThucHien ? k.ngayThucHien : k.ngayDuKien,
+    soTien:       daXong && k.soTienThucTe != null ? k.soTienThucTe : k.soTien,
+    nguon:        'nhap-tay',
+    nhom:         k.nhom,
+    nhanNhan:     k.moTa,
+    trangThai:    daXong ? 'thuc-te' : 'du-kien',
+    refId:        k.id,
+    doTinCay:     k.doTinCay,
+    loaiKhoan:    k.loaiKhoan ?? 'thuc-hien',
+    nhomCha:      k.nhomCha,
+    nhomChaLabel: k.nhomChaLabel,
   }
+}
+
+// ─────────────────────────────────────────────────────────
+// SoDuDauKy — Tồn quỹ đầu kỳ (nhập tay từ sổ quỹ)
+// Collection: dongTienSoDuDauKy
+// ─────────────────────────────────────────────────────────
+export interface SoDuDauKy {
+  id:            string          // docId = `${thang}__${entity}` VD: '2026-08__SAP'
+  thang:         string          // 'YYYY-MM' VD: '2026-08'
+  entity:        EntityType | 'all'
+  tonQuy:        number          // VNĐ — số dư đầu kỳ từ sổ quỹ
+  chuyenNoiBo?:  number          // chuyển quỹ nội bộ net (không đổi tổng quỹ)
+  xlNet?:        number          // thu/chi xử lý net
+  ghiChu?:       string
+  updatedAt:     number
 }

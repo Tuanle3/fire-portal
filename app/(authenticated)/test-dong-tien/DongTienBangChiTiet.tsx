@@ -130,7 +130,7 @@ export default function DongTienBangChiTiet({ rows, onEdit, onChanged }: Props) 
         <td>{thut ? <span style={{ color: 'var(--nh-muted2)' }}>{k.ngayDuKien}</span> : k.ngayDuKien}</td>
         <td>{thut ? '' : k.entity}</td>
         <td>
-          {thut ? <span style={{ paddingLeft: 20, color: '#555' }}>↳ {NHOM_LABEL[k.nhom] ?? k.nhom}</span> : (NHOM_LABEL[k.nhom] ?? k.nhom)}
+          {thut ? <span style={{ paddingLeft: 20, color: '#555' }}>↳ {(NHOM_LABEL as Record<string, string>)[k.nhom] ?? k.nhom}</span> : ((NHOM_LABEL as Record<string, string>)[k.nhom] ?? k.nhom)}
           {k.doTinCay && <span className="nh-badge nh-b-amber" style={{ marginLeft: 6 }}>{DO_TIN_CAY_LABEL[k.doTinCay]}</span>}
           {k.lapNhomId && <span className="nh-badge nh-b-grey" style={{ marginLeft: 6 }}>lặp</span>}
         </td>
@@ -207,7 +207,7 @@ export default function DongTienBangChiTiet({ rows, onEdit, onChanged }: Props) 
                   <td>{g.ngayDuKien}</td>
                   <td>{g.entity}</td>
                   <td>
-                    {NHOM_LABEL[g.nhom] ?? g.nhom}
+                    {(NHOM_LABEL as Record<string, string>)[g.nhom] ?? g.nhom}
                     {!g.doTinCayMixed && g.doTinCay && <span className="nh-badge nh-b-amber" style={{ marginLeft: 6 }}>{DO_TIN_CAY_LABEL[g.doTinCay]}</span>}
                     {g.coLap && <span className="nh-badge nh-b-grey" style={{ marginLeft: 6 }}>lặp</span>}
                   </td>
