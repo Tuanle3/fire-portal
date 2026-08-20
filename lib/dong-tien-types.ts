@@ -92,7 +92,7 @@ export interface DongTienItem {
   ngay:        string
   soTien:      number
   nguon:       NguonDongTien
-  nhom:        NhomDongTien | 'tra-no-ngan-han'
+  nhom:        NhomDongTien | 'tra-no' | 'giai-ngan'
   nhanNhan:    string
   trangThai:   'du-kien' | 'thuc-te'
   refId?:      string

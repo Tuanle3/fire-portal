@@ -1,16 +1,19 @@
 // ============================================================
-// TAB — Dòng tiền (khung ghép Phần 1: nhập tay khoản thu/chi)
+// TAB — Dòng tiền
+//   Phần 1: khoản nhập tay
+//   Phần 2: khoản tự động từ hạn mức tín dụng (chỉ xem)
 // Dùng đúng bộ class CSS hệ thống fire-portal — không Tailwind.
-// Phần 2–7 (adapter hạn mức, engine rollup, timeline, gap
-// analysis...) sẽ nối vào tab này ở các bước tiếp theo.
+// Phần 3+ (engine rollup, timeline, gap analysis...) nối tiếp sau.
 // ============================================================
 'use client'
 
 import { useEffect, useState } from 'react'
 import { KhoanDongTien } from '@/lib/dong-tien-types'
 import { subscribeDongTien } from '@/lib/dong-tien-store'
+import { subscribeDongTienTuHanMuc, DongTienHanMucData } from '@/lib/dong-tien-hanmuc-adapter'
 import DongTienForm from './DongTienForm'
 import DongTienBangChiTiet from './DongTienBangChiTiet'
+import DongTienTuDong from './DongTienTuDong'
 import type { EntityType } from '@/lib/han-muc-types'
 
 const ENTITIES: (EntityType | 'all')[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
@@ -19,11 +22,17 @@ const ENTITY_LABEL: Record<string, string> = { all: 'Toàn tập đoàn' }
 export default function TabDongTien() {
   const [entity, setEntity] = useState<EntityType | 'all'>('all')
   const [rows, setRows]     = useState<KhoanDongTien[]>([])
+  const [hanMucData, setHanMucData] = useState<DongTienHanMucData>({ items: [], khaDungList: [] })
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing]   = useState<KhoanDongTien | null>(null)
 
   useEffect(() => {
     const unsub = subscribeDongTien(setRows, entity === 'all' ? undefined : entity)
+    return () => unsub()
+  }, [entity])
+
+  useEffect(() => {
+    const unsub = subscribeDongTienTuHanMuc(setHanMucData, entity === 'all' ? undefined : entity)
     return () => unsub()
   }, [entity])
 
@@ -74,7 +83,11 @@ export default function TabDongTien() {
         </div>
       )}
 
-      <DongTienBangChiTiet rows={rows} onEdit={openEdit} onChanged={() => {}} />
+      <div style={{ marginBottom: 14 }}>
+        <DongTienBangChiTiet rows={rows} onEdit={openEdit} onChanged={() => {}} />
+      </div>
+
+      <DongTienTuDong items={hanMucData.items} />
     </div>
   )
 }
