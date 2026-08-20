@@ -11,9 +11,11 @@ import { useEffect, useState } from 'react'
 import { KhoanDongTien } from '@/lib/dong-tien-types'
 import { subscribeDongTien } from '@/lib/dong-tien-store'
 import { subscribeDongTienTuHanMuc, DongTienHanMucData } from '@/lib/dong-tien-hanmuc-adapter'
+import { hopNhatDongTien } from '@/lib/dong-tien-engine'
 import DongTienForm from './DongTienForm'
 import DongTienBangChiTiet from './DongTienBangChiTiet'
 import DongTienTuDong from './DongTienTuDong'
+import DongTienRollupPreview from './DongTienRollupPreview'
 import type { EntityType } from '@/lib/han-muc-types'
 
 const ENTITIES: (EntityType | 'all')[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
@@ -87,7 +89,11 @@ export default function TabDongTien() {
         <DongTienBangChiTiet rows={rows} onEdit={openEdit} onChanged={() => {}} />
       </div>
 
-      <DongTienTuDong items={hanMucData.items} />
+      <div style={{ marginBottom: 14 }}>
+        <DongTienTuDong items={hanMucData.items} />
+      </div>
+
+      <DongTienRollupPreview items={hopNhatDongTien(rows, hanMucData.items)} />
     </div>
   )
 }
