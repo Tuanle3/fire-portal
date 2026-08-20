@@ -3,7 +3,13 @@
 //   Phần 1: khoản nhập tay (có thể thu gọn)
 //   Phần 2: khoản tự động từ hạn mức tín dụng (có thể thu gọn)
 //   Phần 3: Aggregation Engine
-//   Phần 4: 3 kiểu hiển thị + bộ lọc ngày TOÀN TAB
+//   Phần 4: 3 kiểu hiển thị
+//
+//   ⚙️ NGUYÊN TẮC: LỌC 1 LẦN DUY NHẤT ở đây (ngày + loại + trạng
+//   thái), mọi phần bên dưới (nhập tay / tự động / tổng hợp /
+//   timeline / chi tiết) đều dùng chung dữ liệu đã lọc — không
+//   có bộ lọc riêng lẻ ở component con nữa, tránh rối/lệch số.
+//
 // Dùng đúng bộ class CSS hệ thống fire-portal — không Tailwind.
 // ============================================================
 'use client'
@@ -45,7 +51,7 @@ function shortcutRange(key: string): { tu: string; den: string } {
     }
   }
   if (key === 'nam-nay') return { tu: `${y}-01-01`, den: `${y}-12-31` }
-  return { tu: '', den: '' }
+  return { tu: '', den: '' } // 'tat-ca'
 }
 
 const SHORTCUTS = [
@@ -56,6 +62,9 @@ const SHORTCUTS = [
   { key: 'tat-ca',    label: 'Tất cả'    },
 ]
 
+// ── Mặc định mở tab: Quý này (gọn, đỡ rối mắt) ───────────────
+const DEFAULT_SHORTCUT = 'quy-nay'
+
 export default function TabDongTien() {
   const [entity,     setEntity]    = useState<EntityType | 'all'>('all')
   const [rows,       setRows]      = useState<KhoanDongTien[]>([])
@@ -63,14 +72,17 @@ export default function TabDongTien() {
   const [showForm,   setShowForm]  = useState(false)
   const [editing,    setEditing]   = useState<KhoanDongTien | null>(null)
 
-  // ── Bộ lọc ngày TOÀN TAB ────────────────────────────────────
-  const [tuNgay,   setTuNgay]   = useState('')
-  const [denNgay,  setDenNgay]  = useState('')
-  const [shortcut, setShortcut] = useState('tat-ca')
+  // ── BỘ LỌC HỢP NHẤT — dùng chung cho toàn bộ tab ─────────────
+  const initRange = shortcutRange(DEFAULT_SHORTCUT)
+  const [tuNgay,   setTuNgay]   = useState(initRange.tu)
+  const [denNgay,  setDenNgay]  = useState(initRange.den)
+  const [shortcut, setShortcut] = useState(DEFAULT_SHORTCUT)
+  const [locLoai,      setLocLoai]      = useState<'all' | 'thu' | 'chi'>('all')
+  const [locTrangThai, setLocTrangThai] = useState<'all' | 'du-kien' | 'thuc-te'>('all')
 
   // ── Thu gọn card nhập tay / tự động ─────────────────────────
-  const [moNhapTay, setMoNhapTay]   = useState(false)
-  const [moTuDong,  setMoTuDong]    = useState(false)
+  const [moNhapTay, setMoNhapTay] = useState(false)
+  const [moTuDong,  setMoTuDong]  = useState(false)
 
   function applyShortcut(key: string) {
     setShortcut(key)
@@ -88,30 +100,38 @@ export default function TabDongTien() {
     return () => unsub()
   }, [entity])
 
-  function openNew()   { setEditing(null); setShowForm(true) }
-  function openEdit(k: KhoanDongTien) { setEditing(k); setShowForm(true) }
+  function openNew()   { setEditing(null); setShowForm(true); setMoNhapTay(true) }
+  function openEdit(k: KhoanDongTien) { setEditing(k); setShowForm(true); setMoNhapTay(true) }
   function closeForm() { setShowForm(false); setEditing(null) }
 
-  // ── Lọc dữ liệu theo khoảng ngày ────────────────────────────
+  // ── Lọc khoản NHẬP TAY: ngày + loại + trạng thái ────────────
   const rowsFiltered = useMemo(() => {
-    if (!tuNgay && !denNgay) return rows
-    return rows.filter(r => {
-      const ng = r.ngayDuKien
-      if (tuNgay  && ng < tuNgay)  return false
-      if (denNgay && ng > denNgay) return false
-      return true
-    })
-  }, [rows, tuNgay, denNgay])
+    return rows
+      .filter(r => !tuNgay  || r.ngayDuKien >= tuNgay)
+      .filter(r => !denNgay || r.ngayDuKien <= denNgay)
+      .filter(r => locLoai === 'all' || r.loai === locLoai)
+      .filter(r => {
+        if (locTrangThai === 'all') return true
+        const trang = r.daThucHien ? 'thuc-te' : 'du-kien'
+        return trang === locTrangThai
+      })
+  }, [rows, tuNgay, denNgay, locLoai, locTrangThai])
 
+  // ── Lọc khoản TỰ ĐỘNG (hạn mức): ngày + loại + trạng thái ───
   const hanMucFiltered = useMemo(() => {
-    if (!tuNgay && !denNgay) return hanMucData.items
-    return locTheoKhoangNgay(hanMucData.items, tuNgay || undefined, denNgay || undefined)
-  }, [hanMucData.items, tuNgay, denNgay])
+    let list = locTheoKhoangNgay(hanMucData.items, tuNgay || undefined, denNgay || undefined)
+    if (locLoai !== 'all')      list = list.filter(it => it.loai === locLoai)
+    if (locTrangThai !== 'all') list = list.filter(it => it.trangThai === locTrangThai)
+    return list
+  }, [hanMucData.items, tuNgay, denNgay, locLoai, locTrangThai])
 
+  // ── Hợp nhất — đã lọc sẵn từ 2 nguồn trên, dùng cho Tổng hợp/Timeline/Chi tiết ──
   const itemsHopNhat = useMemo(
-    () => hopNhatDongTien(rows, hanMucData.items),
-    [rows, hanMucData.items],
+    () => hopNhatDongTien(rowsFiltered, hanMucFiltered),
+    [rowsFiltered, hanMucFiltered],
   )
+
+  const dangLoc = !!(tuNgay || denNgay || locLoai !== 'all' || locTrangThai !== 'all')
 
   // ── Style helper cho nút shortcut ───────────────────────────
   function scBtn(key: string) {
@@ -129,36 +149,33 @@ export default function TabDongTien() {
 
   return (
     <div>
-      {/* ── THANH ĐIỀU KHIỂN: entity + thêm khoản ── */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {ENTITIES.map(e => {
-            const active = entity === e
-            return (
-              <button key={e} onClick={() => setEntity(e)} style={{
-                padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-                fontFamily: 'inherit', cursor: 'pointer',
-                border:     '1px solid ' + (active ? 'var(--nh-navy)' : '#E5E0D8'),
-                background: active ? 'var(--nh-navy)' : '#fff',
-                color:      active ? '#fff' : '#3D3D3D',
-                transition: 'all .15s',
-              }}>
-                {ENTITY_LABEL[e as string] ?? e}
-              </button>
-            )
-          })}
-        </div>
-        <button className="btn-primary" onClick={openNew}>+ Thêm khoản</button>
+      {/* ── THANH ĐIỀU KHIỂN: chỉ chọn pháp nhân ── */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        {ENTITIES.map(e => {
+          const active = entity === e
+          return (
+            <button key={e} onClick={() => setEntity(e)} style={{
+              padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+              fontFamily: 'inherit', cursor: 'pointer',
+              border:     '1px solid ' + (active ? 'var(--nh-navy)' : '#E5E0D8'),
+              background: active ? 'var(--nh-navy)' : '#fff',
+              color:      active ? '#fff' : '#3D3D3D',
+              transition: 'all .15s',
+            }}>
+              {ENTITY_LABEL[e as string] ?? e}
+            </button>
+          )
+        })}
       </div>
 
-      {/* ── BỘ LỌC NGÀY TOÀN TAB ── */}
+      {/* ── BỘ LỌC HỢP NHẤT (ngày + loại + trạng thái) — áp dụng CHO TẤT CẢ bên dưới ── */}
       <div style={{
         background: '#F7F9FC', border: '1px solid var(--nh-border)',
         borderRadius: 10, padding: '10px 16px', marginBottom: 14,
         display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
       }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--nh-navy)', marginRight: 4 }}>
-          🗓 Lọc theo ngày:
+          🗓 Lọc:
         </span>
         {SHORTCUTS.map(s => (
           <button key={s.key} onClick={() => applyShortcut(s.key)} style={scBtn(s.key)}>
@@ -178,20 +195,35 @@ export default function TabDongTien() {
           value={denNgay}
           onChange={e => { setDenNgay(e.target.value); setShortcut('') }}
         />
-        {(tuNgay || denNgay) && (
+
+        <span style={{ color: '#ddd' }}>|</span>
+        <select className="nh-select" style={{ width: 130 }} value={locLoai} onChange={e => setLocLoai(e.target.value as any)}>
+          <option value="all">Tất cả loại</option>
+          <option value="thu">Chỉ khoản THU</option>
+          <option value="chi">Chỉ khoản CHI</option>
+        </select>
+        <select className="nh-select" style={{ width: 150 }} value={locTrangThai} onChange={e => setLocTrangThai(e.target.value as any)}>
+          <option value="all">Tất cả trạng thái</option>
+          <option value="du-kien">Dự kiến</option>
+          <option value="thuc-te">Đã thực hiện</option>
+        </select>
+
+        {dangLoc && (
           <button className="btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
-            onClick={() => { setTuNgay(''); setDenNgay(''); setShortcut('tat-ca') }}>
+            onClick={() => {
+              applyShortcut(DEFAULT_SHORTCUT)
+              setLocLoai('all'); setLocTrangThai('all')
+            }}>
             ✕ Xoá lọc
           </button>
         )}
-        {(tuNgay || denNgay) && (
-          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--nh-muted2)' }}>
-            {rowsFiltered.length + hanMucFiltered.length} khoản trong khoảng
-          </span>
-        )}
+
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--nh-muted2)' }}>
+          {rowsFiltered.length + hanMucFiltered.length} khoản (nhập tay {rowsFiltered.length} + tự động {hanMucFiltered.length})
+        </span>
       </div>
 
-      {/* ── FORM THÊM/SỬA ── */}
+      {/* ── FORM THÊM/SỬA (hiện ngay trên card nhập tay khi bấm) ── */}
       {showForm && (
         <div style={{ marginBottom: 14 }}>
           <DongTienForm
@@ -203,22 +235,28 @@ export default function TabDongTien() {
         </div>
       )}
 
-      {/* ── PHẦN 1: NHẬP TAY (có thể thu gọn) ── */}
+      {/* ── PHẦN 1: NHẬP TAY (có thể thu gọn) — nút Thêm khoản nằm đúng đây ── */}
       <div className="nh-card" style={{ marginBottom: 14 }}>
-        <div
-          className="nh-card-head"
-          onClick={() => setMoNhapTay(v => !v)}
-          style={{ cursor: 'pointer', userSelect: 'none' }}
-        >
-          <span className="nh-card-title">
+        <div className="nh-card-head" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <span
+            className="nh-card-title"
+            onClick={() => setMoNhapTay(v => !v)}
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+          >
             {moNhapTay ? '▲' : '▶'} Danh sách khoản nhập tay
             <span className="nh-badge nh-b-grey" style={{ marginLeft: 8 }}>
               {rowsFiltered.length} khoản
             </span>
           </span>
-          <span style={{ fontSize: 12, color: 'var(--nh-muted2)' }}>
-            {moNhapTay ? 'Thu gọn' : 'Mở rộng'}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span
+              onClick={() => setMoNhapTay(v => !v)}
+              style={{ cursor: 'pointer', fontSize: 12, color: 'var(--nh-muted2)' }}
+            >
+              {moNhapTay ? 'Thu gọn' : 'Mở rộng'}
+            </span>
+            <button className="btn-primary" onClick={openNew}>+ Thêm khoản</button>
+          </div>
         </div>
         {moNhapTay && (
           <div className="nh-card-body" style={{ padding: 0 }}>
@@ -251,7 +289,7 @@ export default function TabDongTien() {
         )}
       </div>
 
-      {/* ── PHẦN 3+4: ENGINE ROLLUP + 3 KIỂU HIỂN THỊ ── */}
+      {/* ── PHẦN 3+4: ENGINE ROLLUP + 3 KIỂU HIỂN THỊ — dùng dữ liệu đã lọc ở trên ── */}
       <DongTienView items={itemsHopNhat} />
     </div>
   )
