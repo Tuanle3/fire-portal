@@ -9,6 +9,7 @@ const NAV = [
   { section: 'MODULE CHÍNH', mod: 'm:finance',     href: '/tai-chinh',       icon: '📊', label: 'Tài chính - Kế toán' },
   { section: 'MODULE CHÍNH', mod: 'm:ngan-sach',   href: '/ngan-sach',       icon: '💰', label: 'Ngân sách dòng tiền' },
   { section: 'MODULE CHÍNH', mod: 'm:nganhang',    href: '/nganhang',       icon: '🏦', label: 'List ngân hàng' },
+  { section: 'MODULE CHÍNH', mod: 'm:test-dong-tien', href: '/test-dong-tien', icon: '💵', label: 'Test Dòng tiền' },
   { section: 'MODULE CHÍNH', mod: 'm:ccn-pricing', href: '/ccn-pricing',     icon: '🏭', label: 'Tính giá cho thuê CCN' },
   { section: 'MODULE CHÍNH', mod: 'm:noxh',        href: '/noxh-nguyen-trai', icon: '🏗', label: 'NOXH Nguyễn Trãi' },
   { section: 'MODULE CHÍNH', mod: 'm:dien-nuoc',   href: '/dien-nuoc-sadt',  icon: '⚡', label: 'Điện nước SA.ĐT' },
