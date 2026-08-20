@@ -34,9 +34,15 @@ function shortcutRange(key: string): { tu: string; den: string } {
   const y   = now.getFullYear()
   const m   = now.getMonth()
   const pad = (n: number) => String(n).padStart(2, '0')
+  const homNay = `${y}-${pad(m + 1)}-${pad(now.getDate())}`
+  const cuoiThangNay = `${y}-${pad(m + 1)}-${new Date(y, m + 1, 0).getDate()}`
 
+  // Mặc định mở tab: từ hôm nay → cuối tháng hiện tại (đỡ rối bởi các kỳ đã qua)
+  if (key === 'tu-hom-nay') {
+    return { tu: homNay, den: cuoiThangNay }
+  }
   if (key === 'thang-nay') {
-    return { tu: `${y}-${pad(m + 1)}-01`, den: `${y}-${pad(m + 1)}-${new Date(y, m + 1, 0).getDate()}` }
+    return { tu: `${y}-${pad(m + 1)}-01`, den: cuoiThangNay }
   }
   if (key === 'quy-nay') {
     const q  = Math.floor(m / 3)
@@ -47,7 +53,7 @@ function shortcutRange(key: string): { tu: string; den: string } {
     const six = new Date(y, m - 5, 1)
     return {
       tu:  `${six.getFullYear()}-${pad(six.getMonth() + 1)}-01`,
-      den: `${y}-${pad(m + 1)}-${new Date(y, m + 1, 0).getDate()}`,
+      den: cuoiThangNay,
     }
   }
   if (key === 'nam-nay') return { tu: `${y}-01-01`, den: `${y}-12-31` }
@@ -55,15 +61,16 @@ function shortcutRange(key: string): { tu: string; den: string } {
 }
 
 const SHORTCUTS = [
-  { key: 'thang-nay', label: 'Tháng này' },
-  { key: 'quy-nay',   label: 'Quý này'   },
-  { key: '6-thang',   label: '6 tháng'   },
-  { key: 'nam-nay',   label: 'Năm nay'   },
-  { key: 'tat-ca',    label: 'Tất cả'    },
+  { key: 'tu-hom-nay', label: 'Từ hôm nay' },
+  { key: 'thang-nay',  label: 'Tháng này'   },
+  { key: 'quy-nay',    label: 'Quý này'     },
+  { key: '6-thang',    label: '6 tháng'     },
+  { key: 'nam-nay',    label: 'Năm nay'     },
+  { key: 'tat-ca',     label: 'Tất cả'      },
 ]
 
-// ── Mặc định mở tab: Quý này (gọn, đỡ rối mắt) ───────────────
-const DEFAULT_SHORTCUT = 'quy-nay'
+// ── Mặc định mở tab: Từ hôm nay → cuối tháng (gọn, đỡ rối các kỳ đã qua) ──
+const DEFAULT_SHORTCUT = 'tu-hom-nay'
 
 export default function TabDongTien() {
   const [entity,     setEntity]    = useState<EntityType | 'all'>('all')
@@ -131,7 +138,7 @@ export default function TabDongTien() {
     [rowsFiltered, hanMucFiltered],
   )
 
-  const dangLoc = !!(tuNgay || denNgay || locLoai !== 'all' || locTrangThai !== 'all')
+  const dangLoc = !!(shortcut !== DEFAULT_SHORTCUT || locLoai !== 'all' || locTrangThai !== 'all')
 
   // ── Style helper cho nút shortcut ───────────────────────────
   function scBtn(key: string) {

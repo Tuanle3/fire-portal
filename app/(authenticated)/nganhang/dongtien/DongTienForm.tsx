@@ -18,6 +18,13 @@ import type { EntityType } from '@/lib/han-muc-types'
 
 const ENTITIES: EntityType[] = ['SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 const NHOM_MOI = '__nhom_moi__' // giá trị đặc biệt cho option "+ Thêm nhóm mới"
+const VND = new Intl.NumberFormat('vi-VN')
+
+/** Bỏ mọi ký tự không phải số (đại ca gõ "100.000.000" hay "100,000,000" đều đọc đúng) */
+function parseSoTien(raw: string): number {
+  const digits = raw.replace(/\D/g, '')
+  return digits ? Number(digits) : 0
+}
 
 const emptyForm = (entityMacDinh?: EntityType) => ({
   entity:     entityMacDinh ?? 'SAP',
@@ -188,9 +195,9 @@ export default function DongTienForm({ editing, entityMacDinh, onSaved, onCancel
             <div>
               <label className="nh-label">Số tiền (VNĐ)</label>
               <input
-                type="number" min={0} className="nh-input"
-                value={form.soTien || ''} placeholder="0"
-                onChange={e => set('soTien', Number(e.target.value))}
+                type="text" inputMode="numeric" className="nh-input"
+                value={form.soTien ? VND.format(form.soTien) : ''} placeholder="0"
+                onChange={e => set('soTien', parseSoTien(e.target.value))}
               />
             </div>
           </div>
