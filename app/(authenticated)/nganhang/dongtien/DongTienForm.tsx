@@ -1,31 +1,28 @@
 // ============================================================
 // FORM — Nhập tay khoản thu/chi dòng tiền (Phần 1)
-// Dùng đúng bộ class CSS hệ thống fire-portal (định nghĩa ở
-// app/(authenticated)/nganhang/page.tsx) — không dùng Tailwind.
+// Nhóm THU/CHI lấy theo danh mục báo cáo tháng (7 THU + 15 CHI,
+// dong-tien-types.ts) + nhóm tuỳ chỉnh do người dùng tự thêm
+// (dong-tien-nhom-store.ts, lưu Firestore, dùng chung).
+// Dùng đúng bộ class CSS hệ thống fire-portal — không Tailwind.
 // ============================================================
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   KhoanDongTien, LoaiDongTien, NhomDongTien, DoTinCay, ChuKyLap,
   NHOM_THEO_LOAI, NHOM_LABEL, DO_TIN_CAY_LABEL,
 } from '@/lib/dong-tien-types'
 import { saveKhoanDongTien } from '@/lib/dong-tien-store'
+import { subscribeNhomTuyChinh, themNhomTuyChinh, NhomTuyChinh } from '@/lib/dong-tien-nhom-store'
 import type { EntityType } from '@/lib/han-muc-types'
 
 const ENTITIES: EntityType[] = ['SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
-
-interface Props {
-  editing?:       KhoanDongTien | null
-  entityMacDinh?: EntityType
-  onSaved:        () => void
-  onCancel:       () => void
-}
+const NHOM_MOI = '__nhom_moi__' // giá trị đặc biệt cho option "+ Thêm nhóm mới"
 
 const emptyForm = (entityMacDinh?: EntityType) => ({
   entity:     entityMacDinh ?? 'SAP',
   loai:       'thu' as LoaiDongTien,
-  nhom:       'ban-hang' as NhomDongTien,
+  nhom:       NHOM_THEO_LOAI.thu[0] as NhomDongTien, // 'cho-goi'
   ngayDuKien: new Date().toISOString().slice(0, 10),
   soTien:     0,
   doTinCay:   'du-kien' as DoTinCay,
@@ -35,10 +32,29 @@ const emptyForm = (entityMacDinh?: EntityType) => ({
   ghiChu:     '',
 })
 
+interface Props {
+  editing?:       KhoanDongTien | null
+  entityMacDinh?: EntityType
+  onSaved:        () => void
+  onCancel:       () => void
+}
+
 export default function DongTienForm({ editing, entityMacDinh, onSaved, onCancel }: Props) {
   const [form, setForm]     = useState(emptyForm(entityMacDinh))
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState<string | null>(null)
+
+  // ── Nhóm tuỳ chỉnh — subscribe 1 lần, lọc theo loai khi hiển thị ──
+  const [nhomTuyChinh, setNhomTuyChinh] = useState<NhomTuyChinh[]>([])
+  const [dangThemNhom, setDangThemNhom] = useState(false)
+  const [tenNhomMoi,   setTenNhomMoi]   = useState('')
+  const [luuNhomLoi,   setLuuNhomLoi]   = useState<string | null>(null)
+  const [dangLuuNhom,  setDangLuuNhom]  = useState(false)
+
+  useEffect(() => {
+    const unsub = subscribeNhomTuyChinh(setNhomTuyChinh)
+    return () => unsub()
+  }, [])
 
   useEffect(() => {
     if (editing) {
@@ -51,11 +67,59 @@ export default function DongTienForm({ editing, entityMacDinh, onSaved, onCancel
     } else {
       setForm(emptyForm(entityMacDinh))
     }
+    setDangThemNhom(false); setTenNhomMoi(''); setLuuNhomLoi(null)
   }, [editing, entityMacDinh])
 
-  const nhomHopLe = NHOM_THEO_LOAI[form.loai]
+  // ── Danh sách option nhóm: chuẩn + tuỳ chỉnh (đúng loai) + nhóm cũ đang
+  //    chọn nếu nó không nằm trong 2 danh sách trên (dữ liệu cũ trước khi
+  //    đổi danh mục, tránh mất lựa chọn hiện tại) ──
+  const nhomOptions = useMemo(() => {
+    const chuan  = NHOM_THEO_LOAI[form.loai].map(v => ({ value: v, label: NHOM_LABEL[v] ?? v }))
+    const tuy    = nhomTuyChinh.filter(n => n.loai === form.loai).map(n => ({ value: n.ten, label: n.ten }))
+    const list   = [...chuan, ...tuy]
+    if (form.nhom && !list.some(o => o.value === form.nhom)) {
+      list.push({ value: form.nhom, label: `${NHOM_LABEL[form.nhom] ?? form.nhom} (nhóm cũ)` })
+    }
+    return list
+  }, [form.loai, form.nhom, nhomTuyChinh])
+
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm(f => ({ ...f, [key]: value }))
+  }
+
+  function chonLoai(loai: LoaiDongTien) {
+    setForm(f => ({ ...f, loai, nhom: NHOM_THEO_LOAI[loai][0] }))
+    setDangThemNhom(false)
+  }
+
+  function chonNhom(value: string) {
+    if (value === NHOM_MOI) {
+      setDangThemNhom(true)
+      setTenNhomMoi('')
+      setLuuNhomLoi(null)
+      return
+    }
+    set('nhom', value)
+  }
+
+  async function luuNhomMoi() {
+    setLuuNhomLoi(null)
+    const ten = tenNhomMoi.trim()
+    if (!ten) { setLuuNhomLoi('Vui lòng nhập tên nhóm.'); return }
+    const daTrung = nhomOptions.some(o => o.label.toLowerCase() === ten.toLowerCase())
+    if (daTrung) { setLuuNhomLoi('Nhóm này đã có sẵn, chọn lại trong danh sách.'); return }
+
+    setDangLuuNhom(true)
+    try {
+      const tenDaLuu = await themNhomTuyChinh(form.loai, ten)
+      set('nhom', tenDaLuu)
+      setDangThemNhom(false)
+      setTenNhomMoi('')
+    } catch (err: any) {
+      setLuuNhomLoi(err?.message ?? 'Có lỗi khi lưu nhóm, thử lại.')
+    } finally {
+      setDangLuuNhom(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -94,11 +158,11 @@ export default function DongTienForm({ editing, entityMacDinh, onSaved, onCancel
         <form onSubmit={handleSubmit}>
           <div className="nh-radio-row" style={{ marginBottom: 12 }}>
             <label>
-              <input type="radio" name="loai" checked={form.loai === 'thu'} onChange={() => set('loai', 'thu')} />
+              <input type="radio" name="loai" checked={form.loai === 'thu'} onChange={() => chonLoai('thu')} />
               <span style={{ color: form.loai === 'thu' ? 'var(--nh-green)' : undefined }}>Khoản THU</span>
             </label>
             <label>
-              <input type="radio" name="loai" checked={form.loai === 'chi'} onChange={() => set('loai', 'chi')} />
+              <input type="radio" name="loai" checked={form.loai === 'chi'} onChange={() => chonLoai('chi')} />
               <span style={{ color: form.loai === 'chi' ? 'var(--nh-red)' : undefined }}>Khoản CHI</span>
             </label>
           </div>
@@ -112,8 +176,9 @@ export default function DongTienForm({ editing, entityMacDinh, onSaved, onCancel
             </div>
             <div>
               <label className="nh-label">Nhóm</label>
-              <select className="nh-select" value={form.nhom} onChange={e => set('nhom', e.target.value as NhomDongTien)}>
-                {nhomHopLe.map(n => <option key={n} value={n}>{NHOM_LABEL[n]}</option>)}
+              <select className="nh-select" value={form.nhom} onChange={e => chonNhom(e.target.value)}>
+                {nhomOptions.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+                <option value={NHOM_MOI}>+ Thêm nhóm mới…</option>
               </select>
             </div>
             <div>
@@ -129,6 +194,26 @@ export default function DongTienForm({ editing, entityMacDinh, onSaved, onCancel
               />
             </div>
           </div>
+
+          {dangThemNhom && (
+            <div style={{
+              display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 10px',
+              background: '#F8FAFC', border: '1px solid var(--nh-border)', borderRadius: 8, padding: 10,
+            }}>
+              <input
+                type="text" className="nh-input" style={{ flex: 1 }}
+                placeholder={`Tên nhóm ${form.loai === 'thu' ? 'thu' : 'chi'} mới...`}
+                value={tenNhomMoi}
+                onChange={e => setTenNhomMoi(e.target.value)}
+                autoFocus
+              />
+              <button type="button" className="btn-save" disabled={dangLuuNhom} onClick={luuNhomMoi}>
+                {dangLuuNhom ? 'Đang lưu...' : 'Lưu nhóm'}
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => setDangThemNhom(false)}>Huỷ</button>
+            </div>
+          )}
+          {luuNhomLoi && <div className="nh-err" style={{ marginBottom: 10 }}>{luuNhomLoi}</div>}
 
           {form.loai === 'thu' && (
             <div style={{ marginBottom: 10 }}>

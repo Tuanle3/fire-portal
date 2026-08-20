@@ -91,7 +91,7 @@ export default function DongTienBangChiTiet({ rows, onEdit, onChanged }: Props) 
               <td>{k.ngayDuKien}</td>
               <td>{k.entity}</td>
               <td>
-                {NHOM_LABEL[k.nhom]}
+                {NHOM_LABEL[k.nhom] ?? k.nhom}
                 {k.doTinCay && <span className="nh-badge nh-b-amber" style={{ marginLeft: 6 }}>{DO_TIN_CAY_LABEL[k.doTinCay]}</span>}
                 {k.lapNhomId && <span className="nh-badge nh-b-grey" style={{ marginLeft: 6 }}>lặp</span>}
               </td>

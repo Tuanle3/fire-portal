@@ -10,36 +10,48 @@ export type { EntityType }
 
 export type LoaiDongTien = 'thu' | 'chi'
 
-export type NhomDongTien =
-  // nhóm THU
-  | 'ban-hang'
-  | 'cho-thue'
-  | 'gop-von'
-  | 'thu-khac'
-  // nhóm CHI
-  | 'luong'
-  | 'nha-cung-cap'
-  | 'thue'
-  | 'xdcb'
-  | 'chi-phi-van-hanh'
-  | 'chi-khac'
+// ── Nhóm dòng tiền — đúng danh mục báo cáo tháng (7 THU + 15 CHI) ──
+// `nhom` là string tự do: hoặc 1 code chuẩn bên dưới, hoặc TÊN của
+// 1 nhóm tuỳ chỉnh do người dùng tự thêm qua "+ Thêm nhóm mới"
+// (lưu ở collection riêng — xem dong-tien-nhom-store.ts). Vì nhóm
+// tuỳ chỉnh không có code, khi hiển thị LUÔN dùng
+// `NHOM_LABEL[nhom] ?? nhom` để tự fallback về đúng tên đã lưu.
+export type NhomDongTien = string
 
 export const NHOM_THEO_LOAI: Record<LoaiDongTien, NhomDongTien[]> = {
-  thu: ['ban-hang', 'cho-thue', 'gop-von', 'thu-khac'],
-  chi: ['luong', 'nha-cung-cap', 'thue', 'xdcb', 'chi-phi-van-hanh', 'chi-khac'],
+  thu: ['cho-goi', 'nam-pho-chau', 'sap', 'dtsa', 'ban-ruou', 'thu-khac', 'vay-nh-dao-han'],
+  chi: [
+    'chi-tra-ncc', 'chi-khac', 'goc-vay-dn', 'lai-vay-dn',
+    'goc-vay-ca-nhan', 'lai-vay-ca-nhan', 'goc-lai-vay-ngoai',
+    'cphd-luong', 'cphd-hanh-chinh', 'cphd-sinh-hoat', 'cphd-thue-phi',
+    'cphd-cong-tac', 'cphd-tiep-khach', 'cphd-marketing', 'cphd-phi-ngan-hang',
+  ],
 }
 
-export const NHOM_LABEL: Record<NhomDongTien, string> = {
-  'ban-hang':          'Bán hàng / dịch vụ',
-  'cho-thue':          'Cho thuê',
-  'gop-von':           'Góp vốn / vay',
+export const NHOM_LABEL: Record<string, string> = {
+  'cho-goi':           'Thu từ Chợ Gôi',
+  'nam-pho-chau':      'Thu từ Nam Phố Châu',
+  'sap':               'Thu từ SAP',
+  'dtsa':              'Thu từ Đô Thị Sơn An',
+  'ban-ruou':          'Thu từ bán rượu',
   'thu-khac':          'Thu khác',
-  'luong':             'Lương',
-  'nha-cung-cap':      'Nhà cung cấp',
-  'thue':              'Thuế',
-  'xdcb':              'Đầu tư XDCB',
-  'chi-phi-van-hanh':  'Chi phí vận hành',
-  'chi-khac':          'Chi khác',
+  'vay-nh-dao-han':    'Thu từ vay ngân hàng (đáo hạn)',
+
+  'chi-tra-ncc':        'Chi trả nhà cung cấp',
+  'chi-khac':           'Chi khác',
+  'goc-vay-dn':         'Trả gốc vay doanh nghiệp',
+  'lai-vay-dn':         'Trả lãi vay doanh nghiệp',
+  'goc-vay-ca-nhan':    'Gốc vay cá nhân',
+  'lai-vay-ca-nhan':    'Lãi vay cá nhân',
+  'goc-lai-vay-ngoai':  'Gốc lãi vay cá nhân/tổ chức bên ngoài',
+  'cphd-luong':         'CPHĐ - Lương & các khoản theo lương',
+  'cphd-hanh-chinh':    'CPHĐ - Hành chính',
+  'cphd-sinh-hoat':     'CPHĐ - Sinh hoạt',
+  'cphd-thue-phi':      'CPHĐ - Thuế, phí, lệ phí',
+  'cphd-cong-tac':      'CPHĐ - Công tác',
+  'cphd-tiep-khach':    'CPHĐ - Tiếp khách, ngoại giao',
+  'cphd-marketing':     'CPHĐ - Marketing, hội nghị, sự kiện',
+  'cphd-phi-ngan-hang': 'CPHĐ - Phí ngân hàng',
 }
 
 /** Độ tin cậy — chỉ áp dụng cho khoản THU dự kiến, dùng để tính kịch bản rủi ro */
