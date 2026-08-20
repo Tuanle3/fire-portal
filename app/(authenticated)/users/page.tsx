@@ -49,12 +49,14 @@ interface PermModule { id: string; label: string; icon: string; alwaysOn?: boole
 
 const MODULES: PermModule[] = [
   { id: 'm:dashboard',   label: 'Dashboard',              icon: '⊞'  },
+  { id: 'm:ecosystem',   label: 'Hệ sinh thái',           icon: '🌐' },
   { id: 'm:tasks',       label: 'Công việc',               icon: '✓'  },
   { id: 'm:finance',     label: 'Tài chính – Kế toán',    icon: '💰' },
   { id: 'm:assets',      label: 'Tài sản đảm bảo',        icon: '🏦' },
   { id: 'm:data',        label: 'Nhật ký dòng tiền',      icon: '📊' },
   { id: 'm:ngan-sach',   label: 'Ngân sách dòng tiền',    icon: '📋' },
   { id: 'm:nganhang',    label: 'List ngân hàng',         icon: '🏛️' },
+  { id: 'm:test-dong-tien', label: 'Test Dòng tiền',       icon: '💵' },
   { id: 'm:ccn-pricing', label: 'Tính giá thuê CCN',      icon: '🏭' },
   { id: 'm:noxh',        label: 'NOXH Nguyễn Trãi',       icon: '🏘️' },
   { id: 'm:dien-nuoc',   label: 'Điện nước SA.ĐT',        icon: '⚡' },
