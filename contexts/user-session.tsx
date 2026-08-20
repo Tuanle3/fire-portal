@@ -1,7 +1,7 @@
 'use client'
 import { createContext, useContext, useEffect, useState } from 'react'
 
-const ALL_MODULES = ['m:dashboard', 'm:tasks', 'm:finance', 'm:assets', 'm:data', 'm:users', 'm:ccn-pricing', 'm:noxh', 'm:dien-nuoc', 'm:ngan-sach', 'm:nganhang', 'm:test-dong-tien']
+const ALL_MODULES = ['m:dashboard', 'm:ecosystem', 'm:tasks', 'm:finance', 'm:assets', 'm:data', 'm:users', 'm:ccn-pricing', 'm:noxh', 'm:dien-nuoc', 'm:ngan-sach', 'm:nganhang', 'm:test-dong-tien']
 
 const DEFAULT_PERMS: Record<string, string[]> = {
   ceo:    ALL_MODULES,
