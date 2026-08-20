@@ -10,13 +10,15 @@ import { BankRelation, BankProposal, BankNote } from '@/lib/bank-types'
 import { TabNganHang } from './_tabs/TabNganHang'
 import { TabSoSanh } from './_tabs/TabSoSanh'
 import { TabHanMucWrapper } from './_tabs/TabHanMucWrapper'
+import TabDongTien from './dongtien/TabDongTien'
 
-type TabId = 'ngan-hang' | 'so-sanh' | 'han-muc'
+type TabId = 'ngan-hang' | 'so-sanh' | 'han-muc' | 'dong-tien'
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'han-muc',   label: 'Hạn mức tín dụng' },
-  { id: 'ngan-hang', label: 'Ngân hàng' },
-  { id: 'so-sanh',   label: 'So sánh' },
+  { id: 'han-muc',    label: 'Hạn mức tín dụng' },
+  { id: 'dong-tien',  label: 'Dòng tiền' },
+  { id: 'ngan-hang',  label: 'Ngân hàng' },
+  { id: 'so-sanh',    label: 'So sánh' },
 ]
 
 export default function NganHangPage() {
@@ -182,6 +184,7 @@ export default function NganHangPage() {
                   <TabSoSanh relations={relations} proposals={proposals} notes={notes} />
                 )}
                 {activeTab === 'han-muc' && <TabHanMucWrapper />}
+                {activeTab === 'dong-tien' && <TabDongTien />}
               </>
             )}
           </div>
