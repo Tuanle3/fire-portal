@@ -1,7 +1,8 @@
 // ============================================================
 // TAB — Dòng tiền (khung ghép Phần 1: nhập tay khoản thu/chi)
-// Các phần 2–7 (adapter hạn mức, engine rollup, timeline,
-// gap-analysis...) sẽ nối vào tab này ở các bước tiếp theo.
+// Dùng đúng bộ class CSS hệ thống fire-portal — không Tailwind.
+// Phần 2–7 (adapter hạn mức, engine rollup, timeline, gap
+// analysis...) sẽ nối vào tab này ở các bước tiếp theo.
 // ============================================================
 'use client'
 
@@ -26,44 +27,51 @@ export default function TabDongTien() {
     return () => unsub()
   }, [entity])
 
-  function openNew() { setEditing(null); setShowForm(true) }
+  function openNew()  { setEditing(null); setShowForm(true) }
   function openEdit(k: KhoanDongTien) { setEditing(k); setShowForm(true) }
   function closeForm() { setShowForm(false); setEditing(null) }
 
   return (
-    <div className="space-y-4">
-      {/* Header: chọn công ty + nút thêm khoản */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          {ENTITIES.map(e => (
-            <button
-              key={e}
-              onClick={() => setEntity(e)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                entity === e
-                  ? 'bg-[#1C3557] text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {ENTITY_LABEL[e] ?? e}
-            </button>
-          ))}
+    <div>
+      {/* Bộ chọn công ty + nút thêm khoản */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {ENTITIES.map(e => {
+            const active = entity === e
+            return (
+              <button
+                key={e}
+                onClick={() => setEntity(e)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  border: '1px solid ' + (active ? 'var(--nh-navy)' : '#E5E0D8'),
+                  background: active ? 'var(--nh-navy)' : '#fff',
+                  color: active ? '#fff' : '#3D3D3D',
+                  transition: 'all .15s',
+                }}
+              >
+                {ENTITY_LABEL[e as string] ?? e}
+              </button>
+            )
+          })}
         </div>
-        <button
-          onClick={openNew}
-          className="rounded-md bg-[#D4A64A] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#D4A64A]/90"
-        >
-          + Thêm khoản
-        </button>
+        <button className="btn-primary" onClick={openNew}>+ Thêm khoản</button>
       </div>
 
       {showForm && (
-        <DongTienForm
-          editing={editing}
-          entityMacDinh={entity === 'all' ? undefined : entity}
-          onSaved={closeForm}
-          onCancel={closeForm}
-        />
+        <div style={{ marginBottom: 14 }}>
+          <DongTienForm
+            editing={editing}
+            entityMacDinh={entity === 'all' ? undefined : entity}
+            onSaved={closeForm}
+            onCancel={closeForm}
+          />
+        </div>
       )}
 
       <DongTienBangChiTiet rows={rows} onEdit={openEdit} onChanged={() => {}} />
