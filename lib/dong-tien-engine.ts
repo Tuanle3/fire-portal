@@ -7,7 +7,7 @@
 // bên dưới, khi có số liệu thật chỉ cần truyền thêm, không cần
 // sửa lại logic rollup.
 // ============================================================
-import { KhoanDongTien, DongTienItem, tuKhoanDongTienRaItem } from './dong-tien-types'
+import { KhoanDongTien, DongTienItem, NguonDongTien, tuKhoanDongTienRaItem } from './dong-tien-types'
 
 export type DonViThoiGian = 'ngay' | 'tuan' | 'thang' | 'quy'
 
@@ -45,6 +45,71 @@ export function locTheoKhoangNgay(
     if (denNgay && it.ngay > denNgay) return false
     return true
   })
+}
+
+// ─────────────────────────────────────────────────────────
+// GỘP NHÓM CHI TIẾT — cùng ngày + cùng ngân hàng + cùng pháp
+// nhân + cùng loại (thu/chi) + cùng nguồn → 1 dòng tổng hợp,
+// mở ra xem từng khoản con. Khoản NHẬP TAY (không có nganHang)
+// không gộp — mỗi khoản giữ nguyên 1 dòng vì diễn giải riêng
+// biệt, gộp lại sẽ mất thông tin.
+// ─────────────────────────────────────────────────────────
+export interface NhomChiTietRow {
+  key:            string
+  ngay:           string
+  entity:         string
+  nganHang?:      string
+  loai:           'thu' | 'chi'
+  nguon:          NguonDongTien
+  tieuDe:         string          // diễn giải tóm tắt của cả nhóm
+  soTien:         number          // tổng tiền cả nhóm
+  soLuong:        number          // số khoản con
+  soDaThucHien:   number
+  soDuKien:       number
+  items:          DongTienItem[]  // các khoản con, đã sort theo ngày
+}
+
+const NGUON_TIEU_DE: Partial<Record<NguonDongTien, string>> = {
+  'kytra-no':  'Trả nợ vay dài hạn',
+  'kythu-nh':  'Trả nợ hạn mức ngắn hạn',
+  'giai-ngan': 'Giải ngân / rút vốn',
+}
+
+export function gomNhomChiTiet(items: DongTienItem[]): NhomChiTietRow[] {
+  const map = new Map<string, NhomChiTietRow>()
+
+  items.forEach(it => {
+    const key = it.nganHang
+      ? `${it.ngay}|${it.entity}|${it.nganHang}|${it.loai}|${it.nguon}`
+      : `don-${it.id}`
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        ngay:         it.ngay,
+        entity:       it.entity,
+        nganHang:     it.nganHang,
+        loai:         it.loai,
+        nguon:        it.nguon,
+        tieuDe:       it.nganHang ? `${NGUON_TIEU_DE[it.nguon] ?? 'Giao dịch'} - ${it.nganHang}` : it.nhanNhan,
+        soTien:       0,
+        soLuong:      0,
+        soDaThucHien: 0,
+        soDuKien:     0,
+        items:        [],
+      })
+    }
+    const g = map.get(key)!
+    g.soTien += it.soTien
+    g.soLuong += 1
+    if (it.trangThai === 'thuc-te') g.soDaThucHien += 1
+    else g.soDuKien += 1
+    g.items.push(it)
+  })
+
+  map.forEach(g => g.items.sort((a, b) => a.ngay.localeCompare(b.ngay)))
+
+  return Array.from(map.values()).sort((a, b) => a.ngay.localeCompare(b.ngay) || a.tieuDe.localeCompare(b.tieuDe))
 }
 
 // ── Date helpers (local, tránh lệch UTC — đồng bộ pattern han-muc-store) ──

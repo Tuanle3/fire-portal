@@ -39,21 +39,41 @@ function addMonths(d: Date, n: number): Date {
 }
 
 // ── Subscribe toàn bộ khoản dòng tiền, lọc theo entity (tuỳ chọn) ──
+//
+// ⚠️ QUAN TRỌNG — chống race condition khi đổi entity liên tục:
+// `ensureTasksAuth()` là bất đồng bộ, nên nếu người dùng đổi
+// pháp nhân (làm effect re-run) TRƯỚC KHI promise này resolve,
+// hàm cleanup cũ chạy lúc `unsub` vẫn còn undefined → không huỷ
+// được gì. Khi promise cũ resolve muộn, nó vẫn tạo `onSnapshot`
+// mới toanh nhưng đã không còn ai gọi cleanup nữa → LISTENER BỊ
+// RÒ RỈ, cứ âm thầm gọi `cb()` với dữ liệu SAI PHÁP NHÂN, ghi đè
+// lên state của lần subscribe đúng (đây là nguyên nhân chọn
+// SAHS nhưng vẫn hiện dữ liệu của entity đã chọn trước đó).
+//
+// Fix: dùng cờ `cancelled` — nếu subscription đã bị huỷ trước
+// khi promise resolve thì bỏ qua, không tạo listener nữa.
 export function subscribeDongTien(
   cb: (rows: KhoanDongTien[]) => void,
   entityFilter?: string,
 ): () => void {
   let unsub: (() => void) | undefined
+  let cancelled = false
+
   ensureTasksAuth().then(() => {
+    if (cancelled) return // effect đã bị huỷ trước khi auth xong — không tạo listener nữa
     const q = entityFilter && entityFilter !== 'all'
       ? query(ktCol(), where('entity', '==', entityFilter), orderBy('ngayDuKien', 'asc'))
       : query(ktCol(), orderBy('ngayDuKien', 'asc'))
     unsub = onSnapshot(q,
-      s => cb(snap<KhoanDongTien>(s)),
+      s => { if (!cancelled) cb(snap<KhoanDongTien>(s)) },
       e => console.error('[subscribeDongTien] snapshot error:', e.code, e.message),
     )
   }).catch(e => console.error('[subscribeDongTien] auth failed', e))
-  return () => unsub?.()
+
+  return () => {
+    cancelled = true
+    unsub?.()
+  }
 }
 
 // ── Lưu 1 khoản (create/edit) ───────────────────────────────

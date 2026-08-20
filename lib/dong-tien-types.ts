@@ -97,6 +97,10 @@ export interface DongTienItem {
   trangThai:   'du-kien' | 'thuc-te'
   refId?:      string
   doTinCay?:   DoTinCay
+  /** Tên ngân hàng — chỉ có ở khoản TỰ ĐỘNG từ hạn mức tín dụng,
+   *  dùng để gộp nhóm nhiều khoản cùng ngày + cùng ngân hàng ở
+   *  chế độ Tổng hợp/Timeline cho gọn (Phần 4 nâng cấp). */
+  nganHang?:   string
 }
 
 /** Chuyển 1 KhoanDongTien (nhập tay) → DongTienItem (chuẩn hợp nhất) */

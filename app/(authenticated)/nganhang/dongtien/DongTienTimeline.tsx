@@ -1,6 +1,9 @@
 // ============================================================
 // TIMELINE — Biểu đồ cột thu/chi + đường tồn quỹ luỹ kế
 // Dùng recharts (npm i recharts). Phần 4.
+// Panel chi tiết khi click cột dùng bảng GỘP NHÓM (cùng ngày +
+// cùng ngân hàng + cùng pháp nhân → 1 dòng) cho gọn, đồng bộ
+// với chế độ Tổng hợp.
 // ============================================================
 'use client'
 
@@ -10,7 +13,8 @@ import {
   Tooltip, Legend, ResponsiveContainer, Cell,
 } from 'recharts'
 import { DongTienItem } from '@/lib/dong-tien-types'
-import { rollupTheoDonVi, DonViThoiGian, CashFlowBucket } from '@/lib/dong-tien-engine'
+import { rollupTheoDonVi, gomNhomChiTiet, DonViThoiGian, CashFlowBucket } from '@/lib/dong-tien-engine'
+import DongTienNhomChiTiet from './DongTienNhomChiTiet'
 
 interface Props {
   items:       DongTienItem[]
@@ -80,6 +84,10 @@ export default function DongTienTimeline({ items, donVi, soDuBanDau }: Props) {
   )
 
   const selectedBucket = buckets.find(b => b.key === selectedKey)
+  const nhomChiTiet = useMemo(
+    () => selectedBucket ? gomNhomChiTiet(selectedBucket.chiTiet) : [],
+    [selectedBucket],
+  )
 
   if (buckets.length === 0) {
     return (
@@ -190,34 +198,7 @@ export default function DongTienTimeline({ items, donVi, soDuBanDau }: Props) {
               onClick={() => setSelectedKey(null)}
             >✕ Đóng</button>
           </div>
-          <table className="nh-tbl" style={{ fontSize: 12 }}>
-            <thead>
-              <tr>
-                <th>Ngày</th>
-                <th>Pháp nhân</th>
-                <th>Diễn giải</th>
-                <th className="r">Số tiền</th>
-                <th>Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedBucket.chiTiet.map(it => (
-                <tr key={it.id}>
-                  <td>{it.ngay}</td>
-                  <td>{it.entity}</td>
-                  <td>{it.nhanNhan}</td>
-                  <td className="r" style={{ fontWeight: 700, color: it.loai === 'thu' ? 'var(--nh-green)' : 'var(--nh-red)' }}>
-                    {it.loai === 'thu' ? '+' : '−'}{VND.format(it.soTien)}
-                  </td>
-                  <td>
-                    <span className={`nh-badge ${it.trangThai === 'thuc-te' ? 'nh-b-green' : 'nh-b-amber'}`}>
-                      {it.trangThai === 'thuc-te' ? 'Đã thực hiện' : 'Dự kiến'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DongTienNhomChiTiet rows={nhomChiTiet} />
         </div>
       )}
 

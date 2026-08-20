@@ -34,6 +34,7 @@ export function tuKyTraNoRaDongTien(ky: KyTraNo, hd: HopDongTinDung): DongTienIt
     nhanNhan:  `Trả nợ ${nhan} - ${hd.nganHang} (kỳ ${ky.soKy})`,
     trangThai: daTra ? 'thuc-te' : 'du-kien',
     refId:     hd.id,
+    nganHang:  hd.nganHang,
   }
 }
 
@@ -51,6 +52,7 @@ export function tuKyThuNHRaDongTien(ky: KyThuNH, bo: BoHoSoGiaiNgan, hanMuc: Han
     nhanNhan:  `Trả nợ NH ngắn hạn ${bo.soBoHoSo} - ${hanMuc.nganHang} (kỳ ${ky.soKy})`,
     trangThai: daThu ? 'thuc-te' : 'du-kien',
     refId:     bo.id,
+    nganHang:  hanMuc.nganHang,
   }
 }
 
@@ -70,6 +72,7 @@ export function tuGiaiNganHopDongRaDongTien(hd: HopDongTinDung): DongTienItem | 
     nhanNhan:  `Giải ngân ${nhan} - ${hd.nganHang}`,
     trangThai: 'thuc-te',
     refId:     hd.id,
+    nganHang:  hd.nganHang,
   }
 }
 
@@ -86,6 +89,7 @@ export function tuGiaiNganBoHoSoRaDongTien(bo: BoHoSoGiaiNgan, hanMuc: HanMucNga
     nhanNhan:  `Rút vốn ${bo.soBoHoSo} - hạn mức ${hanMuc.soHopDong} (${hanMuc.nganHang})`,
     trangThai: 'thuc-te',
     refId:     bo.id,
+    nganHang:  hanMuc.nganHang,
   }
 }
 

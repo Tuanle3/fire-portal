@@ -1,12 +1,16 @@
 // ============================================================
 // TỔNG HỢP — Bảng rollup theo kỳ, nâng cấp từ RollupPreview
 // Phần 4: kiểu hiển thị mặc định khi mở tab Dòng tiền.
+// Chi tiết bên trong mỗi kỳ dùng bảng GỘP NHÓM (cùng ngày +
+// cùng ngân hàng + cùng pháp nhân → 1 dòng, mở ra xem từng
+// khoản) cho gọn, đỡ rối khi 1 ngân hàng có nhiều kỳ trả nợ.
 // ============================================================
 'use client'
 
 import { useMemo, useState } from 'react'
 import { DongTienItem } from '@/lib/dong-tien-types'
-import { rollupTheoDonVi, DonViThoiGian, CashFlowBucket } from '@/lib/dong-tien-engine'
+import { rollupTheoDonVi, gomNhomChiTiet, DonViThoiGian, CashFlowBucket } from '@/lib/dong-tien-engine'
+import DongTienNhomChiTiet from './DongTienNhomChiTiet'
 
 interface Props {
   items:        DongTienItem[]
@@ -22,19 +26,6 @@ function badgeTrangThai(b: CashFlowBucket) {
   if (b.tonQuyCuoiKy < 500_000_000)
     return <span className="nh-badge nh-b-amber">🟡 Cảnh báo</span>
   return <span className="nh-badge nh-b-green">🟢 Dư</span>
-}
-
-const NGUON_LABEL: Record<string, string> = {
-  'nhap-tay':  'Nhập tay',
-  'kytra-no':  'Vay dài hạn',
-  'kythu-nh':  'Hạn mức NH',
-  'giai-ngan': 'Giải ngân',
-}
-const NGUON_BADGE: Record<string, string> = {
-  'nhap-tay':  'nh-b-grey',
-  'kytra-no':  'nh-b-purple',
-  'kythu-nh':  'nh-b-purple',
-  'giai-ngan': 'nh-b-blue',
 }
 
 export default function DongTienTongHop({ items, donVi, soDuBanDau }: Props) {
@@ -82,6 +73,7 @@ export default function DongTienTongHop({ items, donVi, soDuBanDau }: Props) {
         <tbody>
           {buckets.map(b => {
             const daXem = mocRong === b.key
+            const nhomChiTiet = daXem ? gomNhomChiTiet(b.chiTiet) : []
             return (
               <>
                 <tr
@@ -114,40 +106,7 @@ export default function DongTienTongHop({ items, donVi, soDuBanDau }: Props) {
                   <tr key={`${b.key}-detail`}>
                     <td colSpan={9} style={{ padding: 0, background: '#F7F9FC' }}>
                       <div style={{ padding: '10px 20px 14px' }}>
-                        <table className="nh-tbl" style={{ fontSize: 12, marginBottom: 0 }}>
-                          <thead>
-                            <tr>
-                              <th>Ngày</th>
-                              <th>Pháp nhân</th>
-                              <th>Nguồn</th>
-                              <th>Diễn giải</th>
-                              <th className="r">Số tiền</th>
-                              <th>Trạng thái</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {b.chiTiet.map(it => (
-                              <tr key={it.id}>
-                                <td>{it.ngay}</td>
-                                <td>{it.entity}</td>
-                                <td>
-                                  <span className={`nh-badge ${NGUON_BADGE[it.nguon] ?? 'nh-b-grey'}`}>
-                                    {NGUON_LABEL[it.nguon] ?? it.nguon}
-                                  </span>
-                                </td>
-                                <td>{it.nhanNhan}</td>
-                                <td className="r" style={{ fontWeight: 700, color: it.loai === 'thu' ? 'var(--nh-green)' : 'var(--nh-red)' }}>
-                                  {it.loai === 'thu' ? '+' : '−'}{VND.format(it.soTien)}
-                                </td>
-                                <td>
-                                  <span className={`nh-badge ${it.trangThai === 'thuc-te' ? 'nh-b-green' : 'nh-b-amber'}`}>
-                                    {it.trangThai === 'thuc-te' ? 'Đã thực hiện' : 'Dự kiến'}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <DongTienNhomChiTiet rows={nhomChiTiet} />
                       </div>
                     </td>
                   </tr>
@@ -168,7 +127,9 @@ export default function DongTienTongHop({ items, donVi, soDuBanDau }: Props) {
           </tr>
         </tbody>
       </table>
-      <p className="nh-hint" style={{ marginTop: 8 }}>▶ Click vào dòng để xem chi tiết các khoản trong kỳ đó.</p>
+      <p className="nh-hint" style={{ marginTop: 8 }}>
+        ▶ Click vào dòng để xem chi tiết kỳ đó. Trong bảng chi tiết, các khoản cùng ngày + cùng ngân hàng đã được gộp 1 dòng — click tiếp để mở xem từng khoản con.
+      </p>
     </div>
   )
 }
