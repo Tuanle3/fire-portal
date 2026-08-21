@@ -155,7 +155,8 @@ function KhungForm({ open, editing, onClose }: KhungFormProps) {
     if (!hm)                             return setErr('Vui lòng nhập tổng hạn mức')
     setSaving(true)
     try {
-      await saveHanMucNganHan({ ...f, tongHanMuc: hm }, editing?.id)
+      const trangThai = tinhTrangThaiKhung(f.ngayHetHan)
+      await saveHanMucNganHan({ ...f, tongHanMuc: hm, trangThai }, editing?.id)
       onClose()
     } catch (e: any) { setErr(e.message) }
     finally { setSaving(false) }
@@ -188,6 +189,30 @@ function KhungForm({ open, editing, onClose }: KhungFormProps) {
         </div>
 
         {err && <Alert msg={err} />}
+
+        {editing && (editing.maNganSachLai || editing.maNganSachGoc || editing.maNganSachThu) && (
+          <div style={{
+            marginBottom: 14, background: '#f0fdf4', border: '1px solid #86efac88',
+            borderRadius: 8, padding: '10px 14px',
+          }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#166534', marginBottom: 6 }}>
+              🔗 Mã ngân sách (dùng đối chiếu Sheet data_quy)
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px', fontSize: 12.5, color: '#166534' }}>
+              {editing.maNganSachLai && <span>Lãi: <code style={{ background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>{editing.maNganSachLai}</code></span>}
+              {editing.maNganSachGoc && <span>Gốc: <code style={{ background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>{editing.maNganSachGoc}</code></span>}
+              {editing.maNganSachThu && <span>Thu: <code style={{ background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>{editing.maNganSachThu}</code></span>}
+            </div>
+          </div>
+        )}
+        {editing && !editing.maNganSachLai && !editing.maNganSachGoc && !editing.maNganSachThu && (
+          <div style={{
+            marginBottom: 14, background: '#fffbeb', border: '1px solid #f5c54288',
+            borderRadius: 8, padding: '10px 14px', fontSize: 12.5, color: '#92600a',
+          }}>
+            ⚠️ Chưa có mã ngân sách — có thể khung này tạo trước khi có tính năng này (cần chạy migration).
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {fieldWrapper('Số hợp đồng hạn mức *', textInput('soHopDong', 'VD: HMNH-2025-001'), 2)}
@@ -284,9 +309,10 @@ function BoHoSoForm({ open, hanMuc, khaDung, editing, onClose }: BoFormProps) {
     try {
       await saveBoHoSo({
         ...f,
-      	soTienGiaiNgan:    gn,
-	hanMucId:          hanMuc.id,
-	ngayTraLaiDauTien: f.ngayTraLaiDauTien || undefined,
+        soTienGiaiNgan:    gn,
+        hanMucId:          hanMuc.id,
+        trangThai:         'dang-vay',
+        ngayTraLaiDauTien: f.ngayTraLaiDauTien || undefined,
         mucDichVay:        f.mucDichVay || undefined,
         taiSanDamBao:      f.taiSanDamBao || undefined,
         ghiChu:            f.ghiChu || undefined,

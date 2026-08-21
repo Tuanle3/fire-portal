@@ -221,6 +221,35 @@ export default function HopDongForm({
 
         <div className="nh-modal-body">
           {/* ══════════════════════════════════════════
+              Mã ngân sách — chỉ đọc, để đối chiếu với Sheet data_quy.
+              Chỉ hiện khi SỬA (tạo mới thì lúc form mở chưa có mã,
+              mã chỉ sinh ra sau khi lưu xong).
+          ══════════════════════════════════════════ */}
+          {editing && editing.loaiHD !== 'han-muc-khung' && (
+            <div style={{
+              marginBottom: 14, background: '#f0fdf4', border: '1px solid #86efac88',
+              borderRadius: 8, padding: '10px 14px',
+            }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#166534', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>🔗</span> Mã ngân sách (dùng đối chiếu Sheet data_quy)
+              </div>
+              {editing.maNganSachLai || editing.maNganSachGoc || editing.maNganSachThu ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px', fontSize: 12.5, color: '#166534' }}>
+                  {editing.maNganSachLai && <span>Lãi: <code style={{ background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>{editing.maNganSachLai}</code></span>}
+                  {editing.maNganSachGoc && <span>Gốc: <code style={{ background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>{editing.maNganSachGoc}</code></span>}
+                  {editing.maNganSachThu && <span>Thu: <code style={{ background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>{editing.maNganSachThu}</code></span>}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12.5, color: '#a16207' }}>
+                  ⚠️ Chưa có mã ngân sách — có thể HĐ tạo trước khi có tính năng này (cần chạy migration),
+                  hoặc thiếu thông tin để sinh mã (VD: người vay/số tiền giải ngân với HĐ cá nhân).
+                  {editing.canhBaoMa && <div style={{ marginTop: 4 }}>Lý do: {editing.canhBaoMa}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════
               Hạn mức khung — phân loại HĐ (ẩn khi đang sửa để tránh đổi loại giữa chừng)
           ══════════════════════════════════════════ */}
           {!editing && !presetHanMucKhungId && (
