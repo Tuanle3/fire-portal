@@ -155,8 +155,7 @@ function KhungForm({ open, editing, onClose }: KhungFormProps) {
     if (!hm)                             return setErr('Vui lòng nhập tổng hạn mức')
     setSaving(true)
     try {
-      const trangThai = tinhTrangThaiKhung(f.ngayHetHan)
-      await saveHanMucNganHan({ ...f, tongHanMuc: hm, trangThai }, editing?.id)
+      await saveHanMucNganHan({ ...f, tongHanMuc: hm }, editing?.id)
       onClose()
     } catch (e: any) { setErr(e.message) }
     finally { setSaving(false) }
@@ -311,7 +310,6 @@ function BoHoSoForm({ open, hanMuc, khaDung, editing, onClose }: BoFormProps) {
         ...f,
         soTienGiaiNgan:    gn,
         hanMucId:          hanMuc.id,
-        trangThai:         'dang-vay',
         ngayTraLaiDauTien: f.ngayTraLaiDauTien || undefined,
         mucDichVay:        f.mucDichVay || undefined,
         taiSanDamBao:      f.taiSanDamBao || undefined,
