@@ -50,8 +50,40 @@ export function unslugEntity(token: string): string {
   return ENTITY_TOKEN_REVERSE[token] ?? token
 }
 
+// ── Viết tắt ngân hàng — theo mã liên ngân hàng phổ biến tại VN.
+// Các ngân hàng đã lưu sẵn dạng ngắn trong dropdown (ACB, BIDV, VIB,
+// MSB, OCB, SHB, NCB...) không cần map — giữ nguyên. Chỉ map các
+// tên đầy đủ. ⚠️ Chỉ "Vietinbank → VTB" đã được đại ca xác nhận khớp
+// Sheet thật; các dòng còn lại theo quy ước phổ biến — đại ca kiểm
+// tra lại khi phát sinh khoản vay đầu tiên ở ngân hàng đó, báo bi nô
+// nếu Sheet ghi khác để sửa lại.
+const BANK_TOKEN: Record<string, string> = {
+  'Agribank':      'AGR',
+  'Vietcombank':   'VCB',
+  'Vietinbank':    'VTB',   // ⚠️ đã xác nhận đúng
+  'MB Bank':       'MB',
+  'Techcombank':   'TCB',
+  'VPBank':        'VPB',
+  'Sacombank':     'STB',
+  'HDBank':        'HDB',
+  'TPBank':        'TPB',
+  'SeABank':       'SEAB',
+  'LPBank':        'LPB',
+  'Eximbank':      'EIB',
+  'Nam A Bank':    'NAB',
+  'ABBank':        'ABB',
+  'BacABank':      'BAB',
+  'BaoViet Bank':  'BVB',
+  'CBBank':        'CBB',
+  'PGBank':        'PGB',
+  'VietBank':      'VBB',
+  'VietABank':     'VAB',
+  'KienlongBank':  'KLB',
+  'Vikki Bank':    'VIKKI',
+}
+
 export function slugBank(nganHang: string): string {
-  return nganHang.replace(/\s+/g, '')
+  return BANK_TOKEN[nganHang] ?? nganHang.replace(/\s+/g, '')
 }
 
 /** Slug tên người vay — bỏ dấu, bỏ khoảng trắng, giữ nguyên chữ hoa đầu
