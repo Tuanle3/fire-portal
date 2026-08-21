@@ -96,11 +96,13 @@ export default function HopDongForm({
   )
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
+  const [canhBaoMa, setCanhBaoMa] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     if (!open) return
     setForm(editing ? buildFormFromHopDong(editing) : buildEmptyForm(presetHanMucKhungId))
     setError('')
+    setCanhBaoMa(undefined)
   }, [open, editing, presetHanMucKhungId])
 
   const fmtInput = (v: string) => {
@@ -193,8 +195,13 @@ export default function HopDongForm({
         if (form.soBoHoSo) payload.soBoHoSo = form.soBoHoSo
       }
 
-      await saveHopDong(payload, editing?.id)
-      onClose()
+      const { canhBaoMa: canh } = await saveHopDong(payload, editing?.id)
+      setCanhBaoMa(canh)
+      if (!canh) {
+        // Không có cảnh báo → lưu thành công, đóng form bình thường
+        onClose()
+      }
+      // Nếu có canhBaoMa → ở lại form để hiển thị cảnh báo vàng, không đóng
     } catch (e: any) {
       const msg = e?.message ?? String(e)
       setError(`Lưu thất bại: ${msg}`)
@@ -479,6 +486,24 @@ export default function HopDongForm({
               {form.gocTraCoDinh && ' Gốc cứng áp dụng cho tất cả kỳ trả gốc, kỳ cuối tự điều chỉnh.'}
               {form.laiSuatLoai === 'tha-noi' && ' Sau ưu đãi hệ thống tự chuyển sang lãi suất thả nổi.'}
             </p>
+          )}
+          {canhBaoMa && (
+            <div style={{
+              marginTop: 12,
+              background: '#fffbeb',
+              border: '1px solid #f5c542',
+              borderRadius: 8,
+              padding: '10px 14px',
+              fontSize: 12.5,
+              color: '#92600a',
+              lineHeight: 1.5,
+            }}>
+              ⚠️ <strong>Mã ngân sách chưa sinh được:</strong> {canhBaoMa}
+              <br />
+              <span style={{ color: '#a16207' }}>
+                Hợp đồng đã được lưu. Bổ sung thông tin còn thiếu rồi lưu lại để gắn mã.
+              </span>
+            </div>
           )}
           {error && <p className="nh-err">{error}</p>}
         </div>

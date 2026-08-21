@@ -17,6 +17,7 @@ import type {
   HanMucNganHan, BoHoSoGiaiNgan, KyThuNH, TraGocGiuaKy,
   KhaDungSnapshot, TrangThaiKhung, TrangThaiBoHoSo,
 } from './han-muc-ngan-han-types'
+import { taoBoMaNganSach } from '@/lib/ma-ngan-sach'
 
 const db = () => tasksDb
 
@@ -90,15 +91,10 @@ function trangThaiKy(ngayThu: string): KyThuNH['trangThai'] {
 
 // ─────────────────────────────────────────────────────────────
 // BUILD SCHEDULE — tạo lịch thu lãi/gốc cho 1 bộ hồ sơ
-// Logic:
-//   - Mặc định: gốc thu 1 lần cuối kỳ
-//   - Lãi: theo kyTraLai (monthly / quarterly / cuoi-ky)
-//   - Nếu có ngayTraLaiDauTien → kỳ 0 là kỳ lẻ ngày chỉ thu lãi
-//     rồi các kỳ sau neo theo ngày-trong-tháng đó
 // ─────────────────────────────────────────────────────────────
 export function buildScheduleNH(
   bo: BoHoSoGiaiNgan,
-  gocDaTra: number = 0, // gốc đã trả (từ các kỳ trước / giữa kỳ)
+  gocDaTra: number = 0,
 ): KyThuNH[] {
   const ngayGiaiNgan = parseDate(bo.ngayGiaiNgan)
   const ngayDaoHan   = parseDate(bo.ngayDaoHan)
@@ -107,7 +103,6 @@ export function buildScheduleNH(
 
   if (dunNoBanDau <= 0) return []
 
-  // Với kỳ cuối: luôn thu gốc + lãi tháng đó
   if (bo.kyTraLai === 'cuoi-ky') {
     const soNgay = daysDiff(ngayGiaiNgan, ngayDaoHan)
     const laiThu = Math.round(dunNoBanDau * lsNam * (soNgay / 365))
@@ -130,7 +125,6 @@ export function buildScheduleNH(
   const period    = bo.kyTraLai === 'quarterly' ? 3 : 1
   const kyPerYear = bo.kyTraLai === 'quarterly' ? 4 : 12
 
-  // Xác định ankerDate nếu có kỳ lẻ ngày
   const coKyLe   = !!bo.ngayTraLaiDauTien
   let ankerDate  = ngayGiaiNgan
   let coKyLeThuc = false
@@ -149,13 +143,11 @@ export function buildScheduleNH(
     }
   }
 
-  // Số kỳ lãi từ ankerDate đến đáo hạn
   const numKySau = Math.max(1, Math.floor(monthDiff(ankerDate, ngayDaoHan) / period))
   const rows: KyThuNH[] = []
   let dunNo = dunNoBanDau
   let soKy  = 0
 
-  // Kỳ 0 lẻ ngày: chỉ thu lãi
   if (coKyLeThuc) {
     soKy++
     const soNgay = daysDiff(ngayGiaiNgan, ankerDate)
@@ -176,7 +168,6 @@ export function buildScheduleNH(
     })
   }
 
-  // Kỳ 1..N: lãi định kỳ, gốc thu kỳ cuối
   for (let i = 1; i <= numKySau; i++) {
     soKy++
     const isLast    = i === numKySau
@@ -205,31 +196,29 @@ export function buildScheduleNH(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Tính hạn mức khả dụng (real-time, tính dư nợ thực tế)
+// Tính hạn mức khả dụng
 // ─────────────────────────────────────────────────────────────
 export function tinhKhaDung(
   khung:      HanMucNganHan,
   boList:     BoHoSoGiaiNgan[],
-  kyThuMap:   Record<string, KyThuNH[]>,  // boId → kỳ thu
-  traGocList: TraGocGiuaKy[],            // tất cả trả gốc giữa kỳ của khung này
+  kyThuMap:   Record<string, KyThuNH[]>,
+  traGocList: TraGocGiuaKy[],
 ): KhaDungSnapshot {
   let tongGiaiNgan = 0
   let tongGocDaTra = 0
   let soBoDangVay  = 0
 
   boList.forEach(bo => {
-    if (bo.trangThai === 'tat-toan') return // tất toán → không chiếm hạn mức
+    if (bo.trangThai === 'tat-toan') return
     tongGiaiNgan += bo.soTienGiaiNgan
 
     const kyList    = kyThuMap[bo.id] ?? []
     const gocQuaKy  = kyList
       .filter(k => k.trangThai === 'da-thu')
       .reduce((s, k) => s + (k.gocThucThu ?? k.gocThu), 0)
-
     const gocGiuaKy = traGocList
       .filter(t => t.boHoSoId === bo.id)
       .reduce((s, t) => s + t.soTienGoc, 0)
-
     tongGocDaTra += gocQuaKy + gocGiuaKy
     soBoDangVay++
   })
@@ -237,23 +226,24 @@ export function tinhKhaDung(
   const duNoHienTai    = Math.max(0, tongGiaiNgan - tongGocDaTra)
   const khaDung        = Math.max(0, khung.tongHanMuc - duNoHienTai)
   const phanTramSuDung = khung.tongHanMuc > 0
-    ? Math.min(100, Math.round((duNoHienTai / khung.tongHanMuc) * 100))
-    : 0
+    ? Math.round((duNoHienTai / khung.tongHanMuc) * 100) : 0
 
   return { tongHanMuc: khung.tongHanMuc, tongGiaiNgan, tongGocDaTra, duNoHienTai, khaDung, phanTramSuDung, soBoDangVay }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Tính gốc đã trả của 1 bộ hồ sơ (qua kỳ thu + giữa kỳ)
-// ─────────────────────────────────────────────────────────────
+// ── Tính gốc đã trả của 1 bộ hồ sơ ─────────────────────────
 export function tinhGocDaTraBoHoSo(
-  boId:       string,
-  kyList:     KyThuNH[],
-  traGocList: TraGocGiuaKy[],
+  boHoSoId:    string,
+  kyList:      KyThuNH[],
+  traGocList:  TraGocGiuaKy[],
 ): number {
-  const quaKy  = kyList.filter(k => k.trangThai === 'da-thu').reduce((s, k) => s + (k.gocThucThu ?? k.gocThu), 0)
-  const giuaKy = traGocList.filter(t => t.boHoSoId === boId).reduce((s, t) => s + t.soTienGoc, 0)
-  return quaKy + giuaKy
+  const gocQuaKy  = kyList
+    .filter(k => k.trangThai === 'da-thu')
+    .reduce((s, k) => s + (k.gocThucThu ?? k.gocThu), 0)
+  const gocGiuaKy = traGocList
+    .filter(t => t.boHoSoId === boHoSoId)
+    .reduce((s, t) => s + t.soTienGoc, 0)
+  return gocQuaKy + gocGiuaKy
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -261,92 +251,91 @@ export function tinhGocDaTraBoHoSo(
 // ═════════════════════════════════════════════════════════════
 
 export function subscribeHanMucNganHan(
-  cb: (list: HanMucNganHan[]) => void,
+  cb: (rows: HanMucNganHan[]) => void,
+  entityFilter?: string,
 ): () => void {
   let unsub: (() => void) | undefined
   ensureTasksAuth().then(() => {
-    const q = query(khungCol(), orderBy('createdAt', 'desc'))
+    const q = entityFilter && entityFilter !== 'all'
+      ? query(khungCol(), where('entity', '==', entityFilter), orderBy('createdAt', 'desc'))
+      : query(khungCol(), orderBy('createdAt', 'desc'))
     unsub = onSnapshot(q, s => cb(snap<HanMucNganHan>(s)))
-  }).catch(e => console.error('[subscribeHanMucNganHan]', e))
+  }).catch(e => console.error('[subscribeHanMucNganHan] auth failed', e))
   return () => unsub?.()
 }
 
 export function subscribeBoHoSo(
   hanMucId: string,
-  cb: (list: BoHoSoGiaiNgan[]) => void,
+  cb: (rows: BoHoSoGiaiNgan[]) => void,
 ): () => void {
   let unsub: (() => void) | undefined
   ensureTasksAuth().then(() => {
-    const q = query(boHoSoCol(hanMucId), orderBy('ngayGiaiNgan', 'desc'))
+    const q = query(boHoSoCol(hanMucId), orderBy('ngayGiaiNgan', 'asc'))
     unsub = onSnapshot(q, s => cb(snap<BoHoSoGiaiNgan>(s)))
-  }).catch(e => console.error('[subscribeBoHoSo]', e))
+  }).catch(e => console.error('[subscribeBoHoSo] auth failed', e))
   return () => unsub?.()
 }
 
-export function subscribeKyThuNH(
+export function subscribeKyThu(
   hanMucId: string,
   boHoSoId: string,
-  cb: (list: KyThuNH[]) => void,
+  cb: (rows: KyThuNH[]) => void,
 ): () => void {
   let unsub: (() => void) | undefined
   ensureTasksAuth().then(() => {
     const q = query(kyThuCol(hanMucId, boHoSoId), orderBy('soKy', 'asc'))
     unsub = onSnapshot(q, s => cb(snap<KyThuNH>(s)))
-  }).catch(e => console.error('[subscribeKyThuNH]', e))
+  }).catch(e => console.error('[subscribeKyThu] auth failed', e))
   return () => unsub?.()
 }
 
-/**
- * Subscribe tất cả kỳ thu của nhiều bộ hồ sơ trong 1 hạn mức.
- * FIX: bọc qua ensureTasksAuth trước khi attach listeners.
- */
-export function subscribeAllKyThuNH(
+export function subscribeTraGoc(
   hanMucId: string,
-  boIds:    string[],
-  cb:       (map: Record<string, KyThuNH[]>) => void,
-): () => void {
-  if (!boIds.length) { cb({}); return () => {} }
-
-  let unsubs: (() => void)[] = []
-  let cancelled = false
-
-  ensureTasksAuth().then(() => {
-    if (cancelled) return
-    const map: Record<string, KyThuNH[]> = {}
-    boIds.forEach(boId => {
-      const q = query(kyThuCol(hanMucId, boId), orderBy('soKy', 'asc'))
-      const u = onSnapshot(q, s => {
-        map[boId] = snap<KyThuNH>(s)
-        cb({ ...map })
-      })
-      unsubs.push(u)
-    })
-  }).catch(e => console.error('[subscribeAllKyThuNH]', e))
-
-  return () => {
-    cancelled = true
-    unsubs.forEach(u => u())
-  }
-}
-
-export function subscribeTraGocGiuaKy(
-  hanMucId: string,
-  cb: (list: TraGocGiuaKy[]) => void,
+  cb: (rows: TraGocGiuaKy[]) => void,
 ): () => void {
   let unsub: (() => void) | undefined
   ensureTasksAuth().then(() => {
-    const q = query(traGocCol(), where('hanMucId', '==', hanMucId), orderBy('ngayTra', 'desc'))
+    const q = query(traGocCol(), where('hanMucId', '==', hanMucId), orderBy('ngayTra', 'asc'))
     unsub = onSnapshot(q, s => cb(snap<TraGocGiuaKy>(s)))
-  }).catch(e => console.error('[subscribeTraGocGiuaKy]', e))
+  }).catch(e => console.error('[subscribeTraGoc] auth failed', e))
   return () => unsub?.()
 }
+
+// ── Subscribe tất cả kỳ thu của NHIỀU bộ hồ sơ cùng 1 khung ──
+// (gom lại từ nhiều subscribeKyThu — 1 cho mỗi bộ hồ sơ)
+export function subscribeAllKyThuNH(
+  hanMucId:  string,
+  boHoSoIds: string[],
+  cb: (kyThuMap: Record<string, KyThuNH[]>) => void,
+): () => void {
+  if (!boHoSoIds.length) { cb({}); return () => {} }
+  const unsubs: (() => void)[] = []
+  const map: Record<string, KyThuNH[]> = {}
+  boHoSoIds.forEach(boId => {
+    const u = subscribeKyThu(hanMucId, boId, kys => {
+      map[boId] = kys
+      cb({ ...map })
+    })
+    unsubs.push(u)
+  })
+  return () => unsubs.forEach(u => u())
+}
+ 
+// ── Alias — TabHanMucNganHan.tsx gọi bằng 2 tên này, chữ ký giống
+// hệt subscribeKyThu / subscribeTraGoc đã có sẵn (có thể do đổi tên
+// hàm trước đây mà quên sửa chỗ gọi). Alias để không phải sửa lại
+// TabHanMucNganHan.tsx. ──
+export { subscribeKyThu as subscribeKyThuNH }
+export { subscribeTraGoc as subscribeTraGocGiuaKy }
+
 
 // ═════════════════════════════════════════════════════════════
 // WRITE — Hạn mức khung
 // ═════════════════════════════════════════════════════════════
 
 export async function saveHanMucNganHan(
-  data: Omit<HanMucNganHan, 'id' | 'createdAt' | 'updatedAt'>,
+  data: Omit<HanMucNganHan, 'id' | 'createdAt' | 'updatedAt' | 'trangThai'
+    | 'maNganSachLai' | 'maNganSachGoc' | 'maNganSachThu'>,
   id?: string,
 ): Promise<string> {
   await ensureTasksAuth()
@@ -355,39 +344,59 @@ export async function saveHanMucNganHan(
 
   let createdAt = now
   if (id) {
-    const ex = await getDoc(ref)
-    if (ex.exists()) createdAt = (ex.data() as HanMucNganHan).createdAt ?? now
+    const existing = await getDoc(ref)
+    if (existing.exists()) createdAt = (existing.data() as HanMucNganHan).createdAt ?? now
   }
 
-  const toWrite: HanMucNganHan = { ...data, id: ref.id, createdAt, updatedAt: now }
-  const optionals: (keyof HanMucNganHan)[] = ['chiNhanh', 'nguoiVay', 'laiSuatMacDinh', 'ghiChu']
+  // ── Sinh mã ngân sách ─────────────────────────────────────
+  // HanMucNganHan luôn là DN (nhánh A), kyHan luôn là 'ngan-han'
+  // → không bao giờ có canhBaoMa, không cần đổi return type
+  const boMa = taoBoMaNganSach(data.entity, 'ngan-han', data.nganHang)
+
+  const trangThai = tinhTrangThaiKhung(data.ngayHetHan)
+  const docData: HanMucNganHan = {
+    ...data,
+    ...boMa,
+    id: ref.id, trangThai, createdAt, updatedAt: now,
+  }
+
+  const optionalFields: (keyof HanMucNganHan)[] = [
+    'chiNhanh', 'nguoiVay', 'laiSuatMacDinh', 'ghiChu',
+    'maNganSachLai', 'maNganSachGoc', 'maNganSachThu',
+  ]
 
   if (id) {
-    const w: any = { ...toWrite }
-    optionals.forEach(f => { if (w[f] == null) w[f] = deleteField() })
-    await setDoc(ref, w, { merge: true })
+    const dataToWrite: any = { ...docData }
+    optionalFields.forEach(f => {
+      if (dataToWrite[f] === undefined || dataToWrite[f] === null) dataToWrite[f] = deleteField()
+    })
+    await setDoc(ref, dataToWrite, { merge: true })
   } else {
-    const w: any = { ...toWrite }
-    optionals.forEach(f => { if (w[f] == null) delete w[f] })
-    await setDoc(ref, w)
+    const dataToWrite: any = { ...docData }
+    optionalFields.forEach(f => {
+      if (dataToWrite[f] === undefined || dataToWrite[f] === null) delete dataToWrite[f]
+    })
+    await setDoc(ref, dataToWrite)
   }
+
   return ref.id
 }
 
-export async function deleteHanMucNganHan(hanMucId: string): Promise<void> {
+export async function deleteHanMucNganHan(id: string): Promise<void> {
   await ensureTasksAuth()
-  const boSnap  = await getDocs(boHoSoCol(hanMucId))
-  const dangVay = boSnap.docs.filter(d => {
-    const bo = d.data() as BoHoSoGiaiNgan
-    return bo.trangThai !== 'tat-toan'
-  })
-  if (dangVay.length > 0) {
-    throw new Error(`Không thể xóa: còn ${dangVay.length} bộ hồ sơ đang vay`)
+  // Xóa toàn bộ bộ hồ sơ + kỳ thu trước khi xóa khung
+  const boSnap = await getDocs(boHoSoCol(id))
+  for (const boDoc of boSnap.docs) {
+    const kySnap = await getDocs(kyThuCol(id, boDoc.id))
+    const BATCH  = 400
+    for (let i = 0; i < kySnap.docs.length; i += BATCH) {
+      const batch = writeBatch(db())
+      kySnap.docs.slice(i, i + BATCH).forEach(d => batch.delete(d.ref))
+      await batch.commit()
+    }
+    await deleteDoc(boDoc.ref)
   }
-  const batch = writeBatch(db())
-  boSnap.docs.forEach(d => batch.delete(d.ref))
-  batch.delete(doc(khungCol(), hanMucId))
-  await batch.commit()
+  await deleteDoc(doc(khungCol(), id))
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -395,48 +404,67 @@ export async function deleteHanMucNganHan(hanMucId: string): Promise<void> {
 // ═════════════════════════════════════════════════════════════
 
 export async function saveBoHoSo(
-  data: Omit<BoHoSoGiaiNgan, 'id' | 'createdAt' | 'updatedAt'>,
+  data: Omit<BoHoSoGiaiNgan, 'id' | 'createdAt' | 'updatedAt' | 'trangThai'>,
   id?: string,
 ): Promise<string> {
   await ensureTasksAuth()
-  const col = boHoSoCol(data.hanMucId)
-  const ref = id ? doc(col, id) : doc(col)
+  const ref = id ? doc(boHoSoCol(data.hanMucId), id) : doc(boHoSoCol(data.hanMucId))
   const now = Date.now()
 
   let createdAt = now
   if (id) {
-    const ex = await getDoc(ref)
-    if (ex.exists()) createdAt = (ex.data() as BoHoSoGiaiNgan).createdAt ?? now
+    const existing = await getDoc(ref)
+    if (existing.exists()) createdAt = (existing.data() as BoHoSoGiaiNgan).createdAt ?? now
   }
 
-  const toWrite: BoHoSoGiaiNgan = { ...data, id: ref.id, createdAt, updatedAt: now }
-  const optionals: (keyof BoHoSoGiaiNgan)[] = ['ngayTraLaiDauTien', 'mucDichVay', 'taiSanDamBao', 'ghiChu']
+  // Tính trạng thái dựa trên gốc đã trả hiện tại
+  const kySnap     = id ? await getDocs(kyThuCol(data.hanMucId, id)) : null
+  const traGocSnap = id ? await getDocs(query(traGocCol(), where('boHoSoId', '==', id))) : null
+  const kyList     = kySnap ? snap<KyThuNH>(kySnap as QuerySnapshot<DocumentData>) : []
+  const traGocList = traGocSnap ? snap<TraGocGiuaKy>(traGocSnap as QuerySnapshot<DocumentData>) : []
+  const gocDaTra   = id ? tinhGocDaTraBoHoSo(id, kyList, traGocList) : 0
+  const trangThai  = tinhTrangThaiBoHoSo({ ...data, id: ref.id } as BoHoSoGiaiNgan, gocDaTra)
+
+  const docData: BoHoSoGiaiNgan = { ...data, id: ref.id, trangThai, createdAt, updatedAt: now }
+
+  const optionalFields: (keyof BoHoSoGiaiNgan)[] = [
+    'ngayTraLaiDauTien', 'mucDichVay', 'taiSanDamBao', 'ghiChu',
+  ]
 
   if (id) {
-    const w: any = { ...toWrite }
-    optionals.forEach(f => { if (w[f] == null) w[f] = deleteField() })
-    await setDoc(ref, w, { merge: true })
+    const dataToWrite: any = { ...docData }
+    optionalFields.forEach(f => {
+      if (dataToWrite[f] === undefined || dataToWrite[f] === null) dataToWrite[f] = deleteField()
+    })
+    await setDoc(ref, dataToWrite, { merge: true })
   } else {
-    const w: any = { ...toWrite }
-    optionals.forEach(f => { if (w[f] == null) delete w[f] })
-    await setDoc(ref, w)
+    const dataToWrite: any = { ...docData }
+    optionalFields.forEach(f => {
+      if (dataToWrite[f] === undefined || dataToWrite[f] === null) delete dataToWrite[f]
+    })
+    await setDoc(ref, dataToWrite)
   }
 
-  // Build & lưu lịch kỳ thu
-  const schedule = buildScheduleNH(toWrite)
-  const BATCH    = 400
-  for (let i = 0; i < schedule.length; i += BATCH) {
-    const batch = writeBatch(db())
-    schedule.slice(i, i + BATCH).forEach(k => {
-      batch.set(doc(kyThuCol(data.hanMucId, ref.id), k.id), k)
-    })
-    await batch.commit()
+  // Tạo lịch thu mới (chỉ khi tạo mới, không rebuild khi edit để giữ kỳ da-thu)
+  if (!id) {
+    const schedule = buildScheduleNH(docData, 0)
+    const BATCH    = 400
+    for (let i = 0; i < schedule.length; i += BATCH) {
+      const batch = writeBatch(db())
+      schedule.slice(i, i + BATCH).forEach(ky => {
+        batch.set(doc(kyThuCol(data.hanMucId, ref.id), ky.id), ky)
+      })
+      await batch.commit()
+    }
   }
 
   return ref.id
 }
 
-/** Đánh dấu kỳ thu đã thực hiện */
+// ═════════════════════════════════════════════════════════════
+// WRITE — Đánh dấu kỳ thu
+// ═════════════════════════════════════════════════════════════
+
 export async function markKyThuDaThu(
   hanMucId:    string,
   boHoSoId:    string,
@@ -461,7 +489,6 @@ export async function markKyThuDaThu(
   await _syncTrangThaiBoHoSo(hanMucId, boHoSoId)
 }
 
-/** Huỷ đánh dấu kỳ thu (về lại chua-thu) */
 export async function unmarkKyThu(
   hanMucId:  string,
   boHoSoId:  string,
@@ -483,7 +510,6 @@ export async function unmarkKyThu(
   await _syncTrangThaiBoHoSo(hanMucId, boHoSoId)
 }
 
-/** Đồng bộ trạng thái bộ hồ sơ dựa trên gốc đã trả */
 async function _syncTrangThaiBoHoSo(hanMucId: string, boHoSoId: string): Promise<void> {
   const boRef  = doc(boHoSoCol(hanMucId), boHoSoId)
   const boSnap = await getDoc(boRef)
@@ -500,7 +526,6 @@ async function _syncTrangThaiBoHoSo(hanMucId: string, boHoSoId: string): Promise
   await updateDoc(boRef, { trangThai, updatedAt: Date.now() })
 }
 
-/** Xóa bộ hồ sơ (chỉ được nếu chưa có kỳ da-thu) */
 export async function deleteBoHoSo(hanMucId: string, boId: string): Promise<void> {
   await ensureTasksAuth()
   const kySnap = await getDocs(kyThuCol(hanMucId, boId))
@@ -514,7 +539,7 @@ export async function deleteBoHoSo(hanMucId: string, boId: string): Promise<void
 }
 
 // ═════════════════════════════════════════════════════════════
-// WRITE — Trả gốc giữa kỳ (trả trước hạn từng phần)
+// WRITE — Trả gốc giữa kỳ
 // ═════════════════════════════════════════════════════════════
 
 export async function saveTraGocGiuaKy(
@@ -534,12 +559,6 @@ export async function deleteTraGocGiuaKy(id: string, hanMucId: string, boHoSoId:
   await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)
 }
 
-/**
- * Tính lãi tích lũy cho khoản vay "cuối kỳ" (bullet — chỉ 1 kỳ thu duy nhất
- * lúc đáo hạn), có xét TỪNG lần trả gốc giữa kỳ theo đúng mốc ngày phát sinh
- * (lãi tính trên dư nợ thực tế của từng đoạn thời gian, không phải áp thẳng
- * dư nợ cuối cùng cho toàn bộ thời gian vay — đúng chuẩn ngân hàng).
- */
 function tinhLaiCuoiKyTichLuy(bo: BoHoSoGiaiNgan, traGocList: TraGocGiuaKy[]): number {
   const lsNam  = bo.laiSuat / 100
   const events = [...traGocList].sort((a, b) => a.ngayTra.localeCompare(b.ngayTra))
@@ -558,17 +577,6 @@ function tinhLaiCuoiKyTichLuy(bo: BoHoSoGiaiNgan, traGocList: TraGocGiuaKy[]): n
   return Math.round(lai)
 }
 
-/**
- * Cập nhật lại các kỳ CHƯA THU sau khi phát sinh trả gốc giữa kỳ (thêm/xóa),
- * dựa trên dư nợ thực tế còn lại — theo nghiệp vụ trả gốc bullet (gốc dồn
- * kỳ cuối, lãi mỗi kỳ tính trên dư nợ hiện hành).
- *
- * QUAN TRỌNG: các kỳ ĐÃ THU (trangThai='da-thu') giữ nguyên tuyệt đối —
- * không đụng tới, để đảm bảo số liệu lịch sử luôn khớp khi đối soát.
- * Chỉ các kỳ chưa thu được cập nhật tại chỗ (giữ nguyên id/ngày thu/soKy),
- * tránh việc tạo lại toàn bộ lịch (id trùng ky-0/ky-1... sẽ đè lên các kỳ
- * đã thu, làm mất dữ liệu lịch sử — đây là lỗi đã sửa).
- */
 async function _rebuildKyThuSauTraGoc(hanMucId: string, boHoSoId: string): Promise<void> {
   const boRef  = doc(boHoSoCol(hanMucId), boHoSoId)
   const boSnap = await getDoc(boRef)
@@ -593,7 +601,6 @@ async function _rebuildKyThuSauTraGoc(hanMucId: string, boHoSoId: string): Promi
     return
   }
 
-  // Đã trả hết gốc trước hạn → không còn gì để thu ở các kỳ còn lại, xóa hết
   if (duNoConLai <= 0) {
     for (let i = 0; i < unpaid.length; i += BATCH) {
       const batch = writeBatch(db())
@@ -637,7 +644,7 @@ async function _rebuildKyThuSauTraGoc(hanMucId: string, boHoSoId: string): Promi
 }
 
 // ─────────────────────────────────────────────────────────────
-// MIGRATE 1 LẦN: đổi pháp nhân "SAG" → "SAP" cho toàn bộ hạn mức khung ngắn hạn
+// MIGRATE 1 LẦN: đổi pháp nhân "SAG" → "SAP"
 // ─────────────────────────────────────────────────────────────
 export async function migrateEntitySAGtoSAPNganHan(): Promise<{ updated: number }> {
   await ensureTasksAuth()
@@ -653,11 +660,48 @@ export async function migrateEntitySAGtoSAPNganHan(): Promise<{ updated: number 
 }
 
 // ─────────────────────────────────────────────────────────────
+// MIGRATE 1 LẦN: gắn mã ngân sách cho toàn bộ hạn mức khung ngắn hạn đã có sẵn
+// (chạy 1 lần duy nhất — khung nào đã có maNganSachLai thì bỏ qua)
+// ─────────────────────────────────────────────────────────────
+export async function migrateMaNganSachNganHan(): Promise<{ updated: number; skipped: number }> {
+  await ensureTasksAuth()
+  const snap_ = await getDocs(query(khungCol(), orderBy('createdAt', 'asc')))
+  const BATCH = 400
+  let updated = 0, skipped = 0
+
+  const toWrite: Array<{ id: string; fields: Record<string, string> }> = []
+
+  snap_.docs.forEach(d => {
+    const khung = { id: d.id, ...d.data() } as HanMucNganHan
+    if (khung.maNganSachLai) { skipped++; return }
+
+    // Luôn nhánh A, ngan-han
+    const boMa = taoBoMaNganSach(khung.entity, 'ngan-han', khung.nganHang)
+    const fields: Record<string, string> = {}
+    if (boMa.maNganSachLai) fields.maNganSachLai = boMa.maNganSachLai
+    if (boMa.maNganSachGoc) fields.maNganSachGoc = boMa.maNganSachGoc
+    if (boMa.maNganSachThu) fields.maNganSachThu = boMa.maNganSachThu
+    toWrite.push({ id: khung.id, fields })
+  })
+
+  for (let i = 0; i < toWrite.length; i += BATCH) {
+    const batch = writeBatch(db())
+    toWrite.slice(i, i + BATCH).forEach(({ id, fields }) => {
+      batch.update(doc(khungCol(), id), fields)
+      updated++
+    })
+    await batch.commit()
+  }
+
+  return { updated, skipped }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Utility: lấy tất cả kỳ thu trong tháng YYYY-MM (cho calendar)
 // ─────────────────────────────────────────────────────────────
 export function filterKyThuTheoThang(
   kyThuMap: Record<string, KyThuNH[]>,
-  thang:    string, // 'YYYY-MM'
+  thang:    string,
 ): KyThuNH[] {
   return Object.values(kyThuMap)
     .flat()

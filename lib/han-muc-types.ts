@@ -35,6 +35,7 @@ export type LaiSuatLoai = 'co-dinh' | 'tha-noi'
  *  mới là các bộ hồ sơ thực rút vốn). Không set (undefined) = HĐ thông thường,
  *  tương đương 'thong-thuong'. */
 export type LoaiHopDong = 'thong-thuong' | 'han-muc-khung'
+
 export interface HopDongTinDung {
   id:              string
   soHopDong:       string
@@ -62,9 +63,26 @@ export interface HopDongTinDung {
   loaiHD?:         LoaiHopDong   // 'han-muc-khung' nếu đây là HĐ hạn mức khung, không giải ngân trực tiếp
   hanMucKhungId?:  string        // FK → HopDongTinDung.id của HĐ hạn mức khung (nếu đây là bộ hồ sơ con thuộc 1 khung)
   soBoHoSo?:       string        // số bộ hồ sơ giải ngân (chỉ dùng khi hanMucKhungId có giá trị) — hiển thị thay soHopDong nếu có
+
+  // ── Mã ngân sách (tự sinh khi lưu, dùng để đối chiếu data_quy) ──────────
+  // Xem lib/ma-ngan-sach.ts — taoBoMaNganSach() để biết công thức sinh mã.
+  // Nhánh DN:  maNganSachLai = {ENTITY}_{NH|DH}_{BANK}_Lai
+  //            maNganSachGoc = {ENTITY}_{NH|DH}_{BANK}_Goc
+  //            maNganSachThu = T_VNH_{BANK}_{ENTITY}    (chỉ ngắn hạn)
+  // Nhánh CN:  maNganSachLai = {NguoiVay}_{BANK}_{Ty}_Lai
+  //            maNganSachGoc = {NguoiVay}_{BANK}_{Ty}_Goc
+  //            maNganSachThu = undefined (CN không có mã Thu)
+  // canhBaoMa: set khi nhánh Cá nhân thiếu nguoiVay hoặc soTienGiaiNgan
+  //            → UI HopDongForm hiển thị cảnh báo vàng cho người dùng biết
+  maNganSachLai?: string
+  maNganSachGoc?: string
+  maNganSachThu?: string
+  canhBaoMa?:    string
+
   createdAt:       number
   updatedAt:       number
 }
+
 export interface KyTraNo {
   id:              string
   hopDongId:       string
@@ -82,6 +100,7 @@ export interface KyTraNo {
   laiThucTra?:     number   // lãi thực trả — có thể lệch với laiTra kế hoạch
   coCauId?:        string
 }
+
 export interface CoCauNo {
   id:              string
   hopDongId:       string

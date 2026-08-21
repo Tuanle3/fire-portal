@@ -52,6 +52,19 @@ export interface HanMucNganHan {
   ghiChu?:       string
 
   trangThai:     TrangThaiKhung
+
+  // ── Mã ngân sách (tự sinh khi lưu, dùng để đối chiếu data_quy) ──────────
+  // HanMucNganHan luôn là pháp nhân DN (Nhánh A, kyHan='ngan-han').
+  // Xem lib/ma-ngan-sach.ts — taoBoMaNganSach() để biết công thức sinh mã.
+  //   maNganSachLai = {ENTITY}_NH_{BANK}_Lai
+  //   maNganSachGoc = {ENTITY}_NH_{BANK}_Goc
+  //   maNganSachThu = T_VNH_{BANK}_{ENTITY}
+  // Không có canhBaoMa vì HanMucNganHan chỉ dùng Nhánh A (DN), không bao
+  // giờ thiếu dữ liệu để sinh mã (entity + nganHang luôn bắt buộc nhập).
+  maNganSachLai?: string
+  maNganSachGoc?: string
+  maNganSachThu?: string
+
   createdAt:     number
   updatedAt:     number
 }

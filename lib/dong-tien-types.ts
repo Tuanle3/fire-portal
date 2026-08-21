@@ -133,7 +133,7 @@ export function getLoaiKhoan(k: KhoanDongTien): LoaiKhoan {
 // ─────────────────────────────────────────────────────────
 // Type hợp nhất (Phần 3) — nhập tay + tự động hạn mức
 // ─────────────────────────────────────────────────────────
-export type NguonDongTien = 'nhap-tay' | 'kytra-no' | 'kythu-nh' | 'giai-ngan'
+export type NguonDongTien = 'nhap-tay' | 'kytra-no' | 'kythu-nh' | 'giai-ngan' | 'so-quy-thuc-te'
 
 export interface DongTienItem {
   id:           string
