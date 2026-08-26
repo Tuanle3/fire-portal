@@ -7,7 +7,7 @@
 //   tong-hop    — Báo cáo thực hiện (TabTongHop)
 //   giai-phap   — Giải pháp cân đối (TabGiaiPhap)
 // ============================================================
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useUserSession }   from '@/contexts/user-session'
 import { useTopbarInfo }    from '@/contexts/topbar-info'
 import NhSharedStyles       from '@/components/NhSharedStyles'
@@ -23,6 +23,7 @@ import { TabGiaiPhap }  from './TabGiaiPhap'
 // ── Data layer ───────────────────────────────────────────────
 import { subscribeNganSach, saveNganSach } from '@/lib/ngan-sach-store'
 import { subscribeKmcpPlanned }            from '@/lib/ngan-sach-vay-mapping'
+import { matchKMCP }                        from '@/lib/ngan-sach-mapping'
 
 import { DEFAULT_ITEMS, DEFAULT_GIAI_PHAP } from '@/lib/ngan-sach-types'
 import type { NganSachThang } from '@/lib/ngan-sach-types'
@@ -63,11 +64,6 @@ export default function TestDongTienPage() {
 
   const [tab,   setTab]   = useState<Tab>('dong-tien')
   const [month, setMonth] = useState(defaultThang())
-  const [tuNgay, setTuNgay] = useState(`${defaultThang()}-01`)
-  const [denNgay, setDenNgay] = useState(() => {
-    const d = new Date(); const y = d.getFullYear(); const m = d.getMonth()
-    return `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`
-  })
 
   // ── Dữ liệu ngân sách Firestore ─────────────────────────────
   const [localData, setLocalData] = useState<NganSachThang>(makeEmptyDoc(month))
@@ -100,30 +96,19 @@ export default function TestDongTienPage() {
       </div>
     )
     setRight(
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <label style={{ fontSize: 12, color: '#6B7280' }}>Từ</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label style={{ fontSize: 12, color: '#6B7280' }}>Tháng</label>
         <input
-          type="date"
+          type="month"
           className="nh-input"
-          style={{ width: 145 }}
-          value={tuNgay}
-          onChange={e => {
-            setTuNgay(e.target.value)
-            setMonth(e.target.value.slice(0, 7))
-          }}
-        />
-        <label style={{ fontSize: 12, color: '#6B7280' }}>Đến</label>
-        <input
-          type="date"
-          className="nh-input"
-          style={{ width: 145 }}
-          value={denNgay}
-          onChange={e => setDenNgay(e.target.value)}
+          style={{ width: 140 }}
+          value={month}
+          onChange={e => setMonth(e.target.value)}
         />
       </div>
     )
     return () => { setLeft(null); setRight(null) }
-  }, [setLeft, setRight, tuNgay, denNgay])
+  }, [setLeft, setRight, month])
 
   // ── Subscribe Firestore ngân sách ────────────────────────────
   useEffect(() => {
@@ -138,7 +123,7 @@ export default function TestDongTienPage() {
     return subscribeDongTienTuHanMuc(hanMucData => {
       const acc: Record<string, number> = {}
       for (const it of hanMucData.items) {
-        if (it.ngay < tuNgay || it.ngay > denNgay) continue
+        if (!it.ngay.startsWith(month)) continue
         // Chỉ lấy khoản đã thực hiện (trangThai = thuc-te)
         if (it.trangThai !== 'thuc-te') continue
         // Khớp nguồn vay → KMCP
@@ -164,7 +149,7 @@ export default function TestDongTienPage() {
       }
       setHanMucActual(acc)
     })
-  }, [month, tuNgay, denNgay])
+  }, [month])
 
   // ── Subscribe data_quy (Google Sheets → Firebase RTDB) ──────
   // subscribeDongTienTuQuy đọc RTDB node "data_quy", parse rows,
@@ -181,7 +166,7 @@ export default function TestDongTienPage() {
       setTonQuyLoading(false)
 
       // Build kmcpActual từ hoatDong (CP thường, đã loại vay NH)
-      // Lọc theo khoảng tuNgay → denNgay (không chỉ theo tháng)
+      // hoatDong.nhom = Mã ngân sách từ sổ quỹ → khớp đúng KMCP
       const actualFromHoatDong: Record<string, number> = {}
       for (const item of quyData.hoatDong) {
         if (item.ngay < tuNgay || item.ngay > denNgay) continue
@@ -189,8 +174,22 @@ export default function TestDongTienPage() {
         actualFromHoatDong[item.nhom] = (actualFromHoatDong[item.nhom] ?? 0) + item.soTien
       }
 
+      // Fallback: dòng khongXacDinh (có Nhóm_CP nhưng không có Mã ngân sách)
+      // → matchKMCP để map Nhóm_CP → KMCP chuẩn
+      for (const r of quyData.khongXacDinh) {
+        const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
+        if (!ngay || ngay < tuNgay || ngay > denNgay) continue
+        const ghiChu = String(r['Ghi_chu'] ?? '')
+        if (ghiChu === 'Dư đầu kỳ' || ghiChu === 'Dư cuối kỳ') continue
+        const nhomCP = String(r['Nhóm_CP'] ?? r['Nhom_CP'] ?? '')
+        const kmcp = matchKMCP(nhomCP, ghiChu)
+        if (!kmcp) continue
+        const ps = Math.abs(Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0))
+        if (!ps) continue
+        actualFromHoatDong[kmcp] = (actualFromHoatDong[kmcp] ?? 0) + ps
+      }
+
       // Build vayActual từ vayRows (5 dòng vay NH)
-      // Lọc theo khoảng tuNgay → denNgay
       const vayActual: Record<string, number> = {}
       for (const vr of quyData.vayRows) {
         if (vr.ngay < tuNgay || vr.ngay > denNgay) continue
@@ -227,7 +226,7 @@ export default function TestDongTienPage() {
     setSaving(true)
     setSaveMsg('')
     try {
-      await saveNganSach(localData)
+      await saveNganSach(month, localData)
       setSaveMsg('✅ Đã lưu')
     } catch {
       setSaveMsg('❌ Lỗi lưu')
@@ -318,10 +317,11 @@ export default function TestDongTienPage() {
             {tab === 'ke-hoach' && (
               <TabKeHoach
                 data={localData}
-                month={month} 
+                month={month}
                 onChange={setLocalData}
                 onSave={handleSave}
                 saving={saving}
+                saveMsg={saveMsg}
                 kmcpActual={kmcpActualFinal}
                 kmcpPlanned={kmcpPlanned}
                 tonQuySoDu={tonQuy}
@@ -347,9 +347,11 @@ export default function TestDongTienPage() {
             {tab === 'giai-phap' && (
               <TabGiaiPhap
                 data={localData}
+                month={month}
                 onChange={setLocalData}
                 onSave={handleSave}
                 saving={saving}
+                saveMsg={saveMsg}
               />
             )}
 
