@@ -41,9 +41,24 @@ const TABS: { key: Tab; label: string; emoji: string }[] = [
   { key: 'giai-phap',  label: 'Giải pháp cân đối',     emoji: '⚖️' },
 ]
 
-function defaultThang(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+function pad2(n: number) { return String(n).padStart(2, '0') }
+
+// Ngày đầu / cuối của 1 tháng, định dạng YYYY-MM-DD (cho <input type="date">)
+function firstDayOfMonth(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`
+}
+function lastDayOfMonth(d: Date = new Date()): string {
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+  return `${last.getFullYear()}-${pad2(last.getMonth() + 1)}-${pad2(last.getDate())}`
+}
+// Tháng dạng "YYYY-MM" lấy từ 1 ngày YYYY-MM-DD
+function thangCuaNgay(ngay: string): string {
+  return ngay.slice(0, 7)
+}
+// Cộng/trừ số tháng vào 1 ngày YYYY-MM-DD, trả về đầu tháng kết quả
+function shiftMonth(ngay: string, delta: number): Date {
+  const [y, m] = ngay.split('-').map(Number)
+  return new Date(y, (m - 1) + delta, 1)
 }
 
 function makeEmptyDoc(thang: string): NganSachThang {
@@ -59,8 +74,15 @@ export default function TestDongTienPage() {
   const { loading: sessLoading, can } = useUserSession()
   const { setLeft, setRight }         = useTopbarInfo()
 
-  const [tab,   setTab]   = useState<Tab>('dong-tien')
-  const [month, setMonth] = useState(defaultThang())
+  const [tab,    setTab]    = useState<Tab>('dong-tien')
+
+  // ── Bộ lọc "Từ ngày – Đến ngày" (dùng chung cho cả 4 tab) ────
+  const [tuNgay,  setTuNgay]  = useState(firstDayOfMonth())
+  const [denNgay, setDenNgay] = useState(lastDayOfMonth())
+
+  // Kế hoạch/Báo cáo/Giải pháp làm việc theo dữ liệu 1 THÁNG (tài liệu
+  // NganSachThang lưu theo tháng) → tháng áp dụng = tháng chứa "Từ ngày"
+  const month = thangCuaNgay(tuNgay)
 
   // ── Dữ liệu ngân sách Firestore ─────────────────────────────
   const [localData, setLocalData] = useState<NganSachThang>(makeEmptyDoc(month))
@@ -91,19 +113,72 @@ export default function TestDongTienPage() {
       </div>
     )
     setRight(
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ fontSize: 12, color: '#6B7280' }}>Tháng</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button
+          title="Tháng trước"
+          onClick={() => {
+            const d = shiftMonth(tuNgay, -1)
+            setTuNgay(firstDayOfMonth(d))
+            setDenNgay(lastDayOfMonth(d))
+          }}
+          style={{
+            width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '1px solid #E5E7EB', borderRadius: 6, background: '#fff', color: '#6B7280',
+            cursor: 'pointer', fontSize: 13, fontFamily: 'inherit',
+          }}
+        >‹</button>
+
+        <label style={{ fontSize: 12, color: '#6B7280' }}>Từ</label>
         <input
-          type="month"
+          type="date"
           className="nh-input"
-          style={{ width: 140 }}
-          value={month}
-          onChange={e => setMonth(e.target.value)}
+          style={{ width: 145 }}
+          value={tuNgay}
+          onChange={e => {
+            const v = e.target.value
+            setTuNgay(v)
+            if (denNgay < v) setDenNgay(v)
+          }}
         />
+        <label style={{ fontSize: 12, color: '#6B7280' }}>Đến</label>
+        <input
+          type="date"
+          className="nh-input"
+          style={{ width: 145 }}
+          value={denNgay}
+          onChange={e => {
+            const v = e.target.value
+            setDenNgay(v)
+            if (tuNgay > v) setTuNgay(v)
+          }}
+        />
+
+        <button
+          title="Tháng sau"
+          onClick={() => {
+            const d = shiftMonth(tuNgay, 1)
+            setTuNgay(firstDayOfMonth(d))
+            setDenNgay(lastDayOfMonth(d))
+          }}
+          style={{
+            width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '1px solid #E5E7EB', borderRadius: 6, background: '#fff', color: '#6B7280',
+            cursor: 'pointer', fontSize: 13, fontFamily: 'inherit',
+          }}
+        >›</button>
+
+        <button
+          title="Về tháng hiện tại"
+          onClick={() => { setTuNgay(firstDayOfMonth()); setDenNgay(lastDayOfMonth()) }}
+          style={{
+            padding: '4px 10px', border: '1px solid #E5E7EB', borderRadius: 6, background: '#fff',
+            color: '#6B7280', cursor: 'pointer', fontSize: 11.5, fontFamily: 'inherit', fontWeight: 600,
+          }}
+        >Tháng này</button>
       </div>
     )
     return () => { setLeft(null); setRight(null) }
-  }, [setLeft, setRight, month])
+  }, [setLeft, setRight, tuNgay, denNgay])
 
   // ── Subscribe Firestore ngân sách ────────────────────────────
   useEffect(() => {
@@ -147,17 +222,17 @@ export default function TestDongTienPage() {
 
       setKmcpActual({ ...actualFromHoatDong, ...vayActual })
 
-      // Thu/Chi tháng (lọc theo month)
+      // Thu/Chi trong khoảng Từ ngày – Đến ngày đang chọn
       let thu = 0, chi = 0
       for (const item of quyData.hoatDong) {
-        if (!item.ngay.startsWith(month)) continue
+        if (item.ngay < tuNgay || item.ngay > denNgay) continue
         if (item.loai === 'thu') thu += item.soTien
         else chi += item.soTien
       }
       setThuThang(thu)
       setChiThang(chi)
     })
-  }, [month])
+  }, [tuNgay, denNgay])
 
   // ── Subscribe kế hoạch tự động vay NH ───────────────────────
   useEffect(() => {
@@ -238,6 +313,17 @@ export default function TestDongTienPage() {
                 )
               })}
             </div>
+
+            {tab !== 'dong-tien' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 11.5, color: '#9CA3AF', marginTop: -10, marginBottom: 12,
+              }}>
+                📌 Đang áp dụng kế hoạch/báo cáo tháng{' '}
+                <b style={{ color: '#1C3557' }}>{month.split('-')[1]}/{month.split('-')[0]}</b>
+                {' '}(theo "Từ ngày" đã chọn ở góc trên bên phải)
+              </div>
+            )}
 
             {/* ── TAB CONTENT ─────────────────────────────────── */}
 
