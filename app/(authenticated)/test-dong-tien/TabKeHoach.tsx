@@ -319,7 +319,6 @@ function KeHoachDongTienSection({ month, entityFilter }: { month: string; entity
             <DongTienForm
               editing={editing}
               loaiKhoanMacDinh="ke-hoach"
-              khoaLoaiKhoan
               onSaved={closeForm}
               onCancel={closeForm}
             />
