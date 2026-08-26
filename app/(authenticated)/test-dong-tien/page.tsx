@@ -138,7 +138,7 @@ export default function TestDongTienPage() {
     return subscribeDongTienTuHanMuc(hanMucData => {
       const acc: Record<string, number> = {}
       for (const it of hanMucData.items) {
-        if (!it.ngay.startsWith(month)) continue
+        if (it.ngay < tuNgay || it.ngay > denNgay) continue
         // Chỉ lấy khoản đã thực hiện (trangThai = thuc-te)
         if (it.trangThai !== 'thuc-te') continue
         // Khớp nguồn vay → KMCP
@@ -164,7 +164,7 @@ export default function TestDongTienPage() {
       }
       setHanMucActual(acc)
     })
-  }, [month])
+  }, [month, tuNgay, denNgay])
 
   // ── Subscribe data_quy (Google Sheets → Firebase RTDB) ──────
   // subscribeDongTienTuQuy đọc RTDB node "data_quy", parse rows,
@@ -181,15 +181,19 @@ export default function TestDongTienPage() {
       setTonQuyLoading(false)
 
       // Build kmcpActual từ hoatDong (CP thường, đã loại vay NH)
+      // Lọc theo khoảng tuNgay → denNgay (không chỉ theo tháng)
       const actualFromHoatDong: Record<string, number> = {}
       for (const item of quyData.hoatDong) {
+        if (item.ngay < tuNgay || item.ngay > denNgay) continue
         if (!item.nhom) continue
         actualFromHoatDong[item.nhom] = (actualFromHoatDong[item.nhom] ?? 0) + item.soTien
       }
 
       // Build vayActual từ vayRows (5 dòng vay NH)
+      // Lọc theo khoảng tuNgay → denNgay
       const vayActual: Record<string, number> = {}
       for (const vr of quyData.vayRows) {
+        if (vr.ngay < tuNgay || vr.ngay > denNgay) continue
         if (!vr.parsed.xacDinh) { vayActual['VAY-KHAC'] = (vayActual['VAY-KHAC'] ?? 0) + vr.soTien; continue }
         const p = vr.parsed
         let kmcp: string
@@ -201,17 +205,17 @@ export default function TestDongTienPage() {
 
       setKmcpActual({ ...actualFromHoatDong, ...vayActual })
 
-      // Thu/Chi tháng (lọc theo month)
+      // Thu/Chi theo khoảng tuNgay → denNgay
       let thu = 0, chi = 0
       for (const item of quyData.hoatDong) {
-        if (!item.ngay.startsWith(month)) continue
+        if (item.ngay < tuNgay || item.ngay > denNgay) continue
         if (item.loai === 'thu') thu += item.soTien
         else chi += item.soTien
       }
       setThuThang(thu)
       setChiThang(chi)
     })
-  }, [month])
+  }, [month, tuNgay, denNgay])
 
   // ── Subscribe kế hoạch tự động vay NH ───────────────────────
   useEffect(() => {
