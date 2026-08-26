@@ -318,11 +318,9 @@ export default function TestDongTienPage() {
             {tab === 'ke-hoach' && (
               <TabKeHoach
                 data={localData}
-                month={month}
                 onChange={setLocalData}
                 onSave={handleSave}
                 saving={saving}
-                saveMsg={saveMsg}
                 kmcpActual={kmcpActualFinal}
                 kmcpPlanned={kmcpPlanned}
                 tonQuySoDu={tonQuy}
@@ -348,11 +346,9 @@ export default function TestDongTienPage() {
             {tab === 'giai-phap' && (
               <TabGiaiPhap
                 data={localData}
-                month={month}
                 onChange={setLocalData}
                 onSave={handleSave}
                 saving={saving}
-                saveMsg={saveMsg}
               />
             )}
 
