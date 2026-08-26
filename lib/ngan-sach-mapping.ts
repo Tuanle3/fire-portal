@@ -1,5 +1,17 @@
 // Maps Nhóm_CP values from data_quy → KMCP budget codes
 // Uses lowercase substring matching, so "CPHĐ - Phí ngân hàng" → "CP-Bank"
+//
+// ⚠️ BỔ SUNG (gộp module Test Dòng tiền → Ngân sách): các dòng vay ngân hàng
+// (Nhánh A doanh nghiệp, Nhánh B cá nhân, hoặc pattern lịch sử tự do
+// NV_/Ngoai_/TTD_) được nhận diện qua `parseMaNganSach()` (nguồn công thức
+// chân lý dùng chung với module Hạn mức tín dụng — xem lib/ma-ngan-sach.ts)
+// và bị LOẠI khỏi `buildKmcpActual()` để không đếm trùng — module Hạn mức
+// tín dụng đã có kỳ trả nợ riêng, chính xác hơn theo từng hợp đồng. Dùng
+// `buildVayActual()` (mới) để lấy số liệu Thực hiện riêng cho 5 mã KMCP vay
+// (VAY-GOC-DN, VAY-LAI-DN, VAY-GOC-CN, VAY-LAI-CN, THU-VAY) — page.tsx merge
+// kết quả này vào cùng object `kmcpActual` truyền xuống UI, nên TabTongHop /
+// TabKeHoach không cần sửa gì thêm cho phần "Đã thực hiện" của 5 dòng này.
+import { parseMaNganSach } from '@/lib/ma-ngan-sach'
 
 interface MappingRule {
   kmcp: string
@@ -62,6 +74,8 @@ export function findKey(rows: any[], normTarget: string): string | undefined {
 
 // Build KMCP → total amount map from data_quy rows for a given month
 // Chỉ tính "Thực hiện" cho các row có cột Loại = "Thực tế"
+// ⚠️ Dòng vay ngân hàng (parseMaNganSach khớp) bị LOẠI khỏi hàm này — xem
+// buildVayActual() bên dưới.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildKmcpActual(rows: any[], month: string): Record<string, number> {
   const result: Record<string, number> = {}
@@ -83,10 +97,56 @@ export function buildKmcpActual(rows: any[], month: string): Record<string, numb
     if (ghiChu === 'Dư đầu kỳ' || ghiChu === 'Dư cuối kỳ') continue
 
     const maNS  = maNSKey ? String(r[maNSKey] ?? '').trim() : ''
+
+    // ── Dòng vay NH (Nhánh A/B hoặc pattern lịch sử tự do) — loại khỏi tổng
+    //     KMCP thường, xem riêng qua buildVayActual() để tránh đếm 2 lần ──
+    if (maNS && parseMaNganSach(maNS)) continue
+
     const nhomCP = String(r['Nhóm_CP'] ?? r['Nhom_CP'] ?? '')
     const kmcp  = maNS || matchKMCP(nhomCP, ghiChu)
     if (!kmcp) continue
 
+    result[kmcp] = (result[kmcp] ?? 0) + Math.abs(ps)
+  }
+
+  return result
+}
+
+// Build map "Đã thực hiện" RIÊNG cho 5 mã KMCP vay ngân hàng (khai báo ở
+// DEFAULT_ITEMS trong ngan-sach-types.ts), khớp qua parseMaNganSach() —
+// dùng CHUNG công thức mã với module Hạn mức tín dụng nên không lệch số.
+// Dòng "xacDinh: false" (pattern lịch sử tự do NV_/Ngoai_/TTD_) gom vào
+// 'VAY-KHAC' — đại ca cần soát tay riêng, không tự động khớp được.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function buildVayActual(rows: any[], month: string): Record<string, number> {
+  const result: Record<string, number> = {}
+  const maNSKey = findKey(rows, 'mangansach')
+  const loaiKey = findKey(rows, 'loai')
+
+  for (const r of rows) {
+    const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
+    if (!ngay.startsWith(month)) continue
+    if (loaiKey) {
+      const loai = String(r[loaiKey] ?? '').trim()
+      if (loai && loai !== 'Thực tế') continue
+    }
+
+    const maNS = maNSKey ? String(r[maNSKey] ?? '').trim() : ''
+    if (!maNS) continue
+    const parsed = parseMaNganSach(maNS)
+    if (!parsed) continue
+
+    const ps = Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0)
+    let kmcp: string
+    if (!parsed.xacDinh) {
+      kmcp = 'VAY-KHAC'
+    } else if (parsed.loaiKhoan === 'thu-giai-ngan') {
+      kmcp = 'THU-VAY'
+    } else if (parsed.nhanh === 'ca-nhan') {
+      kmcp = parsed.loaiKhoan === 'lai' ? 'VAY-LAI-CN' : 'VAY-GOC-CN'
+    } else {
+      kmcp = parsed.loaiKhoan === 'lai' ? 'VAY-LAI-DN' : 'VAY-GOC-DN'
+    }
     result[kmcp] = (result[kmcp] ?? 0) + Math.abs(ps)
   }
 

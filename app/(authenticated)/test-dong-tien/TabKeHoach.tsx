@@ -4,6 +4,14 @@ import * as XLSX from 'xlsx'
 import { NganSachThang, NganSachItem, GiaiPhap, DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
 import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup } from '@/lib/ngan-sach-store'
 
+// ── Section mới (song song, không đụng bảng KMCP cũ) — Kế hoạch nhập qua
+//    dongTienItems (loaiKhoan='ke-hoach'), tái dùng DongTienForm ──────────
+import type { KhoanDongTien } from '@/lib/dong-tien-types'
+import { subscribeKeHoachThang } from '@/lib/dong-tien-ke-hoach-store'
+import { deleteKhoanDongTien } from '@/lib/dong-tien-store'
+import DongTienForm from './DongTienForm'
+import type { EntityType } from '@/lib/han-muc-types'
+
 // Sinh file mẫu Excel ở client theo đúng cấu trúc tháng đang chọn.
 // - Nội dung gốc = các dòng đã lưu của tháng (đã gồm phần tích luỹ qua các tháng).
 // - Tự bổ sung các mã KMCP đã khai báo (DEFAULT_ITEMS) nếu tháng đó còn thiếu.
@@ -190,6 +198,138 @@ const SECTION_COLORS: Record<string, string> = {
   A: '#ECFDF5', B: '#EFF6FF', C: '#FFF7ED', D: '#FEF3C7', E: '#F0FDF4',
 }
 
+// ── Nhãn diễn giải theo mã KMCP cũ (dùng để hiển thị tên trong section mới) ──
+const KMCP_LABEL_ALL: Record<string, string> = Object.fromEntries(
+  DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp).map(d => [d.kmcp as string, d.dien_giai]),
+)
+
+/**
+ * SECTION MỚI — Kế hoạch nhập qua dongTienItems (loaiKhoan='ke-hoach').
+ * Chạy SONG SONG với bảng KMCP cũ bên dưới (không đụng ngan_sach.items),
+ * dùng lại nguyên DongTienForm để nhập (loaiKhoanMacDinh="ke-hoach",
+ * khoaLoaiKhoan để khoá radio Kế hoạch/Thực hiện vì ngữ cảnh đã rõ).
+ * Tự lọc theo tháng (subscribeKeHoachThang) + entityFilter dùng chung
+ * từ page.tsx (nếu có).
+ */
+function KeHoachDongTienSection({ month, entityFilter }: { month: string; entityFilter?: EntityType | 'all' }) {
+  const [items, setItems]   = useState<KhoanDongTien[]>([])
+  const [open, setOpen]     = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing]   = useState<KhoanDongTien | null>(null)
+
+  useEffect(() => {
+    return subscribeKeHoachThang(month, setItems, entityFilter && entityFilter !== 'all' ? entityFilter : undefined)
+  }, [month, entityFilter])
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { thu: KhoanDongTien[]; chi: KhoanDongTien[] }>()
+    for (const it of items) {
+      const kmcp = it.nhom
+      if (!map.has(kmcp)) map.set(kmcp, { thu: [], chi: [] })
+      map.get(kmcp)![it.loai === 'thu' ? 'thu' : 'chi'].push(it)
+    }
+    return map
+  }, [items])
+
+  const tongThu = items.filter(i => i.loai === 'thu').reduce((s, i) => s + i.soTien, 0)
+  const tongChi = items.filter(i => i.loai === 'chi').reduce((s, i) => s + i.soTien, 0)
+
+  const openNew = () => { setEditing(null); setShowForm(true) }
+  const openEdit = (it: KhoanDongTien) => { setEditing(it); setShowForm(true) }
+  const closeForm = () => { setShowForm(false); setEditing(null) }
+
+  const xoa = async (it: KhoanDongTien) => {
+    if (!confirm(`Xoá khoản "${it.moTa}"?`)) return
+    try { await deleteKhoanDongTien(it.id) } catch { alert('Xoá thất bại, thử lại.') }
+  }
+
+  const fmt = (n: number) => n.toLocaleString('vi-VN')
+
+  return (
+    <div style={{ border: '1px solid #BFDBFE', borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '10px 14px', background: '#EFF6FF', cursor: 'pointer',
+      }} onClick={() => setOpen(v => !v)}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13 }}>{open ? '▾' : '▸'}</span>
+          <span style={{ fontWeight: 700, fontSize: 13, color: '#1C3557' }}>📥 Kế hoạch nhập qua Dòng tiền (mới)</span>
+          <span style={{ fontSize: 11, color: '#6B7280' }}>({items.length} khoản)</span>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <span style={{ fontSize: 11.5, color: '#166534' }}>Thu: {fmt(tongThu)} ₫</span>
+          <span style={{ fontSize: 11.5, color: '#991B1B' }}>Chi: {fmt(tongChi)} ₫</span>
+          <button
+            onClick={e => { e.stopPropagation(); openNew() }}
+            style={{
+              padding: '5px 12px', background: '#1C3557', color: '#fff', border: 'none',
+              borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer',
+            }}
+          >➕ Thêm khoản kế hoạch</button>
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ padding: items.length ? '10px 14px' : '20px 14px' }}>
+          {items.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 12.5 }}>
+              Chưa có khoản kế hoạch nào nhập qua Dòng tiền cho tháng này.
+            </div>
+          )}
+          {[...grouped.entries()].map(([kmcp, g]) => (
+            <div key={kmcp} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#374151', marginBottom: 3 }}>
+                {kmcp} — {KMCP_LABEL_ALL[kmcp] ?? kmcp}
+              </div>
+              {[...g.thu, ...g.chi].map(it => (
+                <div key={it.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px',
+                  fontSize: 12, borderBottom: '1px solid #F3F4F6',
+                }}>
+                  <span style={{
+                    width: 30, textAlign: 'center', fontWeight: 700, fontSize: 10,
+                    color: it.loai === 'thu' ? '#166534' : '#991B1B',
+                  }}>{it.loai === 'thu' ? 'THU' : 'CHI'}</span>
+                  <span style={{ width: 70, color: '#6B7280' }}>{it.entity}</span>
+                  <span style={{ flex: 1 }}>{it.moTa}</span>
+                  <span style={{ width: 90, color: '#9CA3AF' }}>{it.ngayDuKien}</span>
+                  <span style={{ width: 130, textAlign: 'right', fontWeight: 600 }}>{fmt(it.soTien)} ₫</span>
+                  {it.lap && it.lap !== 'mot-lan' && (
+                    <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#F3E8FF', color: '#6B21A8' }}>
+                      {it.lap === 'hang-thang' ? 'Hàng tháng' : 'Hàng quý'}
+                    </span>
+                  )}
+                  <button onClick={() => openEdit(it)} title="Sửa"
+                    style={{ ...BtnSmall('#F3F4F6', '#374151'), width: 20, height: 20, fontSize: 11 }}>✎</button>
+                  <button onClick={() => xoa(it)} title="Xoá"
+                    style={{ ...BtnSmall('#FEE2E2', '#991B1B'), width: 20, height: 20, fontSize: 11 }}>✕</button>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50,
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto',
+        }} onClick={closeForm}>
+          <div style={{ width: '100%', maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+            <DongTienForm
+              editing={editing}
+              loaiKhoanMacDinh="ke-hoach"
+              khoaLoaiKhoan
+              onSaved={closeForm}
+              onCancel={closeForm}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface TonQuyAcc { stk: string; bank: string; unit: string; dauKy: number; ton: number }
 
 interface Props {
@@ -204,9 +344,10 @@ interface Props {
   tonQuySoDu: number
   tonQuyRealtime: number
   tonQuyDetail?: TonQuyAcc[]
+  entityFilter?: EntityType | 'all'      // dùng cho section Kế hoạch mới (dongTienItems)
 }
 
-export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = '', kmcpActual, kmcpPlanned, tonQuySoDu, tonQuyRealtime, tonQuyDetail = [] }: Props) {
+export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = '', kmcpActual, kmcpPlanned, tonQuySoDu, tonQuyRealtime, tonQuyDetail = [], entityFilter }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showTonQuyDetail, setShowTonQuyDetail] = useState(false)
@@ -481,6 +622,8 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
 
         </div>
       </div>
+
+      <KeHoachDongTienSection month={month} entityFilter={entityFilter} />
 
       <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>

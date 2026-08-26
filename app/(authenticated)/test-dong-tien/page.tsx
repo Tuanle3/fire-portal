@@ -7,7 +7,7 @@
 //   tong-hop    — Báo cáo thực hiện (TabTongHop)
 //   giai-phap   — Giải pháp cân đối (TabGiaiPhap)
 // ============================================================
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useUserSession }   from '@/contexts/user-session'
 import { useTopbarInfo }    from '@/contexts/topbar-info'
 import NhSharedStyles       from '@/components/NhSharedStyles'
@@ -29,6 +29,12 @@ import type { NganSachThang } from '@/lib/ngan-sach-types'
 
 // ── Sổ quỹ data_quy (Google Sheets → Firebase RTDB) ─────────
 import { subscribeDongTienTuQuy } from '@/lib/dong-tien-quy-adapter'
+
+// ── Kế hoạch = dongTienItems (loaiKhoan='ke-hoach'), thay cho
+//    ngan_sach.items cố định cũ — xem Bước A của bản refactor ──
+import { subscribeKeHoachThang } from '@/lib/dong-tien-ke-hoach-store'
+import { buildKeHoachPlanned, mergeKeHoachPlanned } from '@/lib/dong-tien-ke-hoach-adapter'
+import type { EntityType } from '@/lib/han-muc-types'
 
 // ============================================================
 
@@ -80,6 +86,12 @@ export default function TestDongTienPage() {
   const [tuNgay,  setTuNgay]  = useState(firstDayOfMonth())
   const [denNgay, setDenNgay] = useState(lastDayOfMonth())
 
+  // ── Bộ lọc Pháp nhân — dùng chung cho Kế hoạch/Báo cáo/Giải pháp
+  //    (Bước E). 'all' = Toàn tập đoàn, không lọc. ────────────────
+  const [entityFilter, setEntityFilter] = useState<EntityType | 'all'>('all')
+  const ENTITY_FILTERS: (EntityType | 'all')[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
+  const entityLabel = (e: EntityType | 'all') => e === 'all' ? 'Toàn tập đoàn' : e
+
   // Kế hoạch/Báo cáo/Giải pháp làm việc theo dữ liệu 1 THÁNG (tài liệu
   // NganSachThang lưu theo tháng) → tháng áp dụng = tháng chứa "Từ ngày"
   const month = thangCuaNgay(tuNgay)
@@ -91,8 +103,15 @@ export default function TestDongTienPage() {
 
   // ── kmcpActual = thực hiện thường + thực hiện vay NH ────────
   const [kmcpActual,   setKmcpActual]   = useState<Record<string, number>>({})
-  // kmcpPlanned = kế hoạch tự động cho 5 dòng vay NH
-  const [kmcpPlanned,  setKmcpPlanned]  = useState<Record<string, number>>({})
+  // kmcpPlanned = 2 nguồn cộng lại:
+  //   1) kmcpPlannedVay      — AUTO cho 5 dòng vay NH (ngan-sach-vay-mapping.ts, giữ nguyên)
+  //   2) kmcpPlannedKeHoach  — từ dongTienItems (loaiKhoan='ke-hoach'), nhập ở Tab Kế hoạch (MỚI)
+  const [kmcpPlannedVay,      setKmcpPlannedVay]      = useState<Record<string, number>>({})
+  const [kmcpPlannedKeHoach,  setKmcpPlannedKeHoach]  = useState<Record<string, number>>({})
+  const kmcpPlanned = useMemo(
+    () => mergeKeHoachPlanned(kmcpPlannedVay, kmcpPlannedKeHoach),
+    [kmcpPlannedVay, kmcpPlannedKeHoach],
+  )
 
   // ── Tồn quỹ ─────────────────────────────────────────────────
   
@@ -191,6 +210,9 @@ export default function TestDongTienPage() {
   // subscribeDongTienTuQuy đọc RTDB node "data_quy", parse rows,
   // trả về { hoatDong, vayRows, khongXacDinh, tonQuyRealtime }
   useEffect(() => {
+    // subscribeDongTienTuQuy đã hỗ trợ tham số entityFilter — nếu chữ ký
+    // thực tế của hàm (trong dong-tien-quy-adapter.ts) khác vị trí/tên
+    // tham số này, chỉ cần sửa lại dòng gọi hàm ngay dưới đây.
     return subscribeDongTienTuQuy(quyData => {
       // Gom tất cả raw rows từ hoatDong + vayRows để build KMCP maps
       // (dong-tien-quy-adapter đã parse + filter Thực tế rồi, nhưng
@@ -231,13 +253,25 @@ export default function TestDongTienPage() {
       }
       setThuThang(thu)
       setChiThang(chi)
-    })
-  }, [tuNgay, denNgay])
+    }, entityFilter === 'all' ? undefined : entityFilter)
+  }, [tuNgay, denNgay, entityFilter])
 
-  // ── Subscribe kế hoạch tự động vay NH ───────────────────────
+  // ── Subscribe kế hoạch tự động vay NH (5 dòng vay — giữ nguyên) ──
   useEffect(() => {
-    return subscribeKmcpPlanned(month, setKmcpPlanned)
+    return subscribeKmcpPlanned(month, setKmcpPlannedVay)
   }, [month])
+
+  // ── Subscribe kế hoạch nhập tay (dongTienItems, loaiKhoan='ke-hoach')
+  //    — MỚI, thay cho việc đọc data.items từ NganSachThang (Bước A+D).
+  //    subscribeKeHoachThang tự lọc theo ngayDuKien trong khoảng đầu–cuối
+  //    tháng, nên mỗi tháng chỉ nhận đúng 1 kỳ của các khoản lặp. ──────
+  useEffect(() => {
+    return subscribeKeHoachThang(
+      month,
+      items => setKmcpPlannedKeHoach(buildKeHoachPlanned(items).planned),
+      entityFilter === 'all' ? undefined : entityFilter,
+    )
+  }, [month, entityFilter])
 
   // ── Save ─────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
@@ -325,6 +359,27 @@ export default function TestDongTienPage() {
               </div>
             )}
 
+            {tab !== 'dong-tien' && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                {ENTITY_FILTERS.map(e => {
+                  const active = entityFilter === e
+                  return (
+                    <button
+                      key={e}
+                      onClick={() => setEntityFilter(e)}
+                      style={{
+                        padding: '5px 12px', fontSize: 12, fontWeight: active ? 700 : 500,
+                        borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+                        border: '1px solid ' + (active ? '#1C3557' : '#E5E7EB'),
+                        background: active ? '#1C3557' : '#fff',
+                        color: active ? '#fff' : '#6B7280',
+                      }}
+                    >{entityLabel(e)}</button>
+                  )
+                })}
+              </div>
+            )}
+
             {/* ── TAB CONTENT ─────────────────────────────────── */}
 
             {tab === 'dong-tien' && <TabDongTien />}
@@ -342,6 +397,7 @@ export default function TestDongTienPage() {
                 tonQuySoDu={tonQuy}
                 tonQuyRealtime={tonQuy}
                 tonQuyDetail={[]}
+                entityFilter={entityFilter}
               />
             )}
 
