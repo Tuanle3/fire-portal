@@ -7,7 +7,7 @@
 //   tong-hop    — Báo cáo thực hiện (TabTongHop)
 //   giai-phap   — Giải pháp cân đối (TabGiaiPhap)
 // ============================================================
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useUserSession }   from '@/contexts/user-session'
 import { useTopbarInfo }    from '@/contexts/topbar-info'
 import NhSharedStyles       from '@/components/NhSharedStyles'
@@ -207,7 +207,7 @@ export default function TestDongTienPage() {
     setSaving(true)
     setSaveMsg('')
     try {
-      await saveNganSach(month, localData)
+      await saveNganSach(localData)
       setSaveMsg('✅ Đã lưu')
     } catch {
       setSaveMsg('❌ Lỗi lưu')
@@ -328,11 +328,9 @@ export default function TestDongTienPage() {
             {tab === 'giai-phap' && (
               <TabGiaiPhap
                 data={localData}
-                month={month}
                 onChange={setLocalData}
                 onSave={handleSave}
                 saving={saving}
-                saveMsg={saveMsg}
               />
             )}
 
