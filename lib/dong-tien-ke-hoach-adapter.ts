@@ -52,15 +52,7 @@ export function buildKeHoachPlanned(items: KhoanDongTien[]): KeHoachPlannedResul
   return { planned, itemsByKmcp }
 }
 
-/**
- * Merge kế hoạch từ dongTienItems vào kmcpPlanned đã có sẵn (hiện tại chỉ
- * gồm 5 dòng vay NH tự động từ ngan-sach-vay-mapping.ts / subscribeKmcpPlanned).
- *
- * Cộng dồn nếu trùng mã thay vì ghi đè — 2 nguồn về nguyên tắc không trùng
- * mã (vay NH luôn dùng VAY-GOC-DN/VAY-LAI-DN/VAY-GOC-CN/VAY-LAI-CN/THU-VAY,
- * còn lại dùng DT-*/CP-*/THU-*), nhưng cộng dồn vẫn an toàn hơn ghi đè nếu
- * sau này có mã trùng ngoài ý muốn — không bao giờ làm mất số đã có.
- */
+/** Merge ke hoach tu dongTienItems vao kmcpPlanned. Cong don neu trung ma. */
 export function mergeKeHoachPlanned(
   base: Record<string, number>,
   fromDongTien: Record<string, number>,
