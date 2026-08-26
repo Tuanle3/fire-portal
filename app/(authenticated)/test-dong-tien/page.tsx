@@ -7,7 +7,7 @@
 //   tong-hop    — Báo cáo thực hiện (TabTongHop)
 //   giai-phap   — Giải pháp cân đối (TabGiaiPhap)
 // ============================================================
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useUserSession }   from '@/contexts/user-session'
 import { useTopbarInfo }    from '@/contexts/topbar-info'
 import NhSharedStyles       from '@/components/NhSharedStyles'
@@ -63,6 +63,11 @@ export default function TestDongTienPage() {
 
   const [tab,   setTab]   = useState<Tab>('dong-tien')
   const [month, setMonth] = useState(defaultThang())
+  const [tuNgay, setTuNgay] = useState(`${defaultThang()}-01`)
+  const [denNgay, setDenNgay] = useState(() => {
+    const d = new Date(); const y = d.getFullYear(); const m = d.getMonth()
+    return `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`
+  })
 
   // ── Dữ liệu ngân sách Firestore ─────────────────────────────
   const [localData, setLocalData] = useState<NganSachThang>(makeEmptyDoc(month))
@@ -95,19 +100,30 @@ export default function TestDongTienPage() {
       </div>
     )
     setRight(
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ fontSize: 12, color: '#6B7280' }}>Tháng</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label style={{ fontSize: 12, color: '#6B7280' }}>Từ</label>
         <input
-          type="month"
+          type="date"
           className="nh-input"
-          style={{ width: 140 }}
-          value={month}
-          onChange={e => setMonth(e.target.value)}
+          style={{ width: 145 }}
+          value={tuNgay}
+          onChange={e => {
+            setTuNgay(e.target.value)
+            setMonth(e.target.value.slice(0, 7))
+          }}
+        />
+        <label style={{ fontSize: 12, color: '#6B7280' }}>Đến</label>
+        <input
+          type="date"
+          className="nh-input"
+          style={{ width: 145 }}
+          value={denNgay}
+          onChange={e => setDenNgay(e.target.value)}
         />
       </div>
     )
     return () => { setLeft(null); setRight(null) }
-  }, [setLeft, setRight, month])
+  }, [setLeft, setRight, tuNgay, denNgay])
 
   // ── Subscribe Firestore ngân sách ────────────────────────────
   useEffect(() => {
@@ -207,7 +223,7 @@ export default function TestDongTienPage() {
     setSaving(true)
     setSaveMsg('')
     try {
-      await saveNganSach(localData)
+      await saveNganSach(month, localData)
       setSaveMsg('✅ Đã lưu')
     } catch {
       setSaveMsg('❌ Lỗi lưu')
@@ -328,9 +344,11 @@ export default function TestDongTienPage() {
             {tab === 'giai-phap' && (
               <TabGiaiPhap
                 data={localData}
+                month={month}
                 onChange={setLocalData}
                 onSave={handleSave}
                 saving={saving}
+                saveMsg={saveMsg}
               />
             )}
 
