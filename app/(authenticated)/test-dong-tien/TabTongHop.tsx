@@ -118,7 +118,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
   const unallocatedChi = Math.max(0, chiThang - matchedChi)
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div>
       <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 700, fontSize: 15, color: '#1C3557', textTransform: 'uppercase' }}>
           Kế hoạch dòng tiền {thangLabel}
@@ -156,6 +156,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
         </button>
       </div>
 
+      <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 8 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, fontFamily: 'inherit' }}>
         <thead>
           <tr style={{ background: '#1C3557', color: '#fff' }}>
@@ -373,6 +374,7 @@ export function TabTongHop({ data, tonQuySoDu, tonQuyRealtime, tonQuySoDuLoading
           </tr>
         </tbody>
       </table>
+      </div>
 
       <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: '#6B7280', flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><AutoBadge /> Tự động từ Firebase (Nhóm_CP)</span>
@@ -392,7 +394,11 @@ function AutoBadge() {
 }
 
 function TH(w?: number): React.CSSProperties {
-  return { padding: '8px 10px', textAlign: 'center', fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', ...(w ? { width: w, minWidth: w } : {}) }
+  return {
+    padding: '8px 10px', textAlign: 'center', fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
+    position: 'sticky', top: 0, zIndex: 2, background: '#1C3557', color: '#fff',
+    ...(w ? { width: w, minWidth: w } : {}),
+  }
 }
 
 function TD({ center, right, color, muted, mono }: { center?: boolean; right?: boolean; color?: string; muted?: boolean; mono?: boolean } = {}): React.CSSProperties {

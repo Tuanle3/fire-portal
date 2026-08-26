@@ -482,7 +482,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr style={{ background: '#1C3557', color: '#fff' }}>
@@ -704,6 +704,7 @@ function TH(w?: number): React.CSSProperties {
   return {
     padding: '6px 6px', textAlign: 'center', fontSize: 11,
     fontWeight: 600, whiteSpace: 'nowrap',
+    position: 'sticky', top: 0, zIndex: 2, background: '#1C3557', color: '#fff',
     ...(w ? { width: w, minWidth: w } : {}),
   }
 }
