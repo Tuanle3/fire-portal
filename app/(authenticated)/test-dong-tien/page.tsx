@@ -7,7 +7,7 @@
 //   tong-hop    — Báo cáo thực hiện (TabTongHop)
 //   giai-phap   — Giải pháp cân đối (TabGiaiPhap)
 // ============================================================
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useUserSession }   from '@/contexts/user-session'
 import { useTopbarInfo }    from '@/contexts/topbar-info'
 import NhSharedStyles       from '@/components/NhSharedStyles'
@@ -29,12 +29,8 @@ import type { NganSachThang } from '@/lib/ngan-sach-types'
 
 // ── Sổ quỹ data_quy (Google Sheets → Firebase RTDB) ─────────
 import { subscribeDongTienTuQuy } from '@/lib/dong-tien-quy-adapter'
-
-// ── Kế hoạch = dongTienItems (loaiKhoan='ke-hoach'), thay cho
-//    ngan_sach.items cố định cũ — xem Bước A của bản refactor ──
-import { subscribeKeHoachThang } from '@/lib/dong-tien-ke-hoach-store'
-import { buildKeHoachPlanned, mergeKeHoachPlanned } from '@/lib/dong-tien-ke-hoach-adapter'
-import type { EntityType } from '@/lib/han-muc-types'
+// ── Hạn mức tín dụng (gốc/lãi vay NH) ──────────────────────
+import { subscribeDongTienTuHanMuc } from '@/lib/dong-tien-hanmuc-adapter'
 
 // ============================================================
 
@@ -47,24 +43,9 @@ const TABS: { key: Tab; label: string; emoji: string }[] = [
   { key: 'giai-phap',  label: 'Giải pháp cân đối',     emoji: '⚖️' },
 ]
 
-function pad2(n: number) { return String(n).padStart(2, '0') }
-
-// Ngày đầu / cuối của 1 tháng, định dạng YYYY-MM-DD (cho <input type="date">)
-function firstDayOfMonth(d: Date = new Date()): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`
-}
-function lastDayOfMonth(d: Date = new Date()): string {
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0)
-  return `${last.getFullYear()}-${pad2(last.getMonth() + 1)}-${pad2(last.getDate())}`
-}
-// Tháng dạng "YYYY-MM" lấy từ 1 ngày YYYY-MM-DD
-function thangCuaNgay(ngay: string): string {
-  return ngay.slice(0, 7)
-}
-// Cộng/trừ số tháng vào 1 ngày YYYY-MM-DD, trả về đầu tháng kết quả
-function shiftMonth(ngay: string, delta: number): Date {
-  const [y, m] = ngay.split('-').map(Number)
-  return new Date(y, (m - 1) + delta, 1)
+function defaultThang(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function makeEmptyDoc(thang: string): NganSachThang {
@@ -80,21 +61,8 @@ export default function TestDongTienPage() {
   const { loading: sessLoading, can } = useUserSession()
   const { setLeft, setRight }         = useTopbarInfo()
 
-  const [tab,    setTab]    = useState<Tab>('dong-tien')
-
-  // ── Bộ lọc "Từ ngày – Đến ngày" (dùng chung cho cả 4 tab) ────
-  const [tuNgay,  setTuNgay]  = useState(firstDayOfMonth())
-  const [denNgay, setDenNgay] = useState(lastDayOfMonth())
-
-  // ── Bộ lọc Pháp nhân — dùng chung cho Kế hoạch/Báo cáo/Giải pháp
-  //    (Bước E). 'all' = Toàn tập đoàn, không lọc. ────────────────
-  const [entityFilter, setEntityFilter] = useState<EntityType | 'all'>('all')
-  const ENTITY_FILTERS: (EntityType | 'all')[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
-  const entityLabel = (e: EntityType | 'all') => e === 'all' ? 'Toàn tập đoàn' : e
-
-  // Kế hoạch/Báo cáo/Giải pháp làm việc theo dữ liệu 1 THÁNG (tài liệu
-  // NganSachThang lưu theo tháng) → tháng áp dụng = tháng chứa "Từ ngày"
-  const month = thangCuaNgay(tuNgay)
+  const [tab,   setTab]   = useState<Tab>('dong-tien')
+  const [month, setMonth] = useState(defaultThang())
 
   // ── Dữ liệu ngân sách Firestore ─────────────────────────────
   const [localData, setLocalData] = useState<NganSachThang>(makeEmptyDoc(month))
@@ -103,15 +71,10 @@ export default function TestDongTienPage() {
 
   // ── kmcpActual = thực hiện thường + thực hiện vay NH ────────
   const [kmcpActual,   setKmcpActual]   = useState<Record<string, number>>({})
-  // kmcpPlanned = 2 nguồn cộng lại:
-  //   1) kmcpPlannedVay      — AUTO cho 5 dòng vay NH (ngan-sach-vay-mapping.ts, giữ nguyên)
-  //   2) kmcpPlannedKeHoach  — từ dongTienItems (loaiKhoan='ke-hoach'), nhập ở Tab Kế hoạch (MỚI)
-  const [kmcpPlannedVay,      setKmcpPlannedVay]      = useState<Record<string, number>>({})
-  const [kmcpPlannedKeHoach,  setKmcpPlannedKeHoach]  = useState<Record<string, number>>({})
-  const kmcpPlanned = useMemo(
-    () => mergeKeHoachPlanned(kmcpPlannedVay, kmcpPlannedKeHoach),
-    [kmcpPlannedVay, kmcpPlannedKeHoach],
-  )
+  // hanMucActual = thực hiện gốc/lãi từ hạn mức (kỳ trả nợ đã thực hiện)
+  const [hanMucActual, setHanMucActual] = useState<Record<string, number>>({})
+  // kmcpPlanned = kế hoạch tự động cho 5 dòng vay NH
+  const [kmcpPlanned,  setKmcpPlanned]  = useState<Record<string, number>>({})
 
   // ── Tồn quỹ ─────────────────────────────────────────────────
   
@@ -132,72 +95,19 @@ export default function TestDongTienPage() {
       </div>
     )
     setRight(
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button
-          title="Tháng trước"
-          onClick={() => {
-            const d = shiftMonth(tuNgay, -1)
-            setTuNgay(firstDayOfMonth(d))
-            setDenNgay(lastDayOfMonth(d))
-          }}
-          style={{
-            width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1px solid #E5E7EB', borderRadius: 6, background: '#fff', color: '#6B7280',
-            cursor: 'pointer', fontSize: 13, fontFamily: 'inherit',
-          }}
-        >‹</button>
-
-        <label style={{ fontSize: 12, color: '#6B7280' }}>Từ</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label style={{ fontSize: 12, color: '#6B7280' }}>Tháng</label>
         <input
-          type="date"
+          type="month"
           className="nh-input"
-          style={{ width: 145 }}
-          value={tuNgay}
-          onChange={e => {
-            const v = e.target.value
-            setTuNgay(v)
-            if (denNgay < v) setDenNgay(v)
-          }}
+          style={{ width: 140 }}
+          value={month}
+          onChange={e => setMonth(e.target.value)}
         />
-        <label style={{ fontSize: 12, color: '#6B7280' }}>Đến</label>
-        <input
-          type="date"
-          className="nh-input"
-          style={{ width: 145 }}
-          value={denNgay}
-          onChange={e => {
-            const v = e.target.value
-            setDenNgay(v)
-            if (tuNgay > v) setTuNgay(v)
-          }}
-        />
-
-        <button
-          title="Tháng sau"
-          onClick={() => {
-            const d = shiftMonth(tuNgay, 1)
-            setTuNgay(firstDayOfMonth(d))
-            setDenNgay(lastDayOfMonth(d))
-          }}
-          style={{
-            width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1px solid #E5E7EB', borderRadius: 6, background: '#fff', color: '#6B7280',
-            cursor: 'pointer', fontSize: 13, fontFamily: 'inherit',
-          }}
-        >›</button>
-
-        <button
-          title="Về tháng hiện tại"
-          onClick={() => { setTuNgay(firstDayOfMonth()); setDenNgay(lastDayOfMonth()) }}
-          style={{
-            padding: '4px 10px', border: '1px solid #E5E7EB', borderRadius: 6, background: '#fff',
-            color: '#6B7280', cursor: 'pointer', fontSize: 11.5, fontFamily: 'inherit', fontWeight: 600,
-          }}
-        >Tháng này</button>
       </div>
     )
     return () => { setLeft(null); setRight(null) }
-  }, [setLeft, setRight, tuNgay, denNgay])
+  }, [setLeft, setRight, month])
 
   // ── Subscribe Firestore ngân sách ────────────────────────────
   useEffect(() => {
@@ -206,13 +116,44 @@ export default function TestDongTienPage() {
     })
   }, [month])
 
+  // ── Subscribe hạn mức tín dụng → thực hiện gốc/lãi vay NH ──
+  // Kỳ trả nợ trangThai='da-tra' → cộng vào VAY-GOC-DN/VAY-LAI-DN/VAY-GOC-CN/VAY-LAI-CN
+  useEffect(() => {
+    return subscribeDongTienTuHanMuc(hanMucData => {
+      const acc: Record<string, number> = {}
+      for (const it of hanMucData.items) {
+        if (!it.ngay.startsWith(month)) continue
+        // Chỉ lấy khoản đã thực hiện (trangThai = thuc-te)
+        if (it.trangThai !== 'thuc-te') continue
+        // Khớp nguồn vay → KMCP
+        let kmcp: string | null = null
+        if (it.nguon === 'kytra-no') {
+          // Phân biệt gốc/lãi qua nhom hoặc nhanNhan
+          const label = (it.nhanNhan ?? '').toLowerCase()
+          const isCN  = (it.entity === 'Cá nhân')
+          if (label.includes('lãi') || label.includes('lai')) {
+            kmcp = isCN ? 'VAY-LAI-CN' : 'VAY-LAI-DN'
+          } else {
+            kmcp = isCN ? 'VAY-GOC-CN' : 'VAY-GOC-DN'
+          }
+        } else if (it.nguon === 'kythu-nh') {
+          // Hạn mức ngắn hạn — luôn là DN
+          const label = (it.nhanNhan ?? '').toLowerCase()
+          kmcp = (label.includes('lãi') || label.includes('lai')) ? 'VAY-LAI-DN' : 'VAY-GOC-DN'
+        } else if (it.nguon === 'giai-ngan') {
+          kmcp = 'THU-VAY'
+        }
+        if (!kmcp) continue
+        acc[kmcp] = (acc[kmcp] ?? 0) + it.soTien
+      }
+      setHanMucActual(acc)
+    })
+  }, [month])
+
   // ── Subscribe data_quy (Google Sheets → Firebase RTDB) ──────
   // subscribeDongTienTuQuy đọc RTDB node "data_quy", parse rows,
   // trả về { hoatDong, vayRows, khongXacDinh, tonQuyRealtime }
   useEffect(() => {
-    // subscribeDongTienTuQuy đã hỗ trợ tham số entityFilter — nếu chữ ký
-    // thực tế của hàm (trong dong-tien-quy-adapter.ts) khác vị trí/tên
-    // tham số này, chỉ cần sửa lại dòng gọi hàm ngay dưới đây.
     return subscribeDongTienTuQuy(quyData => {
       // Gom tất cả raw rows từ hoatDong + vayRows để build KMCP maps
       // (dong-tien-quy-adapter đã parse + filter Thực tế rồi, nhưng
@@ -244,41 +185,29 @@ export default function TestDongTienPage() {
 
       setKmcpActual({ ...actualFromHoatDong, ...vayActual })
 
-      // Thu/Chi trong khoảng Từ ngày – Đến ngày đang chọn
+      // Thu/Chi tháng (lọc theo month)
       let thu = 0, chi = 0
       for (const item of quyData.hoatDong) {
-        if (item.ngay < tuNgay || item.ngay > denNgay) continue
+        if (!item.ngay.startsWith(month)) continue
         if (item.loai === 'thu') thu += item.soTien
         else chi += item.soTien
       }
       setThuThang(thu)
       setChiThang(chi)
-    }, entityFilter === 'all' ? undefined : entityFilter)
-  }, [tuNgay, denNgay, entityFilter])
-
-  // ── Subscribe kế hoạch tự động vay NH (5 dòng vay — giữ nguyên) ──
-  useEffect(() => {
-    return subscribeKmcpPlanned(month, setKmcpPlannedVay)
+    })
   }, [month])
 
-  // ── Subscribe kế hoạch nhập tay (dongTienItems, loaiKhoan='ke-hoach')
-  //    — MỚI, thay cho việc đọc data.items từ NganSachThang (Bước A+D).
-  //    subscribeKeHoachThang tự lọc theo ngayDuKien trong khoảng đầu–cuối
-  //    tháng, nên mỗi tháng chỉ nhận đúng 1 kỳ của các khoản lặp. ──────
+  // ── Subscribe kế hoạch tự động vay NH ───────────────────────
   useEffect(() => {
-    return subscribeKeHoachThang(
-      month,
-      items => setKmcpPlannedKeHoach(buildKeHoachPlanned(items).planned),
-      entityFilter === 'all' ? undefined : entityFilter,
-    )
-  }, [month, entityFilter])
+    return subscribeKmcpPlanned(month, setKmcpPlanned)
+  }, [month])
 
   // ── Save ─────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     setSaving(true)
     setSaveMsg('')
     try {
-     await saveNganSach(localData)
+      await saveNganSach(month, localData)
       setSaveMsg('✅ Đã lưu')
     } catch {
       setSaveMsg('❌ Lỗi lưu')
@@ -287,6 +216,20 @@ export default function TestDongTienPage() {
       setTimeout(() => setSaveMsg(''), 3000)
     }
   }, [month, localData])
+
+  // ── Gộp thực hiện: CP thường + vay NH từ sổ quỹ + gốc/lãi từ hạn mức ──
+  // Ưu tiên: nếu cùng KMCP vay NH có cả 2 nguồn → cộng dồn (không ghi đè)
+  // Thực tế: sổ quỹ khớp Mã ngân sách → vay NH; hạn mức khớp kỳ trả nợ đã trả
+  // → 2 nguồn bổ sung cho nhau, không trùng nếu data_quy có mã đúng chuẩn.
+  const kmcpActualFinal = useMemo(() => {
+    const merged = { ...kmcpActual }
+    for (const [kmcp, val] of Object.entries(hanMucActual)) {
+      // Chỉ dùng hanMucActual cho KMCP vay nếu sổ quỹ chưa có số
+      // (tránh cộng 2 lần khi sổ quỹ đã khớp đúng mã)
+      if (!merged[kmcp]) merged[kmcp] = val
+    }
+    return merged
+  }, [kmcpActual, hanMucActual])
 
   // ── Guards ───────────────────────────────────────────────────
   if (sessLoading) {
@@ -348,38 +291,6 @@ export default function TestDongTienPage() {
               })}
             </div>
 
-            {tab !== 'dong-tien' && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 11.5, color: '#9CA3AF', marginTop: -10, marginBottom: 12,
-              }}>
-                📌 Đang áp dụng kế hoạch/báo cáo tháng{' '}
-                <b style={{ color: '#1C3557' }}>{month.split('-')[1]}/{month.split('-')[0]}</b>
-                {' '}(theo "Từ ngày" đã chọn ở góc trên bên phải)
-              </div>
-            )}
-
-            {tab !== 'dong-tien' && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-                {ENTITY_FILTERS.map(e => {
-                  const active = entityFilter === e
-                  return (
-                    <button
-                      key={e}
-                      onClick={() => setEntityFilter(e)}
-                      style={{
-                        padding: '5px 12px', fontSize: 12, fontWeight: active ? 700 : 500,
-                        borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
-                        border: '1px solid ' + (active ? '#1C3557' : '#E5E7EB'),
-                        background: active ? '#1C3557' : '#fff',
-                        color: active ? '#fff' : '#6B7280',
-                      }}
-                    >{entityLabel(e)}</button>
-                  )
-                })}
-              </div>
-            )}
-
             {/* ── TAB CONTENT ─────────────────────────────────── */}
 
             {tab === 'dong-tien' && <TabDongTien />}
@@ -392,12 +303,11 @@ export default function TestDongTienPage() {
                 onSave={handleSave}
                 saving={saving}
                 saveMsg={saveMsg}
-                kmcpActual={kmcpActual}
+                kmcpActual={kmcpActualFinal}
                 kmcpPlanned={kmcpPlanned}
                 tonQuySoDu={tonQuy}
                 tonQuyRealtime={tonQuy}
                 tonQuyDetail={[]}
-                entityFilter={entityFilter}
               />
             )}
 
@@ -407,7 +317,7 @@ export default function TestDongTienPage() {
                 tonQuySoDu={tonQuy}
                 tonQuyRealtime={tonQuy}
                 tonQuySoDuLoading={tonQuyLoading}
-                kmcpActual={kmcpActual}
+                kmcpActual={kmcpActualFinal}
                 kmcpPlanned={kmcpPlanned}
                 thuThang={thuThang}
                 chiThang={chiThang}
@@ -417,11 +327,13 @@ export default function TestDongTienPage() {
 
             {tab === 'giai-phap' && (
               <TabGiaiPhap
-  data={localData}
-  onChange={setLocalData}
-  onSave={handleSave}
-  saving={saving}
-/>
+                data={localData}
+                month={month}
+                onChange={setLocalData}
+                onSave={handleSave}
+                saving={saving}
+                saveMsg={saveMsg}
+              />
             )}
 
           </div>
