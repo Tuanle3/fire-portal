@@ -227,7 +227,7 @@ export default function TestDongTienPage() {
     setSaving(true)
     setSaveMsg('')
     try {
-      await saveNganSach(month, localData)
+      await saveNganSach(localData)
       setSaveMsg('✅ Đã lưu')
     } catch {
       setSaveMsg('❌ Lỗi lưu')
