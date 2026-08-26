@@ -65,6 +65,11 @@ export default function TestDongTienPage() {
   const [tab,   setTab]   = useState<Tab>('dong-tien')
   const [month, setMonth] = useState(defaultThang())
 
+const [tuNgay, setTuNgay] = useState(`${defaultThang()}-01`)
+const [denNgay, setDenNgay] = useState(() => {
+  const d = new Date(); const y = d.getFullYear(); const m = d.getMonth()
+  return `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`
+})
   // ── Dữ liệu ngân sách Firestore ─────────────────────────────
   const [localData, setLocalData] = useState<NganSachThang>(makeEmptyDoc(month))
   const [saving,    setSaving]    = useState(false)
