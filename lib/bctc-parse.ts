@@ -28,7 +28,8 @@ function findCol(headerRow: Cell[], pred: (norm: string) => boolean): number {
   return -1
 }
 
-const MONTH_RE = /^Th[aá]ng\s*\d{1,2}\/\d{4}$/
+// Chấp nhận cả "Tháng 12/2025" và "12/2025" trơn (header thật trong sheet không có chữ "Tháng")
+const MONTH_RE = /^(Th[aá]ng\s*)?\d{1,2}\/\d{4}$/
 
 function periodFromHeader(cell: string): string {
   const m = /(\d{1,2})\/(\d{4})/.exec(cell)
@@ -38,7 +39,7 @@ function periodFromHeader(cell: string): string {
 interface MonthCol { period: string; valueCol: number; noCol?: number; coCol?: number }
 interface HeaderInfo { headerRow: number; labelRow: number; dataStart: number; monthCols: MonthCol[] }
 
-// Dò dòng header (chứa cell "Tháng MM/YYYY") và xác định layout 1 cột/tháng hay 2 cột (Nợ/Có)/tháng.
+// Dò dòng header (chứa cell "MM/YYYY" hoặc "Tháng MM/YYYY") và xác định layout 1 cột/tháng hay 2 cột (Nợ/Có)/tháng.
 // Sheet Data_AR/Data_AP có 2 dòng header xếp chồng: dòng "Tháng MM/YYYY" (gộp ô) rồi tới dòng tên
 // cột cố định (Đơn vị/Code/Mã KH.../TK Công nợ) + nhãn phụ mỗi tháng — nhãn phụ không phải "Nợ"/"Có"
 // trơn mà ghép cả kỳ ("12/2025 - Nợ") nên so khớp tuyệt đối cũ luôn ra false → coi nhầm là layout 1
@@ -160,7 +161,8 @@ function parseTB(sheet: Sheet): BctcPeriodDoc[] {
   if (!h) return []
   const header = sheet[h.labelRow]
   const colCode        = findCol(header, n => n === 'code')
-  const colSoTaiKhoan  = findCol(header, n => n === 'sotaikhoan')
+  // Sheet thực tế ghi tắt "Số TK" thay vì "Số Tài Khoản" đầy đủ — khớp cả 2 dạng
+  const colSoTaiKhoan  = findCol(header, n => n === 'sotaikhoan' || n === 'sotk')
   const colCap         = findCol(header, n => n === 'cap')
   const colTenTaiKhoan = findCol(header, n => n === 'tentaikhoan')
 
@@ -214,11 +216,14 @@ function parseArAp(sheet: Sheet, report: 'AR' | 'AP'): BctcPeriodDoc[] {
   return groupDocs(report, entries)
 }
 
-// Cho phép tên tab có hậu tố năm ("Data_PL_2025") để tách sheet theo năm — layout "mỗi tháng 1
-// cột" gộp hết mọi năm vào 1 sheet sẽ ngày càng rộng ra, nên mỗi năm giờ có sheet riêng, period
-// thật vẫn lấy từ header "Tháng M/YYYY" như cũ nên không phụ thuộc việc tách sheet này.
+// Nhận diện tên tab theo 2 kiểu:
+// - Kiểu mới: năm đứng TRƯỚC, vd "2026_TB", "2025_PL" (quy ước hiện tại trong Sheet BCTC_SAG)
+// - Kiểu cũ: "Data_TB", hoặc có hậu tố năm ở CUỐI như "Data_PL_2025" — giữ để tương thích ngược.
+// Period thật của từng dòng dữ liệu vẫn lấy từ header "MM/YYYY" trong sheet như cũ, không phụ
+// thuộc vào năm đọc được từ tên tab — tên tab chỉ dùng để chọn đúng hàm parse theo loại báo cáo.
 export function parseTab(tab: string, values: Sheet): BctcPeriodDoc[] {
-  const base = tab.replace(/_\d{4}$/, '')
+  const newStyle = /^(\d{4})_(PL|BS|TB|AR|AP)$/.exec(tab)
+  const base = newStyle ? `Data_${newStyle[2]}` : tab.replace(/_\d{4}$/, '')
   switch (base) {
     case 'Data_PL': return parsePL(values)
     case 'Data_BS': return parseBS(values)
