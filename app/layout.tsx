@@ -1,5 +1,6 @@
 import '../styles/globals.css'
 import type { Metadata, Viewport } from 'next'
+import FirebaseAuthInit from '@/components/FirebaseAuthInit'   // 👈 đổi path
 
 export const metadata: Metadata = {
   title: 'Fire Portal',
@@ -15,7 +16,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi">
-      <body>{children}</body>
+      <body>
+        <FirebaseAuthInit />
+        {children}
+      </body>
     </html>
   )
 }
