@@ -14,10 +14,28 @@ import {
 import { saveKhoanDongTien } from '@/lib/dong-tien-store'
 import { subscribeNhomTuyChinh, themNhomTuyChinh, NhomTuyChinh } from '@/lib/dong-tien-nhom-store'
 import type { EntityType } from '@/lib/han-muc-types'
+// ── Bridge Kế hoạch: khi loaiKhoan='ke-hoach', dropdown "Nhóm/KMCP" phải
+//    dùng đúng mã KMCP cũ (DT-CG, CP-BH, VAY-GOC-DN...) — KHÔNG dùng
+//    NhomDongTien enum (cho-goi, sap, goc-vay-dn...) vì 2 bộ mã khác nhau
+//    hoàn toàn, và kmcpActual/kmcpPlanned đối chiếu sổ quỹ theo mã KMCP cũ. ──
+import { DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
 
 const ENTITIES: EntityType[] = ['SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 const NHOM_MOI = '__nhom_moi__'
 const VND = new Intl.NumberFormat('vi-VN')
+
+// ── Danh sách mã KMCP cố định cũ, tách theo Thu (nhóm B)/Chi (nhóm C) —
+//    đúng quy ước NganSachItem.nhom đang dùng ở TabGiaiPhap/TabTongHop.
+//    Dùng làm option "Nhóm/KMCP" khi form ở chế độ Kế hoạch. ──────────
+const KMCP_ITEMS_THU = DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && d.nhom === 'B')
+const KMCP_ITEMS_CHI = DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && d.nhom === 'C')
+const KMCP_LABEL: Record<string, string> = Object.fromEntries(
+  [...KMCP_ITEMS_THU, ...KMCP_ITEMS_CHI].map(d => [d.kmcp as string, d.dien_giai]),
+)
+function kmcpOptionsTheoLoai(loai: LoaiDongTien) {
+  return (loai === 'thu' ? KMCP_ITEMS_THU : KMCP_ITEMS_CHI)
+    .map(d => ({ value: d.kmcp as string, label: `${d.kmcp} — ${d.dien_giai}` }))
+}
 
 function parseSoTien(raw: string): number {
   return Number(raw.replace(/\D/g, '')) || 0
@@ -43,11 +61,12 @@ interface Props {
   editing?:       KhoanDongTien | null
   entityMacDinh?: EntityType
   loaiKhoanMacDinh?: LoaiKhoan   // Cho phép mở form sẵn ở chế độ KH hoặc TH
+  khoaLoaiKhoan?:  boolean       // true = ẩn radio Kế hoạch/Thực hiện (ngữ cảnh đã rõ, VD mở từ Tab Kế hoạch)
   onSaved:        () => void
   onCancel:       () => void
 }
 
-export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh, onSaved, onCancel }: Props) {
+export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh, khoaLoaiKhoan, onSaved, onCancel }: Props) {
   const [form,         setForm]         = useState(emptyForm(entityMacDinh))
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState<string | null>(null)
@@ -64,12 +83,15 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
 
   useEffect(() => {
     if (editing) {
+      const laKeHoach = (editing.loaiKhoan ?? 'thuc-hien') === 'ke-hoach'
       setForm({
         entity:       editing.entity,
         loai:         editing.loai,
         loaiKhoan:    editing.loaiKhoan ?? 'thuc-hien',
         nhomCha:      editing.nhomCha ?? editing.nhom,
-        nhomChaLabel: editing.nhomChaLabel ?? (NHOM_LABEL[editing.nhom as NhomDongTien] ?? editing.nhom),
+        nhomChaLabel: editing.nhomChaLabel ?? (laKeHoach
+          ? (KMCP_LABEL[editing.nhom as string] ?? editing.nhom)
+          : (NHOM_LABEL[editing.nhom as NhomDongTien] ?? editing.nhom)),
         nhom:         editing.nhom as NhomDongTien,
         ngayDuKien:   editing.ngayDuKien,
         soTien:       editing.soTien,
@@ -82,42 +104,79 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
     } else {
       const base = emptyForm(entityMacDinh)
       if (loaiKhoanMacDinh) base.loaiKhoan = loaiKhoanMacDinh
+      // Chế độ Kế hoạch: mặc định nhóm = mã KMCP đầu tiên (Thu), không phải NhomDongTien enum
+      if (loaiKhoanMacDinh === 'ke-hoach') {
+        const first = kmcpOptionsTheoLoai('thu')[0]
+        if (first) {
+          base.nhom = first.value as NhomDongTien
+          base.nhomCha = first.value
+          base.nhomChaLabel = KMCP_LABEL[first.value] ?? first.value
+        }
+      }
       setForm(base)
     }
     setDangThemNhom(false); setTenNhomMoi(''); setLuuNhomLoi(null)
   }, [editing, entityMacDinh, loaiKhoanMacDinh])
 
   const nhomOptions = useMemo(() => {
+    // ── Chế độ KẾ HOẠCH: dùng mã KMCP cũ (DT-CG, CP-BH...) + custom, KHÔNG
+    //    dùng NhomDongTien enum — xem ghi chú bridge ở đầu file. ──────────
+    if (form.loaiKhoan === 'ke-hoach') {
+      const chuan = kmcpOptionsTheoLoai(form.loai)
+      const tuy   = nhomTuyChinh.filter(n => n.loai === form.loai).map(n => ({ value: n.ten, label: n.ten }))
+      const list  = [...chuan, ...tuy]
+      if (form.nhom && !list.some(o => o.value === form.nhom))
+        list.push({ value: form.nhom, label: `${KMCP_LABEL[form.nhom as string] ?? form.nhom} (cũ)` })
+      return list
+    }
     const chuan = NHOM_THEO_LOAI[form.loai].map(v => ({ value: v, label: NHOM_LABEL[v] ?? v }))
     const tuy   = nhomTuyChinh.filter(n => n.loai === form.loai).map(n => ({ value: n.ten, label: n.ten }))
     const list  = [...chuan, ...tuy]
     if (form.nhom && !list.some(o => o.value === form.nhom))
       list.push({ value: form.nhom, label: `${NHOM_LABEL[form.nhom as NhomDongTien] ?? form.nhom} (cũ)` })
     return list
-  }, [form.loai, form.nhom, nhomTuyChinh])
+  }, [form.loai, form.nhom, form.loaiKhoan, nhomTuyChinh])
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm(f => ({ ...f, [key]: value }))
   }
 
+  function chonLoaiKhoan(loaiKhoan: LoaiKhoan) {
+    const laKeHoach = loaiKhoan === 'ke-hoach'
+    const nhomMacDinh = laKeHoach
+      ? (kmcpOptionsTheoLoai(form.loai)[0]?.value ?? '')
+      : NHOM_THEO_LOAI[form.loai][0]
+    setForm(f => ({
+      ...f, loaiKhoan,
+      nhom: nhomMacDinh as NhomDongTien,
+      nhomCha: nhomMacDinh,
+      nhomChaLabel: laKeHoach ? (KMCP_LABEL[nhomMacDinh] ?? nhomMacDinh) : (NHOM_LABEL[nhomMacDinh] ?? nhomMacDinh),
+    }))
+    setDangThemNhom(false)
+  }
+
   function chonLoai(loai: LoaiDongTien) {
-    const nhomMacDinh = NHOM_THEO_LOAI[loai][0]
+    const laKeHoach = form.loaiKhoan === 'ke-hoach'
+    const nhomMacDinh = laKeHoach
+      ? (kmcpOptionsTheoLoai(loai)[0]?.value ?? '')
+      : NHOM_THEO_LOAI[loai][0]
     setForm(f => ({
       ...f, loai,
-      nhom: nhomMacDinh,
+      nhom: nhomMacDinh as NhomDongTien,
       nhomCha: nhomMacDinh,
-      nhomChaLabel: NHOM_LABEL[nhomMacDinh] ?? nhomMacDinh,
+      nhomChaLabel: laKeHoach ? (KMCP_LABEL[nhomMacDinh] ?? nhomMacDinh) : (NHOM_LABEL[nhomMacDinh] ?? nhomMacDinh),
     }))
     setDangThemNhom(false)
   }
 
   function chonNhom(value: string) {
     if (value === NHOM_MOI) { setDangThemNhom(true); setTenNhomMoi(''); setLuuNhomLoi(null); return }
+    const laKeHoach = form.loaiKhoan === 'ke-hoach'
     setForm(f => ({
       ...f,
       nhom: value as NhomDongTien,
       nhomCha: value,
-      nhomChaLabel: NHOM_LABEL[value as NhomDongTien] ?? value,
+      nhomChaLabel: laKeHoach ? (KMCP_LABEL[value] ?? value) : (NHOM_LABEL[value as NhomDongTien] ?? value),
     }))
   }
 
@@ -177,18 +236,24 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
         <form onSubmit={handleSubmit}>
 
           {/* ── Kế hoạch hay Thực hiện ── */}
-          <div className="nh-radio-row" style={{ marginBottom: 10 }}>
-            <label>
-              <input type="radio" name="loaiKhoan" checked={form.loaiKhoan === 'ke-hoach'}
-                onChange={() => set('loaiKhoan', 'ke-hoach')} />
-              <span style={{ color: 'var(--nh-navy)', fontWeight: 600 }}>📋 Kế hoạch</span>
-            </label>
-            <label>
-              <input type="radio" name="loaiKhoan" checked={form.loaiKhoan === 'thuc-hien'}
-                onChange={() => set('loaiKhoan', 'thuc-hien')} />
-              <span>✏️ Thực hiện</span>
-            </label>
-          </div>
+          {khoaLoaiKhoan ? (
+            <div style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: form.loaiKhoan === 'ke-hoach' ? 'var(--nh-navy)' : '#374151' }}>
+              {form.loaiKhoan === 'ke-hoach' ? '📋 Khoản Kế hoạch' : '✏️ Khoản Thực hiện'}
+            </div>
+          ) : (
+            <div className="nh-radio-row" style={{ marginBottom: 10 }}>
+              <label>
+                <input type="radio" name="loaiKhoan" checked={form.loaiKhoan === 'ke-hoach'}
+                  onChange={() => chonLoaiKhoan('ke-hoach')} />
+                <span style={{ color: 'var(--nh-navy)', fontWeight: 600 }}>📋 Kế hoạch</span>
+              </label>
+              <label>
+                <input type="radio" name="loaiKhoan" checked={form.loaiKhoan === 'thuc-hien'}
+                  onChange={() => chonLoaiKhoan('thuc-hien')} />
+                <span>✏️ Thực hiện</span>
+              </label>
+            </div>
+          )}
 
           {/* ── Thu / Chi ── */}
           <div className="nh-radio-row" style={{ marginBottom: 12 }}>
@@ -210,10 +275,10 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
               </select>
             </div>
             <div>
-              <label className="nh-label">Nhóm khoản mục</label>
+              <label className="nh-label">{form.loaiKhoan === 'ke-hoach' ? 'Nhóm/KMCP' : 'Nhóm khoản mục'}</label>
               <select className="nh-select" value={form.nhom} onChange={e => chonNhom(e.target.value)}>
                 {nhomOptions.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
-                <option value={NHOM_MOI}>+ Thêm nhóm mới…</option>
+                <option value={NHOM_MOI}>{form.loaiKhoan === 'ke-hoach' ? '➕ Thêm khoản mục mới…' : '+ Thêm nhóm mới…'}</option>
               </select>
             </div>
             <div>
@@ -233,7 +298,9 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
           {dangThemNhom && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 10px', background: '#F8FAFC', border: '1px solid var(--nh-border)', borderRadius: 8, padding: 10 }}>
               <input type="text" className="nh-input" style={{ flex: 1 }}
-                placeholder={`Tên nhóm ${form.loai === 'thu' ? 'thu' : 'chi'} mới...`}
+                placeholder={form.loaiKhoan === 'ke-hoach'
+                  ? `Tên khoản mục ${form.loai === 'thu' ? 'thu' : 'chi phí'} mới...`
+                  : `Tên nhóm ${form.loai === 'thu' ? 'thu' : 'chi'} mới...`}
                 value={tenNhomMoi} onChange={e => setTenNhomMoi(e.target.value)} autoFocus />
               <button type="button" className="btn-save" disabled={dangLuuNhom} onClick={luuNhomMoi}>
                 {dangLuuNhom ? 'Đang lưu...' : 'Lưu nhóm'}

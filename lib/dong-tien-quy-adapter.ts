@@ -26,6 +26,7 @@ import { ref, onValue, off } from 'firebase/database'
 import { DongTienItem, LoaiDongTien } from './dong-tien-types'
 import type { EntityType } from '@/lib/han-muc-types'
 import { parseMaNganSach, MaNganSachParsed } from '@/lib/ma-ngan-sach'
+import { findKey } from '@/lib/ngan-sach-mapping'
 
 // ── Raw row từ data_quy (giữ nguyên tên field tiếng Việt có dấu) ──
 export interface DataQuyRow {
@@ -57,9 +58,28 @@ export interface VayNganSachRow {
   parsed:     MaNganSachParsed
   ngay:       string
   soTien:     number   // dương, đã lấy trị tuyệt đối
+  maNS:       string   // mã ngân sách gốc (VD "SAP_NH_ACB_Lai") — dùng để khớp
+                        // trực tiếp với item chi tiết theo ngân hàng/entity,
+                        // song song với 5 mã gộp thô (VAY-GOC-DN...)
 }
 
 function normStr(v: any): string { return String(v ?? '').trim() }
+
+// Sổ quỹ ghi ngày dạng "15/08/2026" (DD/MM/YYYY, text) — trong khi tuNgay/denNgay
+// và mọi so sánh khoảng ngày trong app đều theo ISO "YYYY-MM-DD". So sánh string
+// trực tiếp giữa 2 format này luôn sai (dấu "/" < mọi chữ số nên DD/MM/YYYY luôn
+// bị coi là "nhỏ hơn" ISO) → mọi dòng bị loại khỏi khoảng lọc ngày, bất kể có
+// khớp Mã ngân sách hay không. Chuẩn hoá về ISO ngay khi đọc để toàn bộ logic
+// downstream (lọc ngày, sort lấy Tồn mới nhất, rollup theo kỳ...) nhất quán.
+function toISODate(v: any): string {
+  const s = normStr(v)
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (m) {
+    const [, d, mo, y] = m
+    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+  return s // đã là ISO hoặc format khác — giữ nguyên
+}
 
 function getField(r: DataQuyRow, ...keys: string[]): any {
   for (const k of keys) if (r[k] !== undefined && r[k] !== '') return r[k]
@@ -107,7 +127,12 @@ export function subscribeDongTienTuQuy(
 
     // Sort theo ngày để lấy Tồn mới nhất chính xác (giống pattern page.tsx Ngân sách)
     const sorted = [...rows].sort((a, b) =>
-      normStr(getField(a, 'Ngày')).localeCompare(normStr(getField(b, 'Ngày'))))
+      toISODate(getField(a, 'Ngày')).localeCompare(toISODate(getField(b, 'Ngày'))))
+
+    // Dò tên cột "Mã ngân sách" thực tế trong snapshot (không phụ thuộc biến
+    // thể dấu/khoảng trắng/gạch dưới — dùng chung cơ chế đã chạy đúng ở
+    // ngan-sach-mapping.ts/buildKmcpActual để tránh lệch tên cột lần nữa).
+    const maNSKey = findKey(rows, 'mangansach')
 
     sorted.forEach(r => {
       const stk = normStr(getField(r, 'Số_tài_khoản'))
@@ -120,9 +145,9 @@ export function subscribeDongTienTuQuy(
       const entity = entityRaw ? chuanHoaEntity(entityRaw) : undefined
       if (entityFilter && entityFilter !== 'all' && entity !== entityFilter) return
 
-      const ngay   = normStr(getField(r, 'Ngày'))
+      const ngay   = toISODate(getField(r, 'Ngày'))
       const ps     = Number(getField(r, 'Số_tiền_PS') ?? 0)
-      const maNS   = normStr(getField(r, 'Mã ngân sách', 'Ma_ngan_sach'))
+      const maNS   = normStr(maNSKey ? r[maNSKey] : getField(r, 'Mã ngân sách', 'Ma_ngan_sach'))
       const noiDung = normStr(getField(r, 'Nội_dung', 'Nội dung'))
       const nhomCP  = normStr(getField(r, 'Nhóm_CP', 'Nhóm'))
       if (!ngay || ps === 0) return
@@ -131,7 +156,7 @@ export function subscribeDongTienTuQuy(
       //     → tách riêng, KHÔNG cộng vào tổng dòng tiền chính ──
       const vay = parseMaNganSach(maNS)
       if (vay) {
-        vayRows.push({ parsed: vay, raw: r, ngay, soTien: Math.abs(ps) })
+        vayRows.push({ parsed: vay, raw: r, ngay, soTien: Math.abs(ps), maNS })
         return
       }
 

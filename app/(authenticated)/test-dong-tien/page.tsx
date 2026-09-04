@@ -180,24 +180,31 @@ const [denNgay, setDenNgay] = useState(() => {
       }
 
       // Fallback: dòng khongXacDinh (có Nhóm_CP nhưng không có Mã ngân sách)
-      // → matchKMCP để map Nhóm_CP → KMCP chuẩn
+      // → matchKMCP để map Nhóm_CP → KMCP chuẩn.
+      // PA (b): dòng nào matchKMCP không nhận diện được rule nào thì gom vào
+      // 2 mã catch-all có sẵn (CP-KHAC / THU-K) theo dấu Số_tiền_PS — không
+      // bỏ qua nữa, để không còn "chi chưa phân loại" biến mất khỏi báo cáo.
       for (const r of quyData.khongXacDinh) {
         const ngay = String(r['Ngày'] ?? r['Ngay'] ?? '')
         if (!ngay || ngay < tuNgay || ngay > denNgay) continue
         const ghiChu = String(r['Ghi_chu'] ?? '')
         if (ghiChu === 'Dư đầu kỳ' || ghiChu === 'Dư cuối kỳ') continue
-        const nhomCP = String(r['Nhóm_CP'] ?? r['Nhom_CP'] ?? '')
-        const kmcp = matchKMCP(nhomCP, ghiChu)
-        if (!kmcp) continue
-        const ps = Math.abs(Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0))
+        const ps = Number(r['Số_tiền_PS'] ?? r['So_tien_PS'] ?? 0)
         if (!ps) continue
-        actualFromHoatDong[kmcp] = (actualFromHoatDong[kmcp] ?? 0) + ps
+        const nhomCP = String(r['Nhóm_CP'] ?? r['Nhom_CP'] ?? '')
+        const kmcp = matchKMCP(nhomCP, ghiChu) ?? (ps < 0 ? 'CP-KHAC' : 'THU-K')
+        actualFromHoatDong[kmcp] = (actualFromHoatDong[kmcp] ?? 0) + Math.abs(ps)
       }
 
       // Build vayActual từ vayRows (5 dòng vay NH)
+      // + đồng thời khớp theo ĐÚNG mã ngân sách chi tiết (VD "SAP_NH_ACB_Lai")
+      // — vì bảng KH hiện có các dòng con tách theo từng ngân hàng/entity,
+      // không chỉ 5 mã gộp thô. Cộng cả 2 vào cùng actualFromHoatDong để
+      // dòng nào dùng mã gộp thô hay mã chi tiết đều lên số đúng.
       const vayActual: Record<string, number> = {}
       for (const vr of quyData.vayRows) {
         if (vr.ngay < tuNgay || vr.ngay > denNgay) continue
+        if (vr.maNS) actualFromHoatDong[vr.maNS] = (actualFromHoatDong[vr.maNS] ?? 0) + vr.soTien
         if (!vr.parsed.xacDinh) { vayActual['VAY-KHAC'] = (vayActual['VAY-KHAC'] ?? 0) + vr.soTien; continue }
         const p = vr.parsed
         let kmcp: string
@@ -206,6 +213,13 @@ const [denNgay, setDenNgay] = useState(() => {
         else kmcp = p.loaiKhoan === 'lai' ? 'VAY-LAI-DN' : 'VAY-GOC-DN'
         vayActual[kmcp] = (vayActual[kmcp] ?? 0) + vr.soTien
       }
+
+      // eslint-disable-next-line no-console
+      console.log('[DEBUG vay]', {
+        soDongVayRows: quyData.vayRows.length,
+        mauVayRows: quyData.vayRows.slice(0, 5),
+        vayActual,
+      })
 
       setKmcpActual({ ...actualFromHoatDong, ...vayActual })
 
