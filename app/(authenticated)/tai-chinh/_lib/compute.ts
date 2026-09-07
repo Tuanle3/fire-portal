@@ -1,4 +1,4 @@
-import { BctcArApRow, BctcBsRow, BctcPlRow } from '@/lib/bctc-types'
+import { BctcArApRow, BctcBsRow, BctcPlRow, BctcRow } from '@/lib/bctc-types'
 import { ALL_DONVI, DonViInfo, FlatDoc, RawBctc } from './types'
 import { maSoLevelBS, maSoSortKey, MS_BS, MS_PL, PL_BREAKDOWN_CODES } from './masocode'
 
@@ -55,16 +55,33 @@ export function listLoaiBC(docs: FlatDoc[]): string[] {
   return [...set].sort((a, b) => (a === 'Nội bộ' ? -1 : b === 'Nội bộ' ? 1 : a.localeCompare(b)))
 }
 
-// Lọc rows BS/PL theo đúng 1 loại báo cáo đang chọn — tránh cộng gộp Nội bộ + Ngân hàng của cùng
-// 1 công ty/kỳ/mã số (là nguyên nhân số liệu bị sai/lệch trước đây). Rows không có loaiBC (dữ liệu
-// cũ đồng bộ trước khi có cột này, hoặc AR/AP/TB không có khái niệm Loại BC) luôn được giữ lại,
-// không bị lọc mất, để không đột ngột mất dữ liệu do rows cũ trong Firebase chưa có field mới.
+// Lọc rows BS/PL theo đúng 1 loại báo cáo đang chọn — nhưng CHỈ can thiệp khi thật sự có xung đột:
+// cùng 1 dòng (mã số, hoặc mã thuyết minh + chỉ tiêu với dòng không có mã số) trong cùng 1 kỳ/công
+// ty tồn tại SONG SONG cả 2 loại (VD tháng đó vừa có ghi Nội bộ vừa có ghi Ngân hàng) — đây mới là
+// trường hợp cộng trùng cần tránh. Những kỳ chỉ có DUY NHẤT 1 loại (VD cả năm 2025 chỉ ghi "Ngân
+// hàng", không có "Nội bộ" nào) thì luôn hiển thị nguyên vẹn, không bị ẩn theo lựa chọn filter.
+function loaiBCLineKey(r: BctcBsRow | BctcPlRow): string {
+  return r.maSo ? `MS:${r.maSo}` : `C:${r.code}|${r.chiTieu}`
+}
+
 export function filterDocsByLoaiBC(docs: FlatDoc[], loaiBC: string): FlatDoc[] {
   if (!loaiBC) return docs
   return docs.map(d => {
     if (d.report !== 'BS' && d.report !== 'PL') return d
-    const rows = (d.rows as (BctcBsRow | BctcPlRow)[]).filter(r => !r.loaiBC || r.loaiBC === loaiBC)
-    if (rows.length === d.rows.length) return d
+    const rowsTyped = d.rows as (BctcBsRow | BctcPlRow)[]
+    const groups = new Map<string, (BctcBsRow | BctcPlRow)[]>()
+    for (const r of rowsTyped) {
+      const k = loaiBCLineKey(r)
+      const arr = groups.get(k)
+      if (arr) arr.push(r); else groups.set(k, [r])
+    }
+    const rows: BctcRow[] = []
+    for (const group of groups.values()) {
+      const types = new Set(group.map(r => r.loaiBC).filter(Boolean))
+      // <=1 loại xuất hiện cho dòng này trong kỳ này → không có gì xung đột, giữ nguyên tất cả.
+      // >=2 loại cùng tồn tại → mới thật sự lọc theo lựa chọn hiện tại để tránh cộng trùng.
+      rows.push(...(types.size <= 1 ? group : group.filter(r => r.loaiBC === loaiBC)))
+    }
     return { ...d, rows }
   })
 }
