@@ -50,19 +50,31 @@ interface MonthCol { period: string; valueCol: number; noCol?: number; coCol?: n
 interface HeaderInfo { headerRow: number; labelRow: number; dataStart: number; monthCols: MonthCol[] }
 
 // FIX: Thêm tham số fallbackYear để truyền xuống periodFromHeader
+// Kiểm tra một cell có phải header tháng không (string "Tháng 1" hoặc number 1..12)
+function isMonthCell(c: Cell): boolean {
+  if (typeof c === 'string') return MONTH_RE.test(c.trim())
+  if (typeof c === 'number') return Number.isInteger(c) && c >= 1 && c <= 12
+  return false
+}
+
+// Chuyển cell header tháng → chuỗi để periodFromHeader xử lý
+function monthCellToStr(c: Cell): string {
+  if (typeof c === 'number') return String(c)
+  return String(c ?? '').trim()
+}
+
 function detectHeader(sheet: Sheet, fallbackYear?: string): HeaderInfo | null {
   let headerRow = -1
   for (let r = 0; r < Math.min(sheet.length, 8); r++) {
-    if ((sheet[r] ?? []).some(c => typeof c === 'string' && MONTH_RE.test(c.trim()))) { headerRow = r; break }
+    if ((sheet[r] ?? []).some(c => isMonthCell(c))) { headerRow = r; break }
   }
   if (headerRow === -1) return null
 
   const row = sheet[headerRow]
   const starts: { col: number; period: string }[] = []
   row.forEach((c, col) => {
-    if (typeof c === 'string' && MONTH_RE.test(c.trim())) {
-      // FIX: truyền fallbackYear vào periodFromHeader
-      const period = periodFromHeader(c.trim(), fallbackYear)
+    if (isMonthCell(c)) {
+      const period = periodFromHeader(monthCellToStr(c), fallbackYear)
       if (period) starts.push({ col, period })
     }
   })
