@@ -177,6 +177,30 @@ export function computeSnapshot(docs: FlatDoc[], donViKey: string, period: strin
   }
 }
 
+// Snapshot cho 1 "cột kỳ" có thể gồm nhiều kỳ tháng gộp lại (1 năm = 12 tháng, 1 quý = 3 tháng...).
+// PL là số phát sinh trong kỳ → cộng dồn qua toàn bộ periods; BS/AR/AP là số dư tại 1 thời điểm →
+// lấy đúng kỳ CUỐI CÙNG trong bucket thực sự có số liệu (không phải kỳ cuối theo lịch, có thể còn
+// trống nếu chưa đồng bộ) — cùng quy ước "endOf" đã dùng ở TabPhanTichNgang/TabPhanTichDoc, gộp lại
+// một chỗ để 2 tab dùng chung, tránh lệch logic.
+export function computeBucketSnapshot(docs: FlatDoc[], donViKey: string, periods: string[]): Snapshot {
+  if (periods.length <= 1) return computeSnapshot(docs, donViKey, periods[0] ?? '')
+
+  let bsPeriod = periods[periods.length - 1]
+  for (let i = periods.length - 1; i >= 0; i--) {
+    if (valueByMaSo(docs, 'BS', periods[i], MS_BS.TONG_TS, donViKey) !== 0) { bsPeriod = periods[i]; break }
+  }
+  const bsSnap = computeSnapshot(docs, donViKey, bsPeriod)
+  const pl = (ms: string) => maSoSumOverPeriods(docs, donViKey, periods, ms)
+
+  return {
+    ...bsSnap,
+    period: periods.join('..'),
+    dtt: pl(MS_PL.DTT), giaVon: pl(MS_PL.GIA_VON), laiGop: pl(MS_PL.LAI_GOP),
+    cpLaiVay: pl(MS_PL.CP_LAI_VAY), lnThuanHDKD: pl(MS_PL.LN_THUAN_HDKD),
+    lnTruocThue: pl(MS_PL.LN_TRUOC_THUE), lnSauThue: pl(MS_PL.LN_SAU_THUE),
+  }
+}
+
 export interface Ratios {
   currentRatio: number
   quickRatio: number

@@ -35,6 +35,12 @@ const TOPBAR_STYLE = `
   .tb-pill:disabled{opacity:.4;cursor:not-allowed}
   .tb-sel{background:#fff;border:1px solid #E0E7F0;color:#1C3557;padding:3px 6px;border-radius:6px;font-size:11px;font-family:inherit;cursor:pointer;font-weight:600;flex-shrink:0}
   .tb-vsep{width:1px;height:16px;background:#E0E7F0;flex-shrink:0}
+  .tb-customizer-wrap{position:relative}
+  .tb-customizer{position:absolute;top:26px;right:0;background:#fff;border:1px solid #E0E7F0;border-radius:8px;box-shadow:0 8px 22px rgba(28,53,87,.18);padding:10px;z-index:60;width:230px}
+  .tb-customizer-h{font-size:9.5px;font-weight:700;color:#4B6A8A;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+  .tb-customizer-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:190px;overflow-y:auto;margin-bottom:8px}
+  .tb-customizer-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#1C3557;cursor:pointer}
+  .tb-customizer-actions{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid #F1F4F8;padding-top:8px}
   .tb-unit{display:inline-flex;border-radius:12px;overflow:hidden;background:#F3F5F8;border:1px solid #E0E7F0}
   .tb-unit button{padding:3px 9px;font-size:11px;font-weight:700;border:none;background:transparent;color:#8A94A6;cursor:pointer;font-family:inherit}
   .tb-unit button.act{background:#D4A64A;color:#1C3557}
@@ -250,6 +256,10 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
   const [donViKey, setDonViKey] = useState<string>(ALL_DONVI)
   const [tab, setTab] = useState<TabKey>('tongquan')
   const pf = usePeriodFilter(periods, defaultMonth)
+  // Popover "Tùy chỉnh" (chỉ chế độ Quý) — draft riêng để người dùng tick/bỏ tick thoải mái, chỉ áp
+  // dụng vào pf.customQuarterKeys thật khi bấm "Áp dụng", tránh bảng nhảy số liệu liên tục khi đang chọn.
+  const [quarterCustomizerOpen, setQuarterCustomizerOpen] = useState(false)
+  const [draftQuarterKeys, setDraftQuarterKeys] = useState<string[]>([])
 
   // Kỳ chốt snapshot (BS + card tổng quan) = kỳ gần nhất THỰC SỰ có số liệu trong khoảng đã chọn —
   // không phải kỳ cuối cùng theo lịch, vì lọc Năm/Quý có thể kéo dài tới các tháng tương lai còn
@@ -310,10 +320,74 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
             ))}
           </select>
         )}
+        {(tab === 'tongquan' || tab === 'ngang') && pf.mode === 'quarter' && (
+          <>
+            <div className="tb-vsep" />
+            <span className="tb-flabel">So sánh</span>
+            <div className="tb-pillgroup">
+              <button
+                className={`tb-pill${!pf.customQuarterKeys && pf.compareBasis === 'acrossYears' ? ' act' : ''}`}
+                onClick={() => pf.setCompareBasis('acrossYears')}
+              >
+                Cùng quý qua năm
+              </button>
+              <button
+                className={`tb-pill${!pf.customQuarterKeys && pf.compareBasis === 'quartersInYear' ? ' act' : ''}`}
+                onClick={() => pf.setCompareBasis('quartersInYear')}
+              >
+                4 quý trong năm
+              </button>
+            </div>
+            <div className="tb-customizer-wrap">
+              <button
+                className={`tb-pill${pf.customQuarterKeys ? ' act' : ''}`}
+                onClick={() => { setDraftQuarterKeys(pf.customQuarterKeys ?? []); setQuarterCustomizerOpen(o => !o) }}
+              >
+                ⚙ Tùy chỉnh{pf.customQuarterKeys ? ` (${pf.customQuarterKeys.length})` : ''}
+              </button>
+              {quarterCustomizerOpen && (
+                <div className="tb-customizer">
+                  <div className="tb-customizer-h">Chọn các quý muốn so sánh</div>
+                  <div className="tb-customizer-grid">
+                    {pf.quarterOptions.map(o => {
+                      const checked = draftQuarterKeys.includes(o.key)
+                      return (
+                        <label key={o.key} className="tb-customizer-item">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={e => setDraftQuarterKeys(prev => (
+                              e.target.checked ? [...prev, o.key] : prev.filter(k => k !== o.key)
+                            ))}
+                          />
+                          {o.label}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <div className="tb-customizer-actions">
+                    <button
+                      className="tc-linkbtn"
+                      onClick={() => { setDraftQuarterKeys([]); pf.setCustomQuarterSelection(null); setQuarterCustomizerOpen(false) }}
+                    >
+                      Xoá tuỳ chỉnh
+                    </button>
+                    <button
+                      className="tb-pill act"
+                      onClick={() => { pf.setCustomQuarterSelection(draftQuarterKeys); setQuarterCustomizerOpen(false) }}
+                    >
+                      Áp dụng
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setLeft, tab, donViKey, donViList, pf.mode, pf.year, pf.quarter, pf.month, pf.years, periods])
+  }, [setLeft, tab, donViKey, donViList, pf.mode, pf.year, pf.quarter, pf.month, pf.years, periods, pf.compareBasis, pf.customQuarterKeys, quarterCustomizerOpen, draftQuarterKeys, pf.quarterOptions])
 
   useEffect(() => {
     setRight(
@@ -330,7 +404,7 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
   return (
     <>
       {tab === 'tongquan' && (
-        <TabTongQuan docs={docs} donViKey={donViKey} donViLabel={donViLabel} periods={periods} snapshotPeriod={snapshotPeriod} fmtS={fmtS} unitLbl={unitLbl} />
+        <TabTongQuan docs={docs} donViKey={donViKey} donViLabel={donViLabel} pf={pf} fmtS={fmtS} unitLbl={unitLbl} />
       )}
       {tab === 'ngang' && (
         <TabPhanTichNgang docs={docs} donViKey={donViKey} donViLabel={donViLabel} pf={pf} fmtS={fmtS} unitLbl={unitLbl} />

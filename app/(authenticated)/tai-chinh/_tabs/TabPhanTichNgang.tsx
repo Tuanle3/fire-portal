@@ -5,7 +5,7 @@ import {
 } from '../_lib/compute'
 import { MS_BS, MS_PL, PL_BREAKDOWN_CODES } from '../_lib/masocode'
 import { pct, ratioStr } from '../_lib/format'
-import { PeriodFilter, periodsForQuarter, periodsForYear } from '../_lib/usePeriodFilter'
+import { PeriodFilter } from '../_lib/usePeriodFilter'
 
 interface Props {
   docs: FlatDoc[]
@@ -21,13 +21,15 @@ interface Row { label: string; bold?: boolean; isPercent?: boolean; blank?: bool
 
 const safeDiv = (a: number, b: number) => (b !== 0 ? a / b : 0)
 
-// ── KQKD: cột theo quý + cả năm, gộp cả mã số gốc lẫn thuyết minh (sản phẩm/chi phí) thành 1
-// bảng liền mạch đúng như mẫu — chi phí/thuế hiện dấu âm để đọc theo kiểu "khoản trừ lợi nhuận".
+// ── KQKD: N cột kỳ (đến từ pf.trendBuckets — Năm/Quý/Tháng tự đổi số cột và nội dung), gộp cả mã số
+// gốc lẫn thuyết minh (sản phẩm/chi phí) thành 1 bảng liền mạch — chi phí/thuế hiện dấu âm để đọc
+// theo kiểu "khoản trừ lợi nhuận". Danh sách sản phẩm/chi phí lấy theo hợp của TẤT CẢ các cột (không
+// chỉ cột cuối) để không bị mất dòng nếu 1 sản phẩm chỉ phát sinh ở cột đầu/giữa.
 function buildPlRows(docs: FlatDoc[], donViKey: string, columns: Column[]): Row[] {
-  const yearPeriods = columns[columns.length - 1].periods
-  const productNames = productPL(docs, donViKey, yearPeriods).map(p => p.name)
-  const costNames = breakdownByCode(docs, donViKey, yearPeriods, [PL_BREAKDOWN_CODES.CAU_TRUC_CHI_PHI, PL_BREAKDOWN_CODES.CHI_PHI_KHAC_CT]).map(i => i.chiTieu)
-  const otherNames = breakdownByCode(docs, donViKey, yearPeriods, [PL_BREAKDOWN_CODES.THU_NHAP_KHAC]).map(i => i.chiTieu)
+  const allPeriods = [...new Set(columns.flatMap(c => c.periods))]
+  const productNames = productPL(docs, donViKey, allPeriods).map(p => p.name)
+  const costNames = breakdownByCode(docs, donViKey, allPeriods, [PL_BREAKDOWN_CODES.CAU_TRUC_CHI_PHI, PL_BREAKDOWN_CODES.CHI_PHI_KHAC_CT]).map(i => i.chiTieu)
+  const otherNames = breakdownByCode(docs, donViKey, allPeriods, [PL_BREAKDOWN_CODES.THU_NHAP_KHAC]).map(i => i.chiTieu)
 
   const col = (fn: (periods: string[]) => number) => columns.map(c => fn(c.periods))
   const dt = (name: string) => col(ps => valueByCodeAndLabel(docs, donViKey, ps, [PL_BREAKDOWN_CODES.DOANH_THU_SP], name))
@@ -70,7 +72,7 @@ function PlTable({ rows, columns, fmtS }: { rows: Row[]; columns: Column[]; fmtS
   return (
     <table className="stbl">
       <thead>
-        <tr><th className="lbl">Chỉ tiêu</th>{columns.map(c => <th key={c.label} className="num">{c.label}</th>)}</tr>
+        <tr><th className="lbl">Chỉ tiêu</th>{columns.map((c, i) => <th key={i} className="num">{c.label}</th>)}</tr>
       </thead>
       <tbody>
         {rows.map((r, ri) => {
@@ -94,9 +96,7 @@ function PlTable({ rows, columns, fmtS }: { rows: Row[]; columns: Column[]; fmtS
 // ── Cân đối kế toán + Nguồn vốn: view rút gọn theo đúng mẫu (không phải toàn bộ chi tiết TT200).
 // TSNH lấy nguyên các nhóm La Mã thật (I./II./III...) từ groupBsItems; TSDH rút gọn còn 3 dòng;
 // Nợ/VCSH lấy trực tiếp theo MÃ SỐ CĐKT (311=phải trả NCC NH, 321/339=vay NH/DH, 411=vốn góp,
-// 412=thặng dư vốn, 418+419=quỹ ĐTPT+quỹ khác VCSH, 420=LNST chưa phân phối) — đã đối chiếu đúng
-// với Data_BS thật (không đoán qua số tài khoản TB nữa vì từng lấy sai 421 thay vì 420, và sai
-// dấu 4111/412 theo quy ước report TB).
+// 412=thặng dư vốn, 418+419=quỹ ĐTPT+quỹ khác VCSH, 420=LNST chưa phân phối).
 function sectionLevel1(groups: ReturnType<typeof groupBsItems>, sectionMaSo: string) {
   const startIdx = groups.findIndex(g => g.item.maSo === sectionMaSo)
   if (startIdx === -1) return []
@@ -123,53 +123,34 @@ function BsGroup({ label, rows, fmtS }: { label: string; rows: Row[]; fmtS: (v: 
 }
 
 export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl }: Props) {
-  const year = pf.year
-  const prevYear = String(Number(year) - 1)
-  const isQuarterMode = pf.mode === 'quarter'
-  const monthColsOfQuarter = (y: string, q: number): Column[] =>
-    [q * 3 - 2, q * 3 - 1, q * 3].map(m => {
-      const period = `${y}-${String(m).padStart(2, '0')}`
-      return { label: `Tháng ${m}`, periods: pf.periods.includes(period) ? [period] : [] }
-    })
-  const quarterCols: Column[] = [1, 2, 3, 4].map(q => ({ label: `Quý ${q}`, periods: periodsForQuarter(pf.periods, year, q) }))
-  const yearPeriods = periodsForYear(pf.periods, year)
-  const prevYearPeriods = periodsForYear(pf.periods, prevYear)
+  // Cột kỳ dùng chung cho cả bảng KQKD, CĐKT lẫn Chỉ số tài chính — tự đổi theo bộ lọc Kỳ:
+  //   Năm   → 3 năm gần nhất (2024, 2025, 2026...)
+  //   Quý   → theo pf.compareBasis: cùng 1 quý qua 3 năm gần nhất, HOẶC 4 quý trong năm đang chọn,
+  //           HOẶC danh sách Quý×Năm người dùng tự chọn ở popover "Tùy chỉnh" (pf.customQuarterKeys)
+  //   Tháng → 3 tháng gần nhất trong đúng năm đang chọn
+  const columns: Column[] = pf.trendBuckets(3)
+  const colLabel = columns.map(c => c.label).join(' · ')
 
-  // Khi bộ lọc Kỳ ở chế độ "Quý" (đã chọn 1 quý cụ thể) — tách cột theo từng THÁNG trong quý đó
-  // thay vì gộp cả 4 quý của năm, để xem biến động từng tháng ngay trong quý đang quan tâm.
-  const plColumns: Column[] = isQuarterMode
-    ? [...monthColsOfQuarter(year, pf.quarter), { label: `Quý ${pf.quarter}`, periods: periodsForQuarter(pf.periods, year, pf.quarter) }]
-    : [...quarterCols, { label: `Năm ${year}`, periods: yearPeriods }]
-  const bsColumns: Column[] = isQuarterMode
-    ? [
-        ...monthColsOfQuarter(year, pf.quarter),
-        { label: `Quý ${pf.quarter}/${year}`, periods: periodsForQuarter(pf.periods, year, pf.quarter) },
-        { label: `Quý ${pf.quarter}/${prevYear}`, periods: periodsForQuarter(pf.periods, prevYear, pf.quarter) },
-      ]
-    : [...quarterCols, { label: `Năm ${year}`, periods: yearPeriods }, { label: `Năm ${prevYear}`, periods: prevYearPeriods }]
+  const plRows = buildPlRows(docs, donViKey, columns)
 
-  const plRows = buildPlRows(docs, donViKey, plColumns)
-
-  const allBsPeriods = [...new Set(bsColumns.flatMap(c => c.periods))]
+  const allBsPeriods = [...new Set(columns.flatMap(c => c.periods))]
   const bsItems = buildLineItemMatrix(docs, 'BS', donViKey, allBsPeriods)
   const bsByMaSo = new Map(bsItems.map(i => [i.maSo, i]))
   const bsGroups = groupBsItems(bsItems)
 
-  // "Năm {year}" gộp cả các tháng còn trống của những kỳ tương lai (0 cho tới khi đồng bộ) — nếu
-  // lấy đúng tháng cuối cùng theo mảng thì sẽ rơi vào tháng trống đó (vd tháng 12 khi mới có số
-  // liệu tới tháng 6), nên quét ngược để lấy kỳ cuối cùng CÓ số liệu thật (Tổng TS ≠ 0).
+  // BS là số dư tại 1 thời điểm — mỗi cột chốt vào kỳ CUỐI CÙNG trong cột đó thực sự có số liệu
+  // (không phải kỳ cuối theo lịch, có thể còn trống nếu chưa đồng bộ).
   const endOf = (periods: string[]): string | null => {
     for (let i = periods.length - 1; i >= 0; i--) {
       if ((bsByMaSo.get(MS_BS.TONG_TS)?.values[periods[i]] ?? 0) !== 0) return periods[i]
     }
     return periods.length ? periods[periods.length - 1] : null
   }
-
   const vBS = (maSo: string, periods: string[]) => {
     const p = endOf(periods)
     return p ? (bsByMaSo.get(maSo)?.values[p] ?? 0) : 0
   }
-  const bsCol = (fn: (periods: string[]) => number) => bsColumns.map(c => fn(c.periods))
+  const bsCol = (fn: (periods: string[]) => number) => columns.map(c => fn(c.periods))
 
   const tsnhChildren = sectionLevel1(bsGroups, MS_BS.TSNH)
   const tsnhRows: Row[] = [
@@ -203,19 +184,19 @@ export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl
   const tongTaiSanRow: Row = { label: 'TỔNG TÀI SẢN', bold: true, values: bsCol(ps => vBS(MS_BS.TONG_TS, ps)) }
   const tongNguonVonRow: Row = { label: 'TỔNG NGUỒN VỐN', bold: true, values: bsCol(ps => vBS(MS_BS.TONG_NGUON_VON, ps)) }
 
-  // ── Chỉ số tài chính cơ bản: Năm hiện tại vs năm trước, công thức chạy trực tiếp từ số liệu đã
-  // tổng hợp ở trên (không phải nhập tay) — nhóm/công thức/ngưỡng tham khảo theo đúng mẫu người dùng gửi.
-  const plAnnual = (maSo: string) => maSoSumOverPeriods(docs, donViKey, yearPeriods, maSo)
-  const plPrevYear = (maSo: string) => maSoSumOverPeriods(docs, donViKey, prevYearPeriods, maSo)
+  // ── Chỉ số tài chính cơ bản: chạy trực tiếp trên CHÍNH các cột đang hiển thị ở trên (không còn cố
+  // định "năm nay vs năm trước" như bản cũ) — công thức/ngưỡng tham khảo giữ nguyên theo mẫu gốc.
   const khauHaoOf = (ps: string[]) => breakdownByCode(docs, donViKey, ps, [PL_BREAKDOWN_CODES.CAU_TRUC_CHI_PHI]).find(i => i.chiTieu === 'Khấu hao - Phân bổ')?.value ?? 0
 
-  function ratioSet(bsPeriods: string[], plSum: (maSo: string) => number, khauHao: number) {
-    const tsnh = vBS(MS_BS.TSNH, bsPeriods), noNH = vBS(MS_BS.NO_NGAN_HAN, bsPeriods)
-    const tien = vBS(MS_BS.TIEN, bsPeriods), htk = vBS(MS_BS.HANG_TON_KHO, bsPeriods)
-    const tongTS = vBS(MS_BS.TONG_TS, bsPeriods), noPhaiTra = vBS(MS_BS.NO_PHAI_TRA, bsPeriods), vonCSH = vBS(MS_BS.VON_CSH, bsPeriods)
-    const vayNH = vBS(MS_BS.VAY_NH, bsPeriods), vayDH = vBS(MS_BS.VAY_DH, bsPeriods)
+  function ratioSetFor(periodsForCol: string[]) {
+    const tsnh = vBS(MS_BS.TSNH, periodsForCol), noNH = vBS(MS_BS.NO_NGAN_HAN, periodsForCol)
+    const tien = vBS(MS_BS.TIEN, periodsForCol), htk = vBS(MS_BS.HANG_TON_KHO, periodsForCol)
+    const tongTS = vBS(MS_BS.TONG_TS, periodsForCol), noPhaiTra = vBS(MS_BS.NO_PHAI_TRA, periodsForCol), vonCSH = vBS(MS_BS.VON_CSH, periodsForCol)
+    const vayNH = vBS(MS_BS.VAY_NH, periodsForCol), vayDH = vBS(MS_BS.VAY_DH, periodsForCol)
+    const plSum = (maSo: string) => maSoSumOverPeriods(docs, donViKey, periodsForCol, maSo)
     const dtt = plSum(MS_PL.DTT), laiGop = plSum(MS_PL.LAI_GOP), lntt = plSum(MS_PL.LN_TRUOC_THUE)
     const lnst = plSum(MS_PL.LN_SAU_THUE), cpLaiVay = plSum(MS_PL.CP_LAI_VAY)
+    const khauHao = khauHaoOf(periodsForCol)
     const ebitda = lntt + cpLaiVay + khauHao
     return {
       currentRatio: safeDiv(tsnh, noNH), quickRatio: safeDiv(tsnh - htk, noNH), cashRatio: safeDiv(tien, noNH),
@@ -225,48 +206,57 @@ export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl
       grossMargin: safeDiv(laiGop, dtt), roe: safeDiv(lnst, vonCSH), roa: safeDiv(lnst, tongTS), netMargin: safeDiv(lnst, dtt),
     }
   }
-  const hasPrevYear = prevYearPeriods.length > 0
-  const curR = ratioSet(yearPeriods, plAnnual, khauHaoOf(yearPeriods))
-  const prevR = hasPrevYear ? ratioSet(prevYearPeriods, plPrevYear, khauHaoOf(prevYearPeriods)) : null
+  type RatioSet = ReturnType<typeof ratioSetFor>
+  const ratioByColumn: { hasData: boolean; r: RatioSet }[] = columns.map(c => ({
+    hasData: c.periods.length > 0 && vBS(MS_BS.TONG_TS, c.periods) !== 0,
+    r: ratioSetFor(c.periods),
+  }))
+  const val = (key: keyof RatioSet): (number | null)[] => ratioByColumn.map(c => (c.hasData ? c.r[key] : null))
 
   type RKind = 'ratio' | 'pct' | 'money'
-  interface RRow { label: string; formula?: string; note: string; kind: RKind; cur: number; prev: number | null }
+  interface RRow { label: string; formula?: string; note: string; kind: RKind; values: (number | null)[] }
   const fmtRatio = (kind: RKind, v: number) => kind === 'pct' ? pct(v) : kind === 'money' ? fmtS(v) : `${ratioStr(v)} lần`
 
   const ratioGroups: { title: string; rows: RRow[] }[] = [
     {
       title: '1. Thanh khoản', rows: [
-        { label: 'Thanh khoản hiện hành', formula: 'TSNH / Nợ NH', note: 'BĐS: ≥ 1,3 | Xây dựng: ≥ 1,2', kind: 'ratio', cur: curR.currentRatio, prev: prevR?.currentRatio ?? null },
-        { label: 'Thanh khoản nhanh', formula: '(TSNH − HTK) / Nợ NH', note: 'BĐS: ≥ 0,5 | Xây dựng: ≥ 0,7', kind: 'ratio', cur: curR.quickRatio, prev: prevR?.quickRatio ?? null },
-        { label: 'Thanh khoản tiền mặt', formula: 'Tiền / Nợ NH', note: '≥ 0,1 là mức tối thiểu an toàn', kind: 'ratio', cur: curR.cashRatio, prev: prevR?.cashRatio ?? null },
-        { label: 'Vốn lưu động ròng', formula: 'TSNH − Nợ NH', note: `> 0 (đơn vị: ${unitLbl})`, kind: 'money', cur: curR.workingCapital, prev: prevR?.workingCapital ?? null },
+        { label: 'Thanh khoản hiện hành', formula: 'TSNH / Nợ NH', note: 'BĐS: ≥ 1,3 | Xây dựng: ≥ 1,2', kind: 'ratio', values: val('currentRatio') },
+        { label: 'Thanh khoản nhanh', formula: '(TSNH − HTK) / Nợ NH', note: 'BĐS: ≥ 0,5 | Xây dựng: ≥ 0,7', kind: 'ratio', values: val('quickRatio') },
+        { label: 'Thanh khoản tiền mặt', formula: 'Tiền / Nợ NH', note: '≥ 0,1 là mức tối thiểu an toàn', kind: 'ratio', values: val('cashRatio') },
+        { label: 'Vốn lưu động ròng', formula: 'TSNH − Nợ NH', note: `> 0 (đơn vị: ${unitLbl})`, kind: 'money', values: val('workingCapital') },
       ],
     },
     {
       title: '2. Đòn bẩy tài chính', rows: [
-        { label: 'Nợ / Tổng TS', formula: 'Tổng nợ phải trả / Tổng TS', note: 'BĐS: ≤ 65% | Xây dựng: ≤ 70%', kind: 'pct', cur: curR.debtToAssets, prev: prevR?.debtToAssets ?? null },
-        { label: 'Nợ / Vốn CSH', formula: 'Tổng nợ phải trả / Vốn CSH', note: 'An toàn: ≤ 2,0x | Cảnh báo: > 3,0x', kind: 'ratio', cur: curR.debtToEquity, prev: prevR?.debtToEquity ?? null },
-        { label: 'ICR — Khả năng trả lãi', formula: '(LNTT + CP lãi vay) / CP lãi vay', note: 'BĐS: ≥ 2,5x | Xây dựng: ≥ 3,0x', kind: 'ratio', cur: curR.icr, prev: prevR?.icr ?? null },
-        { label: 'Nợ vay / EBITDA', formula: '(Nợ vay NH + DH) / EBITDA', note: 'Ổn: ≤ 4x | Nguy hiểm: > 6x', kind: 'ratio', cur: curR.debtToEbitda, prev: prevR?.debtToEbitda ?? null },
+        { label: 'Nợ / Tổng TS', formula: 'Tổng nợ phải trả / Tổng TS', note: 'BĐS: ≤ 65% | Xây dựng: ≤ 70%', kind: 'pct', values: val('debtToAssets') },
+        { label: 'Nợ / Vốn CSH', formula: 'Tổng nợ phải trả / Vốn CSH', note: 'An toàn: ≤ 2,0x | Cảnh báo: > 3,0x', kind: 'ratio', values: val('debtToEquity') },
+        { label: 'ICR — Khả năng trả lãi', formula: '(LNTT + CP lãi vay) / CP lãi vay', note: 'BĐS: ≥ 2,5x | Xây dựng: ≥ 3,0x', kind: 'ratio', values: val('icr') },
+        { label: 'Nợ vay / EBITDA', formula: '(Nợ vay NH + DH) / EBITDA', note: 'Ổn: ≤ 4x | Nguy hiểm: > 6x', kind: 'ratio', values: val('debtToEbitda') },
       ],
     },
     {
       title: '3. Sinh lời - Lợi nhuận', rows: [
-        { label: 'Lãi gộp / Doanh thu thuần', note: 'BĐS: ≥ 25% | Xây dựng: ≥ 8%', kind: 'pct', cur: curR.grossMargin, prev: prevR?.grossMargin ?? null },
-        { label: 'ROE', formula: 'LNST / Vốn CSH', note: 'BĐS: ≥ 15% | Xây dựng: ≥ 12%', kind: 'pct', cur: curR.roe, prev: prevR?.roe ?? null },
-        { label: 'ROA', formula: 'LNST / Tổng TS', note: 'BĐS: ≥ 5% | Xây dựng: ≥ 6%', kind: 'pct', cur: curR.roa, prev: prevR?.roa ?? null },
-        { label: 'LNST / Doanh thu thuần', note: 'BĐS TM: ≥ 12% | NOXH: ≥ 4%', kind: 'pct', cur: curR.netMargin, prev: prevR?.netMargin ?? null },
+        { label: 'Lãi gộp / Doanh thu thuần', note: 'BĐS: ≥ 25% | Xây dựng: ≥ 8%', kind: 'pct', values: val('grossMargin') },
+        { label: 'ROE', formula: 'LNST / Vốn CSH', note: 'BĐS: ≥ 15% | Xây dựng: ≥ 12%', kind: 'pct', values: val('roe') },
+        { label: 'ROA', formula: 'LNST / Tổng TS', note: 'BĐS: ≥ 5% | Xây dựng: ≥ 6%', kind: 'pct', values: val('roa') },
+        { label: 'LNST / Doanh thu thuần', note: 'BĐS TM: ≥ 12% | NOXH: ≥ 4%', kind: 'pct', values: val('netMargin') },
       ],
     },
   ]
 
   return (
     <>
+      <div className="tc-sub">{donViLabel} · So sánh: {colLabel || '—'}</div>
+
+      {columns.length <= 1 && (
+        <div className="alert-row alert-yellow">⚠ Chưa đủ dữ liệu các kỳ trước để so sánh — chỉ có 1 cột dữ liệu.</div>
+      )}
+
       <div className="pn-grid">
         <div className="panel" style={{ marginBottom: 0 }}>
           <div className="panel-h"><span>📈 Báo cáo kết quả kinh doanh</span><span className="company-badge">{donViLabel}</span></div>
           <div className="panel-b" style={{ overflowX: 'auto' }}>
-            <PlTable rows={plRows} columns={plColumns} fmtS={fmtS} />
+            <PlTable rows={plRows} columns={columns} fmtS={fmtS} />
           </div>
         </div>
 
@@ -276,7 +266,7 @@ export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl
             <div className="panel-b" style={{ overflowX: 'auto' }}>
               <table className="stbl">
                 <thead>
-                  <tr><th /><th className="lbl">Chỉ tiêu</th>{bsColumns.map(c => <th key={c.label} className="num">{c.label}</th>)}</tr>
+                  <tr><th /><th className="lbl">Chỉ tiêu</th>{columns.map((c, i) => <th key={i} className="num">{c.label}</th>)}</tr>
                 </thead>
                 <tbody>
                   <tr className="bold">
@@ -297,14 +287,14 @@ export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl
           </div>
 
           <div className="panel" style={{ marginBottom: 0 }}>
-            <div className="panel-h"><span>📐 Chỉ số tài chính cơ bản</span><span>Năm {year}{hasPrevYear ? ` so ${prevYear}` : ''}</span></div>
+            <div className="panel-h"><span>📐 Chỉ số tài chính cơ bản</span><span>{columns.length} kỳ</span></div>
             <div className="panel-b pn-ratio-cards">
               {ratioGroups.map(g => (
                 <div className="pn-ratio-card" key={g.title}>
                   <div className="pn-ratio-cardh">{g.title}</div>
                   <table className="stbl pn-ratio-tbl">
                     <thead>
-                      <tr><th className="lbl" /><th className="num">{year}</th>{hasPrevYear && <th className="num">{prevYear}</th>}</tr>
+                      <tr><th className="lbl" />{columns.map((c, i) => <th key={i} className="num">{c.label}</th>)}</tr>
                     </thead>
                     <tbody>
                       {g.rows.map(r => (
@@ -314,8 +304,7 @@ export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl
                             {r.formula && <div className="pn-ratio-meta">{r.formula}</div>}
                             <div className="pn-ratio-meta pn-ratio-note">{r.note}</div>
                           </td>
-                          <td className="num">{fmtRatio(r.kind, r.cur)}</td>
-                          {hasPrevYear && <td className="num">{r.prev == null ? '–' : fmtRatio(r.kind, r.prev)}</td>}
+                          {r.values.map((v, ci) => <td key={ci} className="num">{v == null ? '–' : fmtRatio(r.kind, v)}</td>)}
                         </tr>
                       ))}
                     </tbody>
@@ -323,7 +312,6 @@ export function TabPhanTichNgang({ docs, donViKey, donViLabel, pf, fmtS, unitLbl
                 </div>
               ))}
             </div>
-            {!hasPrevYear && <div style={{ fontSize: 10, color: '#9CA3AF', padding: '0 12px 8px' }}>Chưa có dữ liệu Năm {prevYear} để so sánh.</div>}
           </div>
         </div>
       </div>
