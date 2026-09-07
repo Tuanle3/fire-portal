@@ -28,6 +28,14 @@ function findCol(headerRow: Cell[], pred: (norm: string) => boolean): number {
   return -1
 }
 
+// Cột "Loại BC" (Nội bộ / Ngân hàng...) — dò theo tên header trước, fallback về cột B (index 1,
+// đúng vị trí thực tế trong Data_PL/Data_BS) nếu vì lý do gì đó không khớp được tên header.
+function findLoaiBCCol(headerRow: Cell[]): number {
+  const byName = findCol(headerRow, n => n === 'loaibc')
+  if (byName >= 0) return byName
+  return String(headerRow[1] ?? '').trim() ? 1 : -1
+}
+
 // FIX: Chấp nhận 3 dạng header:
 //   1. "Tháng 12/2025" hoặc "12/2025"  — có năm đầy đủ
 //   2. "Tháng 1" ... "Tháng 12"        — chỉ có số tháng, không có năm (dùng fallbackYear từ tên tab)
@@ -128,6 +136,7 @@ function parsePL(sheet: Sheet, year?: string): BctcPeriodDoc[] {
   const colChiTieu = findCol(header, n => n === 'sotaikhoan')
   const colMaSo    = findCol(header, n => n === 'maso')
   const colTMinh   = findCol(header, n => n.startsWith('tmi'))
+  const colLoaiBC  = findLoaiBCCol(header)
 
   const entries: { donVi: string; period: string; row: BctcPlRow }[] = []
   for (const { rowIdx, donVi } of validRows(sheet, h.dataStart)) {
@@ -141,6 +150,7 @@ function parsePL(sheet: Sheet, year?: string): BctcPeriodDoc[] {
           chiTieu: colChiTieu >= 0 ? String(row[colChiTieu] ?? '').trim() : '',
           tMinh: colTMinh >= 0 ? String(row[colTMinh] ?? '').trim() : '',
           value: num(row[mc.valueCol]),
+          loaiBC: colLoaiBC >= 0 ? String(row[colLoaiBC] ?? '').trim() : '',
         },
       })
     }
@@ -156,6 +166,7 @@ function parseBS(sheet: Sheet, year?: string): BctcPeriodDoc[] {
   const colChiTieu = findCol(header, n => n === 'chitieu')
   const colMaSo    = findCol(header, n => n.startsWith('ma') && !n.includes('khach') && !n.includes('cungcap') && !n.includes('ncc'))
   const colTMinh   = findCol(header, n => n.startsWith('tmi'))
+  const colLoaiBC  = findLoaiBCCol(header)
 
   const entries: { donVi: string; period: string; row: BctcBsRow }[] = []
   for (const { rowIdx, donVi } of validRows(sheet, h.dataStart)) {
@@ -169,6 +180,7 @@ function parseBS(sheet: Sheet, year?: string): BctcPeriodDoc[] {
           chiTieu: colChiTieu >= 0 ? String(row[colChiTieu] ?? '').trim() : '',
           tMinh: colTMinh >= 0 ? String(row[colTMinh] ?? '').trim() : '',
           value: num(row[mc.valueCol]),
+          loaiBC: colLoaiBC >= 0 ? String(row[colLoaiBC] ?? '').trim() : '',
         },
       })
     }

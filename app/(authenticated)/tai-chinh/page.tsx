@@ -5,7 +5,7 @@ import { getDb } from '@/lib/firebase'
 import { useDashUnit } from '@/contexts/dash-unit'
 import { useTopbarInfo } from '@/contexts/topbar-info'
 import { ALL_DONVI, DonViInfo, RawBctc } from './_lib/types'
-import { computeSnapshot, FlatDoc, flattenBctc, hasSnapshotData, listDonVi, listPeriods } from './_lib/compute'
+import { computeSnapshot, filterDocsByLoaiBC, FlatDoc, flattenBctc, hasSnapshotData, listDonVi, listLoaiBC, listPeriods } from './_lib/compute'
 import { moneyFmt } from './_lib/format'
 import { Granularity, usePeriodFilter } from './_lib/usePeriodFilter'
 import { TabTongQuan } from './_tabs/TabTongQuan'
@@ -212,6 +212,7 @@ export default function TaiChinhPage() {
   const docs = useMemo(() => flattenBctc(raw), [raw])
   const periods = useMemo(() => listPeriods(docs), [docs])
   const donViList = useMemo(() => listDonVi(docs), [docs])
+  const loaiBCList = useMemo(() => listLoaiBC(docs), [docs])
 
   // Kỳ mặc định = kỳ gần nhất THỰC SỰ có số liệu (không phải kỳ cuối cùng trong mảng, có thể là
   // tháng tương lai còn trống trong Sheet) — tính trên "Hợp nhất" để không phụ thuộc lựa chọn đơn vị.
@@ -241,20 +242,24 @@ export default function TaiChinhPage() {
           </div>
         )}
         {!loading && !error && periods.length > 0 && (
-          <TaiChinhShell key={periods.join('|')} docs={docs} periods={periods} donViList={donViList} defaultMonth={defaultMonth} />
+          <TaiChinhShell key={periods.join('|')} docs={docs} periods={periods} donViList={donViList} loaiBCList={loaiBCList} defaultMonth={defaultMonth} />
         )}
       </div>
     </>
   )
 }
 
-function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
-  docs: FlatDoc[]; periods: string[]; donViList: DonViInfo[]; defaultMonth: string
+function TaiChinhShell({ docs: allDocs, periods, donViList, loaiBCList, defaultMonth }: {
+  docs: FlatDoc[]; periods: string[]; donViList: DonViInfo[]; loaiBCList: string[]; defaultMonth: string
 }) {
   const { unit, setUnit } = useDashUnit()
   const { setLeft, setRight } = useTopbarInfo()
   const [donViKey, setDonViKey] = useState<string>(ALL_DONVI)
   const [tab, setTab] = useState<TabKey>('tongquan')
+  // Nội bộ / Ngân hàng ... — mặc định lấy giá trị đầu tiên trong danh sách (listLoaiBC đã ưu tiên
+  // "Nội bộ" lên trước). '' nếu dữ liệu chưa có Loại BC nào (đồng bộ cũ) — khi đó không lọc gì cả.
+  const [loaiBC, setLoaiBC] = useState<string>(loaiBCList[0] ?? '')
+  const docs = useMemo(() => filterDocsByLoaiBC(allDocs, loaiBC), [allDocs, loaiBC])
   const pf = usePeriodFilter(periods, defaultMonth)
   // Popover "Tùy chỉnh" (chỉ chế độ Quý) — draft riêng để người dùng tick/bỏ tick thoải mái, chỉ áp
   // dụng vào pf.customQuarterKeys thật khi bấm "Áp dụng", tránh bảng nhảy số liệu liên tục khi đang chọn.
@@ -294,6 +299,17 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
               <button className={`tb-pill${donViKey === ALL_DONVI ? ' act' : ''}`} onClick={() => setDonViKey(ALL_DONVI)}>Hợp nhất</button>
               {donViList.map(d => (
                 <button key={d.key} className={`tb-pill${donViKey === d.key ? ' act' : ''}`} onClick={() => setDonViKey(d.key)}>{d.label}</button>
+              ))}
+            </div>
+          </>
+        )}
+        {loaiBCList.length > 1 && (
+          <>
+            <div className="tb-vsep" />
+            <span className="tb-flabel">Loại BC</span>
+            <div className="tb-pillgroup">
+              {loaiBCList.map(l => (
+                <button key={l} className={`tb-pill${loaiBC === l ? ' act' : ''}`} onClick={() => setLoaiBC(l)}>{l}</button>
               ))}
             </div>
           </>
@@ -387,7 +403,7 @@ function TaiChinhShell({ docs, periods, donViList, defaultMonth }: {
       </div>,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setLeft, tab, donViKey, donViList, pf.mode, pf.year, pf.quarter, pf.month, pf.years, periods, pf.compareBasis, pf.customQuarterKeys, quarterCustomizerOpen, draftQuarterKeys, pf.quarterOptions])
+  }, [setLeft, tab, donViKey, donViList, loaiBC, loaiBCList, pf.mode, pf.year, pf.quarter, pf.month, pf.years, periods, pf.compareBasis, pf.customQuarterKeys, quarterCustomizerOpen, draftQuarterKeys, pf.quarterOptions])
 
   useEffect(() => {
     setRight(

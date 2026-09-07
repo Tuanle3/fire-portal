@@ -6,6 +6,9 @@ export interface BctcPlRow {
   chiTieu: string
   tMinh: string
   value: number
+  // Cột "Loại BC" trong Sheet (VD "Nội bộ" / "Ngân hàng") — 1 công ty/kỳ có thể có nhiều báo cáo
+  // song song, cần giữ lại để lọc riêng từng loại thay vì cộng gộp. '' nếu Sheet không có cột này.
+  loaiBC: string
 }
 
 export interface BctcBsRow {
@@ -14,6 +17,7 @@ export interface BctcBsRow {
   chiTieu: string
   tMinh: string
   value: number
+  loaiBC: string
 }
 
 export interface BctcTbRow {

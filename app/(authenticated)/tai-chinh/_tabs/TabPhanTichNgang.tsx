@@ -54,12 +54,23 @@ function buildPlRows(docs: FlatDoc[], donViKey: string, columns: Column[]): Row[
   rows.push(...productNames.map((n, i) => ({ label: `% Lãi gộp - ${n}`, isPercent: true, values: columns.map((_, ci) => safeDiv(grossRows[i].values[ci], dt(n)[ci])) })))
   rows.push({ label: '', blank: true, values: columns.map(() => 0) })
 
+  // Dòng tổng lấy TRỰC TIẾP từ mã số CP bán hàng (25) + CP QLDN (26) — không cộng từ các dòng
+  // thuyết minh (TM_CP) bên dưới, vì thuyết minh có thể chưa được nhập chi tiết dù dòng tổng theo
+  // mã số BCTC gốc đã có đủ số liệu (khiến "Chi phí hoạt động" hiện sai thành 0/thiếu trước đây).
   const costRows = costNames.map(n => ({ label: `CPHĐ - ${n}`, values: cp(n) }))
-  rows.push({ label: 'Chi phí hoạt động', bold: true, values: sumArr(costRows.map(r => r.values)) })
+  rows.push({
+    label: 'Chi phí hoạt động', bold: true,
+    values: col(ps => -(maSoSumOverPeriods(docs, donViKey, ps, MS_PL.CP_BAN_HANG) + maSoSumOverPeriods(docs, donViKey, ps, MS_PL.CP_QLDN))),
+  })
   rows.push(...costRows)
 
+  // Tương tự: tổng lấy từ mã số Thu nhập khác (31) − Chi phí khác (32), thuyết minh chỉ để bung chi
+  // tiết bên dưới, không phải nguồn tính tổng.
   const otherRows = otherNames.map(n => ({ label: n, values: other(n) }))
-  rows.push({ label: 'Thu nhập khác - Chi phí khác', bold: true, values: sumArr(otherRows.map(r => r.values)) })
+  rows.push({
+    label: 'Thu nhập khác - Chi phí khác', bold: true,
+    values: col(ps => maSoSumOverPeriods(docs, donViKey, ps, MS_PL.THU_NHAP_KHAC) - maSoSumOverPeriods(docs, donViKey, ps, MS_PL.CHI_PHI_KHAC)),
+  })
   rows.push(...otherRows)
 
   rows.push({ label: 'Lợi nhuận trước thuế', bold: true, values: col(ps => maSoSumOverPeriods(docs, donViKey, ps, MS_PL.LN_TRUOC_THUE)) })

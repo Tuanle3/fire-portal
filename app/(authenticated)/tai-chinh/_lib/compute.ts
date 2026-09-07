@@ -41,6 +41,34 @@ export function listPeriods(docs: FlatDoc[]): string[] {
   return [...new Set(docs.map(d => d.period))].sort()
 }
 
+// Danh sách các "Loại BC" (Nội bộ / Ngân hàng...) thực sự có trong dữ liệu BS/PL — AR/AP/TB chưa
+// có cột này nên bỏ qua. Ưu tiên "Nội bộ" đứng đầu (giá trị mặc định khi chọn lần đầu), phần còn
+// lại sắp theo alphabet.
+export function listLoaiBC(docs: FlatDoc[]): string[] {
+  const set = new Set<string>()
+  for (const d of docs) {
+    if (d.report !== 'BS' && d.report !== 'PL') continue
+    for (const row of d.rows as (BctcBsRow | BctcPlRow)[]) {
+      if (row.loaiBC) set.add(row.loaiBC)
+    }
+  }
+  return [...set].sort((a, b) => (a === 'Nội bộ' ? -1 : b === 'Nội bộ' ? 1 : a.localeCompare(b)))
+}
+
+// Lọc rows BS/PL theo đúng 1 loại báo cáo đang chọn — tránh cộng gộp Nội bộ + Ngân hàng của cùng
+// 1 công ty/kỳ/mã số (là nguyên nhân số liệu bị sai/lệch trước đây). Rows không có loaiBC (dữ liệu
+// cũ đồng bộ trước khi có cột này, hoặc AR/AP/TB không có khái niệm Loại BC) luôn được giữ lại,
+// không bị lọc mất, để không đột ngột mất dữ liệu do rows cũ trong Firebase chưa có field mới.
+export function filterDocsByLoaiBC(docs: FlatDoc[], loaiBC: string): FlatDoc[] {
+  if (!loaiBC) return docs
+  return docs.map(d => {
+    if (d.report !== 'BS' && d.report !== 'PL') return d
+    const rows = (d.rows as (BctcBsRow | BctcPlRow)[]).filter(r => !r.loaiBC || r.loaiBC === loaiBC)
+    if (rows.length === d.rows.length) return d
+    return { ...d, rows }
+  })
+}
+
 function safeDiv(a: number, b: number): number {
   return b !== 0 ? a / b : 0
 }
