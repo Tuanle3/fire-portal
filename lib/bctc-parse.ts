@@ -28,12 +28,13 @@ function findCol(headerRow: Cell[], pred: (norm: string) => boolean): number {
   return -1
 }
 
-// Cột "Loại BC" (Nội bộ / Ngân hàng...) — dò theo tên header trước, fallback về cột B (index 1,
-// đúng vị trí thực tế trong Data_PL/Data_BS) nếu vì lý do gì đó không khớp được tên header.
+// Cột "Loại BC" (Nội bộ / Ngân hàng...) — CHỈ nhận khi header ghi đúng "Loại BC". Không fallback
+// đoán vị trí cột, vì các tab cũ (VD sheet 2025) chưa từng có cột này — đoán bừa sẽ vơ nhầm cột
+// khác (VD "Chỉ tiêu") khiến mọi dòng có loaiBC riêng biệt, không khớp filter, làm mất trắng dữ
+// liệu của cả năm đó. Không tìm thấy → trả về -1 → mỗi row có loaiBC: '' → luôn hiển thị bất kể
+// đang lọc loại nào (xem filterDocsByLoaiBC).
 function findLoaiBCCol(headerRow: Cell[]): number {
-  const byName = findCol(headerRow, n => n === 'loaibc')
-  if (byName >= 0) return byName
-  return String(headerRow[1] ?? '').trim() ? 1 : -1
+  return findCol(headerRow, n => n === 'loaibc')
 }
 
 // FIX: Chấp nhận 3 dạng header:
