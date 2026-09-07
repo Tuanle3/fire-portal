@@ -364,15 +364,13 @@ const [denNgay, setDenNgay] = useState(() => {
             )}
 
             {tab === 'giai-phap' && (
-              <TabGiaiPhap
-                data={localData}
-                month={month}
-                onChange={setLocalData}
-                onSave={handleSave}
-                saving={saving}
-                saveMsg={saveMsg}
-              />
-            )}
+  <TabGiaiPhap
+    data={localData}
+    onChange={setLocalData}
+    onSave={handleSave}
+    saving={saving}
+  />
+)}
 
           </div>
         </div>
