@@ -60,6 +60,7 @@ export const MS_PL = {
   DTT: '10',
   GIA_VON: '11',
   LAI_GOP: '20',
+  LAI_LO_BDSDT: '21',
   DT_TAI_CHINH: '22',
   CP_TAI_CHINH: '23',
   CP_LAI_VAY: '24',

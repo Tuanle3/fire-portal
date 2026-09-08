@@ -54,6 +54,14 @@ function buildPlRows(docs: FlatDoc[], donViKey: string, columns: Column[]): Row[
   rows.push(...productNames.map((n, i) => ({ label: `% Lãi gộp - ${n}`, isPercent: true, values: columns.map((_, ci) => safeDiv(grossRows[i].values[ci], dt(n)[ci])) })))
   rows.push({ label: '', blank: true, values: columns.map(() => 0) })
 
+  // FIX: 4 dòng theo mã số 21-24 trong sheet gốc (Lãi/lỗ HĐ BĐS đầu tư, Doanh thu tài chính, Chi
+  // phí tài chính, trong đó Chi phí lãi vay) — trước đây bị bỏ sót hoàn toàn khỏi bảng, nhảy thẳng
+  // từ Lãi gộp sang Chi phí hoạt động (25+26), sai thứ tự so với BCTC gốc.
+  rows.push({ label: 'Lãi/lỗ hoạt động BĐS đầu tư', values: col(ps => maSoSumOverPeriods(docs, donViKey, ps, MS_PL.LAI_LO_BDSDT)) })
+  rows.push({ label: 'Doanh thu tài chính', values: col(ps => maSoSumOverPeriods(docs, donViKey, ps, MS_PL.DT_TAI_CHINH)) })
+  rows.push({ label: 'Chi phí tài chính', values: col(ps => -maSoSumOverPeriods(docs, donViKey, ps, MS_PL.CP_TAI_CHINH)) })
+  rows.push({ label: '- Trong đó: Chi phí lãi vay', values: col(ps => -maSoSumOverPeriods(docs, donViKey, ps, MS_PL.CP_LAI_VAY)) })
+
   // Dòng tổng lấy TRỰC TIẾP từ mã số CP bán hàng (25) + CP QLDN (26) — không cộng từ các dòng
   // thuyết minh (TM_CP) bên dưới, vì thuyết minh có thể chưa được nhập chi tiết dù dòng tổng theo
   // mã số BCTC gốc đã có đủ số liệu (khiến "Chi phí hoạt động" hiện sai thành 0/thiếu trước đây).
@@ -63,6 +71,7 @@ function buildPlRows(docs: FlatDoc[], donViKey: string, columns: Column[]): Row[
     values: col(ps => -(maSoSumOverPeriods(docs, donViKey, ps, MS_PL.CP_BAN_HANG) + maSoSumOverPeriods(docs, donViKey, ps, MS_PL.CP_QLDN))),
   })
   rows.push(...costRows)
+  rows.push({ label: 'Lợi nhuận thuần từ HĐKD', bold: true, values: col(ps => maSoSumOverPeriods(docs, donViKey, ps, MS_PL.LN_THUAN_HDKD)) })
 
   // Tương tự: tổng lấy từ mã số Thu nhập khác (31) − Chi phí khác (32), thuyết minh chỉ để bung chi
   // tiết bên dưới, không phải nguồn tính tổng.
