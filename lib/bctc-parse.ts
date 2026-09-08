@@ -133,17 +133,16 @@ function parsePL(sheet: Sheet, year?: string): BctcPeriodDoc[] {
   const h = detectHeader(sheet, year)
   if (!h) return []
   const header = sheet[h.labelRow]
-  // FIX: Sheet Data_PL thật không có cột tên "Code" riêng — cột "TM" dùng chung cho cả số hiệu
-  // thuyết minh của dòng chính (VD "VI.1", "VI.2") lẫn code breakdown của các dòng thuyết minh chi
-  // tiết bên dưới (VD "TM_DT_SP", "TM_GV_SP") — đây chính là cột breakdownByCode()/codeMatches()
-  // cần đọc. Trước đây tìm đúng chữ "code" nên luôn ra -1, khiến toàn bộ khối thuyết minh (doanh
-  // thu/giá vốn/lãi gộp theo sản phẩm, cấu trúc chi phí...) bị mất trắng khỏi báo cáo.
-  const colCode    = findCol(header, n => n === 'code' || n === 'tm')
-  // FIX: cột nhãn chỉ tiêu tên thật là "Chỉ tiêu" (chitieu) — trước đây tìm nhầm "sotaikhoan" (copy
-  // sót từ parseTB) nên mọi dòng PL luôn có chiTieu rỗng, làm hỏng luôn việc gộp theo tên sản phẩm.
-  const colChiTieu = findCol(header, n => n === 'chitieu')
+  // FIX: Đã xác minh trực tiếp trên Firebase (data_bctc/SA_P/PL/2026-07) — sheet dùng CHUNG 1 cột
+  // "Mã số" cho cả 2 việc: mã BCTC chuẩn (01, 02, 10...71) ở các dòng chính, VÀ mã breakdown
+  // (TM_DTSP, TM_GV_SP, TM_LG_SP...) ở các dòng thuyết minh chi tiết bên dưới — cột "TM" trong sheet
+  // chỉ chứa số thuyết minh kiểu "VI.1" của dòng chính, LUÔN RỖNG ở dòng breakdown. Trước đây từng
+  // đoán code nằm ở cột "TM" (sai) — giờ lấy code TỪ CHÍNH cột Mã số, trùng nguồn với colMaSo.
   const colMaSo    = findCol(header, n => n === 'maso')
-  const colTMinh   = findCol(header, n => n.startsWith('tmi'))
+  // FIX: cột nhãn chỉ tiêu tên thật là "Chỉ tiêu" (chitieu) — trước đây tìm nhầm "sotaikhoan" (copy
+  // sót từ parseTB) nên mọi dòng PL luôn có chiTieu rỗng, làm hỏng việc gộp theo tên sản phẩm.
+  const colChiTieu = findCol(header, n => n === 'chitieu')
+  const colTMinh   = findCol(header, n => n === 'tm')
   const colLoaiBC  = findLoaiBCCol(header)
 
   const entries: { donVi: string; period: string; row: BctcPlRow }[] = []
@@ -153,7 +152,7 @@ function parsePL(sheet: Sheet, year?: string): BctcPeriodDoc[] {
       entries.push({
         donVi, period: mc.period,
         row: {
-          code: colCode >= 0 ? String(row[colCode] ?? '').trim() : '',
+          code: colMaSo >= 0 ? String(row[colMaSo] ?? '').trim() : '',
           maSo: colMaSo >= 0 ? String(row[colMaSo] ?? '').trim() : '',
           chiTieu: colChiTieu >= 0 ? String(row[colChiTieu] ?? '').trim() : '',
           tMinh: colTMinh >= 0 ? String(row[colTMinh] ?? '').trim() : '',
@@ -170,11 +169,9 @@ function parseBS(sheet: Sheet, year?: string): BctcPeriodDoc[] {
   const h = detectHeader(sheet, year)
   if (!h) return []
   const header = sheet[h.labelRow]
-  // Đồng bộ với fix ở parsePL: header thật ghi "TM" chứ không phải "Code".
-  const colCode    = findCol(header, n => n === 'code' || n === 'tm')
   const colChiTieu = findCol(header, n => n === 'chitieu')
   const colMaSo    = findCol(header, n => n.startsWith('ma') && !n.includes('khach') && !n.includes('cungcap') && !n.includes('ncc'))
-  const colTMinh   = findCol(header, n => n.startsWith('tmi'))
+  const colTMinh   = findCol(header, n => n === 'tm')
   const colLoaiBC  = findLoaiBCCol(header)
 
   const entries: { donVi: string; period: string; row: BctcBsRow }[] = []
@@ -184,7 +181,7 @@ function parseBS(sheet: Sheet, year?: string): BctcPeriodDoc[] {
       entries.push({
         donVi, period: mc.period,
         row: {
-          code: colCode >= 0 ? String(row[colCode] ?? '').trim() : '',
+          code: colMaSo >= 0 ? String(row[colMaSo] ?? '').trim() : '',
           maSo: colMaSo >= 0 ? String(row[colMaSo] ?? '').trim() : '',
           chiTieu: colChiTieu >= 0 ? String(row[colChiTieu] ?? '').trim() : '',
           tMinh: colTMinh >= 0 ? String(row[colTMinh] ?? '').trim() : '',

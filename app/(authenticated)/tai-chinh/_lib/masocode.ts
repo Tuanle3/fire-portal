@@ -79,7 +79,7 @@ export const MS_PL = {
 // Code (không phải mã số) của các dòng thuyết minh chi tiết trong Data_PL — dùng để lên
 // card "Doanh thu theo sản phẩm" / "Cấu trúc chi phí" chứ không nằm trong bảng KQKD chính.
 export const PL_BREAKDOWN_CODES = {
-  DOANH_THU_SP: 'TM_DT_SP',
+  DOANH_THU_SP: 'TM_DTSP',
   GIA_VON_SP: 'TM_GV_SP',
   LAI_GOP_SP: 'TM_LG_SP',
   THU_NHAP_KHAC: 'TM_DT_K',
