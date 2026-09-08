@@ -133,8 +133,15 @@ function parsePL(sheet: Sheet, year?: string): BctcPeriodDoc[] {
   const h = detectHeader(sheet, year)
   if (!h) return []
   const header = sheet[h.labelRow]
-  const colCode    = findCol(header, n => n === 'code')
-  const colChiTieu = findCol(header, n => n === 'sotaikhoan')
+  // FIX: Sheet Data_PL thật không có cột tên "Code" riêng — cột "TM" dùng chung cho cả số hiệu
+  // thuyết minh của dòng chính (VD "VI.1", "VI.2") lẫn code breakdown của các dòng thuyết minh chi
+  // tiết bên dưới (VD "TM_DT_SP", "TM_GV_SP") — đây chính là cột breakdownByCode()/codeMatches()
+  // cần đọc. Trước đây tìm đúng chữ "code" nên luôn ra -1, khiến toàn bộ khối thuyết minh (doanh
+  // thu/giá vốn/lãi gộp theo sản phẩm, cấu trúc chi phí...) bị mất trắng khỏi báo cáo.
+  const colCode    = findCol(header, n => n === 'code' || n === 'tm')
+  // FIX: cột nhãn chỉ tiêu tên thật là "Chỉ tiêu" (chitieu) — trước đây tìm nhầm "sotaikhoan" (copy
+  // sót từ parseTB) nên mọi dòng PL luôn có chiTieu rỗng, làm hỏng luôn việc gộp theo tên sản phẩm.
+  const colChiTieu = findCol(header, n => n === 'chitieu')
   const colMaSo    = findCol(header, n => n === 'maso')
   const colTMinh   = findCol(header, n => n.startsWith('tmi'))
   const colLoaiBC  = findLoaiBCCol(header)
@@ -163,7 +170,8 @@ function parseBS(sheet: Sheet, year?: string): BctcPeriodDoc[] {
   const h = detectHeader(sheet, year)
   if (!h) return []
   const header = sheet[h.labelRow]
-  const colCode    = findCol(header, n => n === 'code')
+  // Đồng bộ với fix ở parsePL: header thật ghi "TM" chứ không phải "Code".
+  const colCode    = findCol(header, n => n === 'code' || n === 'tm')
   const colChiTieu = findCol(header, n => n === 'chitieu')
   const colMaSo    = findCol(header, n => n.startsWith('ma') && !n.includes('khach') && !n.includes('cungcap') && !n.includes('ncc'))
   const colTMinh   = findCol(header, n => n.startsWith('tmi'))
