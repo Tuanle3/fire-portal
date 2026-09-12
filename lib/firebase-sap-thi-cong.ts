@@ -14,6 +14,16 @@ function db() {
   return getMainFirestore()
 }
 
+// Firestore không chấp nhận field có giá trị `undefined` (VD: field optional
+// bị bỏ trống rồi set thành `undefined`) — loại bỏ trước khi addDoc/updateDoc.
+function stripUndefined<T extends Record<string, unknown>>(data: T): T {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(data)) {
+    if (v !== undefined) out[k] = v
+  }
+  return out as T
+}
+
 // ─── Dự án ────────────────────────────────────────────────────
 export function subscribeProjects(cb: (list: SapProject[]) => void): Unsubscribe {
   const q = query(collection(db(), ROOT), orderBy('createdAt', 'desc'))
@@ -22,12 +32,12 @@ export function subscribeProjects(cb: (list: SapProject[]) => void): Unsubscribe
 
 export async function createProject(data: Omit<SapProject, 'id' | 'createdAt'>) {
   await ensureAnonAuth()
-  return addDoc(collection(db(), ROOT), { ...data, createdAt: Date.now() })
+  return addDoc(collection(db(), ROOT), stripUndefined({ ...data, createdAt: Date.now() }))
 }
 
 export async function updateProject(id: string, data: Partial<SapProject>) {
   await ensureAnonAuth()
-  return updateDoc(doc(db(), ROOT, id), data as Record<string, unknown>)
+  return updateDoc(doc(db(), ROOT, id), stripUndefined(data as Record<string, unknown>))
 }
 
 export async function deleteProject(id: string) {
@@ -50,11 +60,11 @@ function makeSubStore<T extends { id: string }>(sub: string) {
     },
     async add(projectId: string, data: Omit<T, 'id'>) {
       await ensureAnonAuth()
-      return addDoc(collection(db(), subPath(projectId, sub)), data as Record<string, unknown>)
+      return addDoc(collection(db(), subPath(projectId, sub)), stripUndefined(data as Record<string, unknown>))
     },
     async update(projectId: string, itemId: string, data: Partial<T>) {
       await ensureAnonAuth()
-      return updateDoc(doc(db(), subPath(projectId, sub), itemId), data as Record<string, unknown>)
+      return updateDoc(doc(db(), subPath(projectId, sub), itemId), stripUndefined(data as Record<string, unknown>))
     },
     async remove(projectId: string, itemId: string) {
       await ensureAnonAuth()
@@ -83,7 +93,7 @@ function makeNestedStore<T extends { id: string }>(parentSub: string, childSub: 
     },
     async add(projectId: string, parentId: string, data: Omit<T, 'id'>) {
       await ensureAnonAuth()
-      return addDoc(collection(db(), nestedPath(projectId, parentSub, parentId, childSub)), data as Record<string, unknown>)
+      return addDoc(collection(db(), nestedPath(projectId, parentSub, parentId, childSub)), stripUndefined(data as Record<string, unknown>))
     },
     async remove(projectId: string, parentId: string, itemId: string) {
       await ensureAnonAuth()
