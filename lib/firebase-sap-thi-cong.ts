@@ -1,4 +1,4 @@
-import { getMainFirestore } from '@/lib/firebase'
+import { getMainFirestore, ensureAnonAuth } from '@/lib/firebase'
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,
   query, orderBy, Unsubscribe,
@@ -21,14 +21,17 @@ export function subscribeProjects(cb: (list: SapProject[]) => void): Unsubscribe
 }
 
 export async function createProject(data: Omit<SapProject, 'id' | 'createdAt'>) {
+  await ensureAnonAuth()
   return addDoc(collection(db(), ROOT), { ...data, createdAt: Date.now() })
 }
 
 export async function updateProject(id: string, data: Partial<SapProject>) {
+  await ensureAnonAuth()
   return updateDoc(doc(db(), ROOT, id), data as Record<string, unknown>)
 }
 
 export async function deleteProject(id: string) {
+  await ensureAnonAuth()
   // Lưu ý: xoá doc dự án KHÔNG tự xoá các subcollection con trên Firestore.
   // Cần Cloud Function hoặc dọn thủ công nếu muốn xoá sạch dữ liệu con.
   return deleteDoc(doc(db(), ROOT, id))
@@ -46,12 +49,15 @@ function makeSubStore<T extends { id: string }>(sub: string) {
       return onSnapshot(q, snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as T))))
     },
     async add(projectId: string, data: Omit<T, 'id'>) {
+      await ensureAnonAuth()
       return addDoc(collection(db(), subPath(projectId, sub)), data as Record<string, unknown>)
     },
     async update(projectId: string, itemId: string, data: Partial<T>) {
+      await ensureAnonAuth()
       return updateDoc(doc(db(), subPath(projectId, sub), itemId), data as Record<string, unknown>)
     },
     async remove(projectId: string, itemId: string) {
+      await ensureAnonAuth()
       return deleteDoc(doc(db(), subPath(projectId, sub), itemId))
     },
   }
@@ -76,9 +82,11 @@ function makeNestedStore<T extends { id: string }>(parentSub: string, childSub: 
       return onSnapshot(q, snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as T))))
     },
     async add(projectId: string, parentId: string, data: Omit<T, 'id'>) {
+      await ensureAnonAuth()
       return addDoc(collection(db(), nestedPath(projectId, parentSub, parentId, childSub)), data as Record<string, unknown>)
     },
     async remove(projectId: string, parentId: string, itemId: string) {
+      await ensureAnonAuth()
       return deleteDoc(doc(db(), nestedPath(projectId, parentSub, parentId, childSub), itemId))
     },
   }
