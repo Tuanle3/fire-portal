@@ -10,6 +10,30 @@ const STATUS_CLASS: Record<HangMucStatus, string> = {
   todo: '', active: '', done: 'done', delay: 'delay',
 }
 
+// Sắp xếp theo cây cha-con: mỗi cha đi kèm ngay các con của nó (theo order
+// riêng trong nhóm anh em), thay vì sort phẳng toàn bộ theo `order` chung —
+// cách cũ khiến hạng mục con bị rơi lạc chỗ khi order của nó lớn hơn các
+// hạng mục cha khác được tạo sau.
+function sortHierarchical(items: HangMuc[]): HangMuc[] {
+  const byParent = new Map<string, HangMuc[]>()
+  for (const item of items) {
+    const key = item.parentId || ''
+    if (!byParent.has(key)) byParent.set(key, [])
+    byParent.get(key)!.push(item)
+  }
+  for (const list of byParent.values()) list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+
+  const result: HangMuc[] = []
+  function walk(parentKey: string) {
+    for (const item of byParent.get(parentKey) ?? []) {
+      result.push(item)
+      walk(item.id)
+    }
+  }
+  walk('')
+  return result
+}
+
 export function TabTienDo({ projectId }: { projectId: string }) {
   const [items, setItems] = useState<HangMuc[]>([])
   const [editing, setEditing] = useState<HangMuc | 'new' | null>(null)
@@ -19,7 +43,7 @@ export function TabTienDo({ projectId }: { projectId: string }) {
     return () => unsub()
   }, [projectId])
 
-  const sorted = [...items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const sorted = sortHierarchical(items)
   const avgPct = items.length ? Math.round(items.reduce((s, i) => s + (i.progressPct || 0), 0) / items.length) : 0
   const delayCount = items.filter(i => i.status === 'delay').length
   const doneCount = items.filter(i => i.status === 'done').length
