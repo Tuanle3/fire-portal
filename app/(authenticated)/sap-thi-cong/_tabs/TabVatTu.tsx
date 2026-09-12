@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { VatTuItem, fmt } from '../_lib/types'
+import { NumberInput } from '../_lib/NumberInput'
 import { vatTuStore } from '@/lib/firebase-sap-thi-cong'
 
 export function TabVatTu({ projectId }: { projectId: string }) {
@@ -101,9 +102,9 @@ function VatTuModal({ projectId, value, onClose }: { projectId: string; value: V
           {err && <div className="stc-err">{err}</div>}
           <div className="stc-field stc-field--full"><label>Tên vật tư *</label><input value={name} onChange={e => setName(e.target.value)} placeholder="VD: Xi măng PCB40" /></div>
           <div className="stc-field"><label>Đơn vị tính *</label><input value={unit} onChange={e => setUnit(e.target.value)} placeholder="tấn / m³ / bao..." /></div>
-          <div className="stc-field"><label>Đơn giá (đ)</label><input type="number" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} /></div>
-          <div className="stc-field"><label>Khối lượng kế hoạch</label><input type="number" value={qtyPlanned} onChange={e => setQtyPlanned(e.target.value)} /></div>
-          <div className="stc-field"><label>Khối lượng đã dùng</label><input type="number" value={qtyUsed} onChange={e => setQtyUsed(e.target.value)} /></div>
+          <div className="stc-field"><label>Đơn giá (đ)</label><NumberInput value={unitPrice} onChange={setUnitPrice} /></div>
+          <div className="stc-field"><label>Khối lượng kế hoạch</label><NumberInput value={qtyPlanned} onChange={setQtyPlanned} /></div>
+          <div className="stc-field"><label>Khối lượng đã dùng</label><NumberInput value={qtyUsed} onChange={setQtyUsed} /></div>
           <div className="stc-field"><label>Nhà cung cấp</label><input value={supplier} onChange={e => setSupplier(e.target.value)} /></div>
           <div className="stc-field"><label>Ngày nhập</label><input type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
           <div className="stc-field stc-field--full"><label>Ghi chú</label><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} /></div>

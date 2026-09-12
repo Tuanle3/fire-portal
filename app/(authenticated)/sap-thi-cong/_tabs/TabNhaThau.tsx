@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { NhaThau, NhaThauStatus, NghiemThu, NghiemThuStatus, fmt } from '../_lib/types'
+import { NumberInput } from '../_lib/NumberInput'
 import { nhaThauStore, nghiemThuStore } from '@/lib/firebase-sap-thi-cong'
 
 const NT_STATUS_LABEL: Record<NhaThauStatus, string> = { active: 'Đang thi công', done: 'Hoàn thành', paused: 'Tạm dừng' }
@@ -97,7 +98,7 @@ function NhaThauModal({ projectId, value, onClose }: { projectId: string; value:
           {err && <div className="stc-err">{err}</div>}
           <div className="stc-field stc-field--full"><label>Tên nhà thầu *</label><input value={name} onChange={e => setName(e.target.value)} /></div>
           <div className="stc-field stc-field--full"><label>Phạm vi công việc</label><input value={scope} onChange={e => setScope(e.target.value)} placeholder="VD: Thi công phần thô..." /></div>
-          <div className="stc-field"><label>Giá trị hợp đồng (đ) *</label><input type="number" value={contractValue} onChange={e => setContractValue(e.target.value)} /></div>
+          <div className="stc-field"><label>Giá trị hợp đồng (đ) *</label><NumberInput value={contractValue} onChange={setContractValue} /></div>
           <div className="stc-field"><label>% Giữ lại bảo hành</label><input type="number" min={0} max={20} value={retainPct} onChange={e => setRetainPct(e.target.value)} /></div>
           <div className="stc-field stc-field--full">
             <label>Trạng thái</label>
@@ -226,13 +227,13 @@ function NghiemThuAddModal({ projectId, subcon, acCount, onClose }: { projectId:
         <div className="stc-modal-body">
           {err && <div className="stc-err">{err}</div>}
           <div className="stc-field"><label>Tên đợt</label><input value={dot} onChange={e => setDot(e.target.value)} /></div>
-          <div className="stc-field"><label>Giá trị nghiệm thu (đ) *</label><input type="number" value={value} onChange={e => setValue(e.target.value)} /></div>
+          <div className="stc-field"><label>Giá trị nghiệm thu (đ) *</label><NumberInput value={value} onChange={setValue} /></div>
           <div className="stc-field"><label>Số biên bản NT</label><input value={bbNo} onChange={e => setBbNo(e.target.value)} /></div>
           <div className="stc-field"><label>Ngày ký biên bản</label><input type="date" value={bbDate} onChange={e => setBbDate(e.target.value)} /></div>
           <div className="stc-field"><label>Số hoá đơn</label><input value={invNo} onChange={e => setInvNo(e.target.value)} /></div>
           <div className="stc-field"><label>Ngày hoá đơn</label><input type="date" value={invDate} onChange={e => setInvDate(e.target.value)} /></div>
           <div className="stc-field"><label>% Giữ lại bảo hành</label><input type="number" min={0} max={20} value={retainPct} onChange={e => setRetainPct(e.target.value)} /></div>
-          <div className="stc-field"><label>Đã thanh toán (đ)</label><input type="number" value={paid} onChange={e => setPaid(e.target.value)} /></div>
+          <div className="stc-field"><label>Đã thanh toán (đ)</label><NumberInput value={paid} onChange={setPaid} /></div>
           <div className="stc-field stc-field--full">
             <label>Trạng thái</label>
             <select value={status} onChange={e => setStatus(e.target.value as NghiemThuStatus)}>

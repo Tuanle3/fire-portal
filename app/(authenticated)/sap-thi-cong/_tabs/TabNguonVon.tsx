@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { NguonVon, NguonVonType, fmt } from '../_lib/types'
+import { NumberInput } from '../_lib/NumberInput'
 import { nguonVonStore } from '@/lib/firebase-sap-thi-cong'
 
 const TYPE_LABEL: Record<NguonVonType, string> = { 'von-tu-co': 'Vốn tự có', vay: 'Vốn vay', khac: 'Khác' }
@@ -95,7 +96,7 @@ function NguonVonModal({ projectId, value, onClose }: { projectId: string; value
               <option value="khac">Khác</option>
             </select>
           </div>
-          <div className="stc-field"><label>Số tiền (đ) *</label><input type="number" value={amount} onChange={e => setAmount(e.target.value)} /></div>
+          <div className="stc-field"><label>Số tiền (đ) *</label><NumberInput value={amount} onChange={setAmount} /></div>
           <div className="stc-field stc-field--full"><label>Ghi chú</label><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} /></div>
         </div>
         <div className="stc-modal-foot">

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useUserSession } from '@/contexts/user-session'
 import { SAP_TABS, SapTab, SapProject } from './_lib/types'
+import { NumberInput } from './_lib/NumberInput'
 import { subscribeProjects, createProject, deleteProject } from '@/lib/firebase-sap-thi-cong'
 import { TabTienDo } from './_tabs/TabTienDo'
 import { TabDongTien } from './_tabs/TabDongTien'
@@ -307,7 +308,7 @@ function NewProjectModal({
           </div>
           <div className="stc-field">
             <label>Tổng mức đầu tư (đ)</label>
-            <input type="number" value={contractValue} onChange={e => setContractValue(e.target.value)} />
+            <NumberInput value={contractValue} onChange={setContractValue} />
           </div>
           <div className="stc-field stc-field--full">
             <label>Địa điểm</label>

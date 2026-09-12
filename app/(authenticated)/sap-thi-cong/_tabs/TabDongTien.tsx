@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { DongTienItem, DongTienType, fmt } from '../_lib/types'
+import { NumberInput } from '../_lib/NumberInput'
 import { dongTienStore } from '@/lib/firebase-sap-thi-cong'
 
 export function TabDongTien({ projectId }: { projectId: string }) {
@@ -105,7 +106,7 @@ function DongTienModal({ projectId, value, onClose }: { projectId: string; value
             </select>
           </div>
           <div className="stc-field stc-field--full"><label>Hạng mục / Diễn giải *</label><input value={category} onChange={e => setCategory(e.target.value)} placeholder="VD: Tạm ứng nhà thầu, thu tiền khách hàng..." /></div>
-          <div className="stc-field"><label>Số tiền (đ) *</label><input type="number" value={amount} onChange={e => setAmount(e.target.value)} /></div>
+          <div className="stc-field"><label>Số tiền (đ) *</label><NumberInput value={amount} onChange={setAmount} /></div>
           <div className="stc-field stc-field--full"><label>Ghi chú</label><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} /></div>
         </div>
         <div className="stc-modal-foot">

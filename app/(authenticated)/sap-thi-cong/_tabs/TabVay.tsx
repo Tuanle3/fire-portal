@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { KhoanVay, KyTraNo, fmt } from '../_lib/types'
+import { NumberInput } from '../_lib/NumberInput'
 import { khoanVayStore, kyTraNoStore } from '@/lib/firebase-sap-thi-cong'
 
 export function TabVay({ projectId }: { projectId: string }) {
@@ -91,7 +92,7 @@ function KhoanVayModal({ projectId, value, onClose }: { projectId: string; value
           {err && <div className="stc-err">{err}</div>}
           <div className="stc-field"><label>Tên đợt giải ngân *</label><input value={batch} onChange={e => setBatch(e.target.value)} placeholder="VD: GN đợt 1" /></div>
           <div className="stc-field"><label>Ngày giải ngân</label><input type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
-          <div className="stc-field"><label>Số tiền (đ) *</label><input type="number" value={amount} onChange={e => setAmount(e.target.value)} /></div>
+          <div className="stc-field"><label>Số tiền (đ) *</label><NumberInput value={amount} onChange={setAmount} /></div>
           <div className="stc-field"><label>Ngân hàng</label><input value={bank} onChange={e => setBank(e.target.value)} /></div>
           <div className="stc-field"><label>Lãi suất (%/năm)</label><input type="number" value={interestRate} onChange={e => setInterestRate(e.target.value)} /></div>
           <div className="stc-field stc-field--full"><label>Ghi chú</label><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} /></div>
@@ -197,8 +198,8 @@ function KyTraNoAddModal({ projectId, vayId, onClose }: { projectId: string; vay
         <div className="stc-modal-body">
           {err && <div className="stc-err">{err}</div>}
           <div className="stc-field stc-field--full"><label>Ngày đến hạn *</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
-          <div className="stc-field"><label>Gốc (đ)</label><input type="number" value={goc} onChange={e => setGoc(e.target.value)} /></div>
-          <div className="stc-field"><label>Lãi (đ)</label><input type="number" value={lai} onChange={e => setLai(e.target.value)} /></div>
+          <div className="stc-field"><label>Gốc (đ)</label><NumberInput value={goc} onChange={setGoc} /></div>
+          <div className="stc-field"><label>Lãi (đ)</label><NumberInput value={lai} onChange={setLai} /></div>
         </div>
         <div className="stc-modal-foot">
           <button className="btn-ghost" onClick={onClose}>Huỷ</button>
