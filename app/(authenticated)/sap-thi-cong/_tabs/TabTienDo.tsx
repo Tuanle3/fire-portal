@@ -84,7 +84,7 @@ export function TabTienDo({ projectId }: { projectId: string }) {
                 const nts = nhaThauByHangMuc(i.id)
                 return (
                   <tr key={i.id} onClick={() => setEditing(i)} style={{ cursor: 'pointer' }}>
-                    <td>{i.parentId ? <span style={{ paddingLeft: 16, color: 'var(--muted)' }}>↳ </span> : null}{i.name}</td>
+                    <td>{i.parentId ? <span style={{ paddingLeft: 16, color: 'var(--muted)' }}>↳ </span> : null}<span style={!i.parentId ? { fontWeight: 700 } : undefined}>{i.name}</span></td>
                     <td>{i.startDate || '—'}</td>
                     <td>{i.endDate || '—'}</td>
                     <td>
