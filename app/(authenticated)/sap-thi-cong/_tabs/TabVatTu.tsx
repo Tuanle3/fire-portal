@@ -126,7 +126,7 @@ function VatTuModal({
   }
 
   return (
-    <div className="stc-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="stc-modal-overlay" onClick={(e) => e.stopPropagation()}>
       <div className="stc-modal">
         <div className="stc-modal-head">
           <div className="stc-modal-title">{value ? 'Sửa vật tư' : '+ Thêm vật tư'}</div>

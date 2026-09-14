@@ -155,7 +155,7 @@ function NhaThauModal({
   }
 
   return (
-    <div className="stc-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="stc-modal-overlay" onClick={(e) => e.stopPropagation()}>
       <div className="stc-modal">
         <div className="stc-modal-head">
           <div className="stc-modal-title">{value ? 'Sửa nhà thầu phụ' : '+ Thêm nhà thầu phụ'}</div>
@@ -239,7 +239,7 @@ function NghiemThuPanel({
   }
 
   return (
-    <div className="stc-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="stc-modal-overlay" onClick={(e) => e.stopPropagation()}>
       <div className="stc-modal" style={{ width: 'min(960px,96vw)' }}>
         <div className="stc-modal-head">
           <div>
@@ -344,7 +344,7 @@ function NghiemThuModal({
   }
 
   return (
-    <div className="stc-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="stc-modal-overlay" onClick={(e) => e.stopPropagation()}>
       <div className="stc-modal">
         <div className="stc-modal-head">
           <div className="stc-modal-title">{value ? 'Sửa đợt nghiệm thu' : '+ Thêm đợt nghiệm thu'}</div>
