@@ -316,14 +316,18 @@ function NghiemThuPanel({
           <button className="stc-modal-close" onClick={onClose}>✕</button>
         </div>
         <div style={{ padding: '14px 20px 0' }}>
-          <div className="stc-kpi-row" style={{ marginBottom: 12 }}>
+          {/* Hàng 1: 4 KPI tổng quan */}
+          <div className="stc-kpi-row" style={{ marginBottom: 6 }}>
             <div className="stc-kpi"><div className="stc-kpi-label">Số đợt NT</div><div className="stc-kpi-val">{acs.length}</div></div>
             <div className="stc-kpi"><div className="stc-kpi-label">GT nghiệm thu (chưa VAT)</div><div className="stc-kpi-val">{fmt(totalVal)} đ</div></div>
             <div className="stc-kpi"><div className="stc-kpi-label">Tổng VAT</div><div className="stc-kpi-val">{fmt(totalVATAmount)} đ</div></div>
             <div className="stc-kpi green"><div className="stc-kpi-label">Tổng GT (gồm VAT)</div><div className="stc-kpi-val">{fmt(totalGross)} đ</div></div>
             <div className="stc-kpi red"><div className="stc-kpi-label">Giữ lại BH</div><div className="stc-kpi-val">{fmt(totalRetain)} đ</div></div>
-            <div className="stc-kpi green"><div className="stc-kpi-label">Đã thanh toán</div><div className="stc-kpi-val">{fmt(totalPaid)} đ</div></div>
-            <div className="stc-kpi red"><div className="stc-kpi-label">Còn phải TT</div><div className="stc-kpi-val">{fmt(totalUnpaid)} đ</div></div>
+          </div>
+          {/* Hàng 2: 2 KPI thanh toán — highlight nổi bật */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+            <div className="stc-kpi green" style={{ margin: 0 }}><div className="stc-kpi-label">Đã thanh toán</div><div className="stc-kpi-val">{fmt(totalPaid)} đ</div></div>
+            <div className="stc-kpi red" style={{ margin: 0 }}><div className="stc-kpi-label">Còn phải TT</div><div className="stc-kpi-val">{fmt(totalUnpaid)} đ</div></div>
           </div>
         </div>
         <div style={{ padding: '0 20px 16px', overflowY: 'auto', maxHeight: '50vh' }}>
