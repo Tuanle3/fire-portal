@@ -87,6 +87,7 @@ export type DongTienItem = {
   category: string
   amount: number
   doiTacId?: string        // đối tác liên quan (nếu có), để lọc/tổng hợp theo đối tác
+  hangMucId?: string       // hạng mục thi công liên quan (nếu có), để tổng hợp thu/chi theo hạng mục
   note?: string
   // Đánh dấu bản ghi được tự động sinh ra từ nghiệp vụ khác (nghiệm thu, vật
   // tư, giải ngân vay, trả nợ) — không sửa/xoá trực tiếp ở đây, phải thao
@@ -105,6 +106,7 @@ export type VatTuItem = {
   qtyUsed: number
   unitPrice: number
   soHopDong?: string
+  hangMucId?: string   // hạng mục thi công dùng vật tư này (nếu có) — để biết chi phí vật tư thuộc hạng mục nào
   doiTacId?: string    // liên kết Đối tác (NCC) — ưu tiên dùng thay cho `supplier` tự do
   supplier?: string    // tên NCC hiển thị (đồng bộ theo doiTacId nếu có, hoặc nhập tay cho dữ liệu cũ)
   paidAmount: number   // đã thanh toán cho NCC — tự động đồng bộ 1 dòng "chi" tương ứng

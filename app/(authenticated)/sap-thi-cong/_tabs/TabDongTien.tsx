@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { DongTienItem, DongTienType, DoiTac, fmt } from '../_lib/types'
+import { DongTienItem, DongTienType, DoiTac, HangMuc, fmt } from '../_lib/types'
 import { NumberInput } from '../_lib/NumberInput'
-import { dongTienStore, doiTacStore } from '@/lib/firebase-sap-thi-cong'
+import { dongTienStore, doiTacStore, hangMucStore } from '@/lib/firebase-sap-thi-cong'
 
 const SOURCE_LABEL: Record<NonNullable<DongTienItem['sourceType']>, string> = {
   'nghiem-thu': 'đợt nghiệm thu nhà thầu phụ (tab Nhà thầu phụ)',
@@ -11,14 +11,37 @@ const SOURCE_LABEL: Record<NonNullable<DongTienItem['sourceType']>, string> = {
   'ky-tra-no': 'kỳ trả nợ vay (tab Vay & giải ngân)',
 }
 
+// Sắp xếp cây cha-con để hiện thụt lề trong dropdown chọn hạng mục — cùng cách làm với
+// TabTienDo.tsx / TabNhaThau.tsx / TabVatTu.tsx.
+function sortHierarchical(items: HangMuc[]): HangMuc[] {
+  const byParent = new Map<string, HangMuc[]>()
+  for (const item of items) {
+    const key = item.parentId || ''
+    if (!byParent.has(key)) byParent.set(key, [])
+    byParent.get(key)!.push(item)
+  }
+  for (const list of byParent.values()) list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const result: HangMuc[] = []
+  function walk(parentKey: string) {
+    for (const item of byParent.get(parentKey) ?? []) {
+      result.push(item)
+      walk(item.id)
+    }
+  }
+  walk('')
+  return result
+}
+
 export function TabDongTien({ projectId }: { projectId: string }) {
   const [items, setItems] = useState<DongTienItem[]>([])
   const [doiTacs, setDoiTacs] = useState<DoiTac[]>([])
+  const [hangMucs, setHangMucs] = useState<HangMuc[]>([])
   const [editing, setEditing] = useState<DongTienItem | 'new' | null>(null)
   const [filter, setFilter] = useState<'all' | DongTienType>('all')
 
   useEffect(() => { const unsub = dongTienStore.subscribe(projectId, setItems); return () => unsub() }, [projectId])
   useEffect(() => { const unsub = doiTacStore.subscribe(projectId, setDoiTacs); return () => unsub() }, [projectId])
+  useEffect(() => { const unsub = hangMucStore.subscribe(projectId, setHangMucs); return () => unsub() }, [projectId])
 
   const totalThu = items.filter(i => i.type === 'thu').reduce((s, i) => s + i.amount, 0)
   const totalChi = items.filter(i => i.type === 'chi').reduce((s, i) => s + i.amount, 0)
@@ -26,6 +49,7 @@ export function TabDongTien({ projectId }: { projectId: string }) {
     .filter(i => filter === 'all' || i.type === filter)
     .sort((a, b) => (a.date < b.date ? 1 : -1))
   const doiTacName = (id?: string) => doiTacs.find(d => d.id === id)?.name
+  const hangMucName = (id?: string) => hangMucs.find(h => h.id === id)?.name
 
   function handleRowClick(item: DongTienItem) {
     if (item.auto) {
@@ -57,10 +81,10 @@ export function TabDongTien({ projectId }: { projectId: string }) {
         <div className="stc-panel-body" style={{ padding: 0 }}>
           <table className="stc-table">
             <thead>
-              <tr><th>Ngày</th><th>Loại</th><th>Hạng mục / Diễn giải</th><th>Đối tác</th><th>Số tiền (đ)</th><th>Ghi chú</th><th></th></tr>
+              <tr><th>Ngày</th><th>Loại</th><th>Hạng mục / Diễn giải</th><th>Hạng mục CT</th><th>Đối tác</th><th>Số tiền (đ)</th><th>Ghi chú</th><th></th></tr>
             </thead>
             <tbody>
-              {!shown.length && <tr className="stc-empty-row"><td colSpan={7}>Chưa có dữ liệu dòng tiền.</td></tr>}
+              {!shown.length && <tr className="stc-empty-row"><td colSpan={8}>Chưa có dữ liệu dòng tiền.</td></tr>}
               {shown.map(i => (
                 <tr key={i.id} onClick={() => handleRowClick(i)} style={{ cursor: 'pointer' }}>
                   <td>{i.date}</td>
@@ -69,6 +93,7 @@ export function TabDongTien({ projectId }: { projectId: string }) {
                     {i.category}
                     {i.auto && <span className="stc-badge stc-badge-upcoming" style={{ marginLeft: 6 }} title="Tự động tạo từ nghiệp vụ khác, không sửa/xoá trực tiếp ở đây">🔗 Tự động</span>}
                   </td>
+                  <td style={{ fontSize: 11 }}>{i.hangMucId ? <span className="stc-badge stc-badge-upcoming">{hangMucName(i.hangMucId) || '—'}</span> : <span style={{ color: 'var(--muted)' }}>—</span>}</td>
                   <td style={{ fontSize: 11.5, color: 'var(--muted)' }}>{doiTacName(i.doiTacId) || '—'}</td>
                   <td className="num" style={{ color: i.type === 'thu' ? 'var(--green)' : '#DC2626', fontWeight: 700 }}>{fmt(i.amount)}</td>
                   <td style={{ color: 'var(--muted)', fontSize: 11.5 }}>{i.note || '—'}</td>
@@ -88,16 +113,17 @@ export function TabDongTien({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      {editing && <DongTienModal projectId={projectId} doiTacs={doiTacs} value={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+      {editing && <DongTienModal projectId={projectId} doiTacs={doiTacs} hangMucs={hangMucs} value={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
     </>
   )
 }
 
 function DongTienModal({
-  projectId, doiTacs, value, onClose,
+  projectId, doiTacs, hangMucs, value, onClose,
 }: {
   projectId: string
   doiTacs: DoiTac[]
+  hangMucs: HangMuc[]
   value: DongTienItem | null
   onClose: () => void
 }) {
@@ -106,6 +132,7 @@ function DongTienModal({
   const [category, setCategory] = useState(value?.category ?? '')
   const [amount, setAmount] = useState(String(value?.amount ?? ''))
   const [doiTacId, setDoiTacId] = useState(value?.doiTacId)
+  const [hangMucId, setHangMucId] = useState(value?.hangMucId)
   const [note, setNote] = useState(value?.note ?? '')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -114,7 +141,7 @@ function DongTienModal({
     if (!category.trim() || !amount) { setErr('Vui lòng nhập đầy đủ diễn giải và số tiền'); return }
     setSaving(true); setErr('')
     try {
-      const data = { date, type, category: category.trim(), amount: Number(amount), doiTacId, note: note.trim() || undefined }
+      const data = { date, type, category: category.trim(), amount: Number(amount), doiTacId, hangMucId, note: note.trim() || undefined }
       if (value) await dongTienStore.update(projectId, value.id, data)
       else await dongTienStore.add(projectId, data)
       onClose()
@@ -146,6 +173,16 @@ function DongTienModal({
               <option value="">— Không chọn —</option>
               {doiTacs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
+          </div>
+          <div className="stc-field stc-field--full">
+            <label>Hạng mục thi công liên quan</label>
+            <select value={hangMucId ?? ''} onChange={e => setHangMucId(e.target.value || undefined)}>
+              <option value="">— Không chọn —</option>
+              {sortHierarchical(hangMucs).map(h => (
+                <option key={h.id} value={h.id}>{h.parentId ? `\u00A0\u00A0↳ ${h.name}` : h.name}</option>
+              ))}
+            </select>
+            <div className="stc-hint" style={{ marginTop: 6, fontSize: 11 }}>Gắn hạng mục để sau này lọc/tổng hợp thu-chi theo từng đầu việc, kiểm tra hiệu quả từng hạng mục dễ hơn.</div>
           </div>
           <div className="stc-field stc-field--full"><label>Ghi chú</label><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} /></div>
         </div>
