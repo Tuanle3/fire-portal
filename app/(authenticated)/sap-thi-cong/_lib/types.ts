@@ -104,7 +104,8 @@ export type VatTuItem = {
   unit: string
   qtyPlanned: number
   qtyUsed: number
-  unitPrice: number
+  unitPrice: number      // đơn giá CHƯA VAT
+  vatPercent?: number    // thuế suất VAT (%) — 0/5/8/10, mặc định coi là 0 nếu chưa có (dữ liệu cũ)
   soHopDong?: string
   hangMucId?: string   // hạng mục thi công dùng vật tư này (nếu có) — để biết chi phí vật tư thuộc hạng mục nào
   doiTacId?: string    // liên kết Đối tác (NCC) — ưu tiên dùng thay cho `supplier` tự do
@@ -124,7 +125,8 @@ export type NghiemThu = {
   bbDate?: string
   invNo?: string
   invDate?: string
-  value: number
+  value: number          // giá trị nghiệm thu CHƯA VAT
+  vatPercent?: number    // thuế suất VAT (%) của đợt này — mặc định lấy theo NhaThau.vatPercent, coi là 0 nếu chưa có (dữ liệu cũ)
   retainPct: number
   retain: number
   netPayable: number
@@ -144,7 +146,8 @@ export type NhaThau = {
   scope?: string
   hangMucIds?: string[]    // các hạng mục thi công mà nhà thầu này phụ trách (nhiều-nhiều)
   soHopDong?: string
-  contractValue: number
+  contractValue: number   // giá trị hợp đồng CHƯA VAT
+  vatPercent?: number     // thuế suất VAT (%) mặc định của hợp đồng — coi là 0 nếu chưa có (dữ liệu cũ)
   retainPct: number
   status: NhaThauStatus
 }

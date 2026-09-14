@@ -1,4 +1,6 @@
 'use client'
+// LƯU Ý: cần thêm field `vatPercent?: number` vào type VatTuItem trong ../_lib/types.ts
+// (đơn giá vẫn là giá CHƯA VAT; vatPercent là % thuế suất, dùng để tính ra thuế VAT + tổng tiền).
 import { useState, useEffect } from 'react'
 import { VatTuItem, DoiTac, HangMuc, fmt } from '../_lib/types'
 import { NumberInput } from '../_lib/NumberInput'
@@ -49,7 +51,9 @@ export function TabVatTu({ projectId }: { projectId: string }) {
 
   const hangMucName = (id?: string) => (id && hangMucs.find(h => h.id === id)?.name) || '—'
 
-  const totalCost = items.reduce((s, i) => s + i.qtyUsed * i.unitPrice, 0)
+  const totalChuaVAT = items.reduce((s, i) => s + i.qtyUsed * i.unitPrice, 0)
+  const totalVAT = items.reduce((s, i) => s + (i.qtyUsed * i.unitPrice) * ((i.vatPercent ?? 0) / 100), 0)
+  const totalCost = totalChuaVAT + totalVAT
   const totalPaid = items.reduce((s, i) => s + (i.paidAmount || 0), 0)
   const overCount = items.filter(i => i.qtyUsed > i.qtyPlanned).length
 
@@ -57,7 +61,9 @@ export function TabVatTu({ projectId }: { projectId: string }) {
     <>
       <div className="stc-kpi-row">
         <div className="stc-kpi"><div className="stc-kpi-label">Số mặt hàng</div><div className="stc-kpi-val">{items.length}</div></div>
-        <div className="stc-kpi gold"><div className="stc-kpi-label">Tổng chi phí vật tư đã dùng</div><div className="stc-kpi-val">{fmt(totalCost)} đ</div></div>
+        <div className="stc-kpi"><div className="stc-kpi-label">Chưa VAT</div><div className="stc-kpi-val">{fmt(totalChuaVAT)} đ</div></div>
+        <div className="stc-kpi"><div className="stc-kpi-label">Thuế VAT</div><div className="stc-kpi-val">{fmt(totalVAT)} đ</div></div>
+        <div className="stc-kpi gold"><div className="stc-kpi-label">Tổng tiền vật tư (gồm VAT)</div><div className="stc-kpi-val">{fmt(totalCost)} đ</div></div>
         <div className="stc-kpi green"><div className="stc-kpi-label">Đã thanh toán NCC</div><div className="stc-kpi-val">{fmt(totalPaid)} đ</div></div>
         <div className="stc-kpi red"><div className="stc-kpi-label">Vượt định mức</div><div className="stc-kpi-val">{overCount}</div></div>
       </div>
@@ -70,14 +76,17 @@ export function TabVatTu({ projectId }: { projectId: string }) {
         <div className="stc-panel-body" style={{ padding: 0 }}>
           <table className="stc-table">
             <thead>
-              <tr><th>Tên vật tư</th><th>ĐVT</th><th>KH</th><th>Đã dùng</th><th>Đơn giá (đ)</th><th>Thành tiền (đ)</th><th>Đã TT (đ)</th><th>Hạng mục</th><th>NCC</th><th>Số HĐ/PO</th><th></th></tr>
+              <tr><th>Tên vật tư</th><th>ĐVT</th><th>KH</th><th>Đã dùng</th><th>Đơn giá (đ)</th><th>Chưa VAT (đ)</th><th>VAT</th><th>Tổng tiền (đ)</th><th>Đã TT (đ)</th><th>Còn nợ (đ)</th><th>Hạng mục</th><th>NCC</th><th>Số HĐ/PO</th><th></th></tr>
             </thead>
             <tbody>
-              {!items.length && <tr className="stc-empty-row"><td colSpan={11}>Chưa có vật tư nào.</td></tr>}
+              {!items.length && <tr className="stc-empty-row"><td colSpan={14}>Chưa có vật tư nào.</td></tr>}
               {items.map(i => {
                 const over = i.qtyUsed > i.qtyPlanned
-                const thanhTien = i.qtyUsed * i.unitPrice
-                const conNo = thanhTien - (i.paidAmount || 0)
+                const vatPercent = i.vatPercent ?? 0
+                const chuaVAT = i.qtyUsed * i.unitPrice
+                const vatAmount = chuaVAT * vatPercent / 100
+                const tongTien = chuaVAT + vatAmount
+                const conNo = tongTien - (i.paidAmount || 0)
                 return (
                   <tr key={i.id} onClick={() => setEditing(i)} style={{ cursor: 'pointer' }}>
                     <td>{i.name}</td>
@@ -85,8 +94,11 @@ export function TabVatTu({ projectId }: { projectId: string }) {
                     <td className="num">{fmt(i.qtyPlanned)}</td>
                     <td className="num" style={{ color: over ? '#DC2626' : undefined, fontWeight: over ? 700 : undefined }}>{fmt(i.qtyUsed)}</td>
                     <td className="num">{fmt(i.unitPrice)}</td>
-                    <td className="num" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmt(thanhTien)}</td>
-                    <td className="num" style={{ color: conNo > 0 ? '#DC2626' : 'var(--green)', fontWeight: 700 }}>{fmt(i.paidAmount || 0)}</td>
+                    <td className="num">{fmt(chuaVAT)}</td>
+                    <td className="num" style={{ color: 'var(--muted)' }}>{vatPercent > 0 ? `${vatPercent}%` : '—'}</td>
+                    <td className="num" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmt(tongTien)}</td>
+                    <td className="num" style={{ color: 'var(--green)', fontWeight: 700 }}>{fmt(i.paidAmount || 0)}</td>
+                    <td className="num" style={{ color: conNo > 0 ? '#DC2626' : 'var(--green)', fontWeight: 700 }}>{fmt(conNo)}</td>
                     <td style={{ fontSize: 11 }}>{i.hangMucId ? <span className="stc-badge stc-badge-upcoming">{hangMucName(i.hangMucId)}</span> : <span style={{ color: 'var(--muted)' }}>—</span>}</td>
                     <td style={{ fontSize: 11.5, color: 'var(--muted)' }}>{i.supplier || '—'}</td>
                     <td style={{ fontSize: 11.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{i.soHopDong || '—'}</td>
@@ -128,6 +140,7 @@ function VatTuModal({
   const [qtyPlanned, setQtyPlanned] = useState(String(value?.qtyPlanned ?? ''))
   const [qtyUsed, setQtyUsed] = useState(String(value?.qtyUsed ?? 0))
   const [unitPrice, setUnitPrice] = useState(String(value?.unitPrice ?? ''))
+  const [vatPercent, setVatPercent] = useState(String(value?.vatPercent ?? 10))
   const [hangMucId, setHangMucId] = useState(value?.hangMucId)
   const [doiTacId, setDoiTacId] = useState(value?.doiTacId)
   const [supplier, setSupplier] = useState(value?.supplier ?? '')
@@ -141,8 +154,15 @@ function VatTuModal({
   // Quy ra tiền cả 2 chiều: "dự kiến" theo khối lượng KẾ HOẠCH (để biết trước khi mua sẽ tốn bao
   // nhiêu) và "thực tế" theo khối lượng ĐÃ DÙNG (dùng để đối chiếu công nợ NCC) — trước đây chỉ
   // tính theo đã dùng nên nhập khối lượng kế hoạch xong không thấy quy ra tiền ước tính.
-  const duKien = (Number(qtyPlanned) || 0) * (Number(unitPrice) || 0)
-  const thanhTien = (Number(qtyUsed) || 0) * (Number(unitPrice) || 0)
+  // Đơn giá nhập vào được coi là đơn giá CHƯA VAT — VAT cộng thêm theo % khai báo để ra tổng tiền
+  // thực phải trả NCC, tránh nhầm giữa giá trị hàng và tổng tiền trên hoá đơn.
+  const vatPct = Number(vatPercent) || 0
+  const duKienChuaVAT = (Number(qtyPlanned) || 0) * (Number(unitPrice) || 0)
+  const duKienVAT = duKienChuaVAT * vatPct / 100
+  const duKien = duKienChuaVAT + duKienVAT
+  const thanhTienChuaVAT = (Number(qtyUsed) || 0) * (Number(unitPrice) || 0)
+  const thanhTienVAT = thanhTienChuaVAT * vatPct / 100
+  const thanhTien = thanhTienChuaVAT + thanhTienVAT
 
   async function handleSave() {
     if (!name.trim() || !unit.trim()) { setErr('Vui lòng nhập tên vật tư và đơn vị tính'); return }
@@ -152,6 +172,7 @@ function VatTuModal({
         name: name.trim(), unit: unit.trim(),
         qtyPlanned: Number(qtyPlanned) || 0, qtyUsed: Number(qtyUsed) || 0,
         unitPrice: Number(unitPrice) || 0,
+        vatPercent: vatPct,
         hangMucId,
         doiTacId, supplier: supplier.trim() || undefined,
         soHopDong: soHopDong.trim() || undefined,
@@ -174,7 +195,16 @@ function VatTuModal({
           {err && <div className="stc-err">{err}</div>}
           <div className="stc-field stc-field--full"><label>Tên vật tư *</label><input value={name} onChange={e => setName(e.target.value)} placeholder="VD: Xi măng PCB40" /></div>
           <div className="stc-field"><label>Đơn vị tính *</label><input value={unit} onChange={e => setUnit(e.target.value)} placeholder="tấn / m³ / bao..." /></div>
-          <div className="stc-field"><label>Đơn giá (đ)</label><NumberInput value={unitPrice} onChange={setUnitPrice} /></div>
+          <div className="stc-field"><label>Đơn giá chưa VAT (đ)</label><NumberInput value={unitPrice} onChange={setUnitPrice} /></div>
+          <div className="stc-field">
+            <label>Thuế suất VAT (%)</label>
+            <select value={vatPercent} onChange={e => setVatPercent(e.target.value)}>
+              <option value="0">0% (không VAT)</option>
+              <option value="5">5%</option>
+              <option value="8">8%</option>
+              <option value="10">10%</option>
+            </select>
+          </div>
           <div className="stc-field"><label>Khối lượng kế hoạch</label><NumberInput decimal value={qtyPlanned} onChange={setQtyPlanned} placeholder="VD: 3,204" /></div>
           <div className="stc-field"><label>Khối lượng đã dùng</label><NumberInput decimal value={qtyUsed} onChange={setQtyUsed} /></div>
           <div className="stc-field"><label>Ngày nhập</label><input type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
@@ -209,10 +239,14 @@ function VatTuModal({
 
           {(duKien > 0 || thanhTien > 0) && (
             <div className="stc-hint stc-field--full">
-              {duKien > 0 && <div>Dự kiến theo kế hoạch: <strong>{fmt(duKien)}</strong> đ <span style={{ color: 'var(--muted)' }}>(khối lượng KH × đơn giá)</span></div>}
+              {duKien > 0 && (
+                <div>
+                  Dự kiến theo kế hoạch: chưa VAT <strong>{fmt(duKienChuaVAT)}</strong> đ + VAT ({vatPct}%) <strong>{fmt(duKienVAT)}</strong> đ = tổng <strong>{fmt(duKien)}</strong> đ
+                </div>
+              )}
               {thanhTien > 0 && (
                 <div style={{ marginTop: duKien > 0 ? 4 : 0 }}>
-                  Thành tiền thực tế: <strong>{fmt(thanhTien)}</strong> đ — Đã TT: <strong style={{ color: 'var(--green)' }}>{fmt(Number(paidAmount) || 0)}</strong> đ — Còn nợ NCC: <strong style={{ color: '#DC2626' }}>{fmt(thanhTien - (Number(paidAmount) || 0))}</strong> đ
+                  Thực tế: chưa VAT <strong>{fmt(thanhTienChuaVAT)}</strong> đ + VAT ({vatPct}%) <strong>{fmt(thanhTienVAT)}</strong> đ = tổng tiền <strong>{fmt(thanhTien)}</strong> đ — Đã TT: <strong style={{ color: 'var(--green)' }}>{fmt(Number(paidAmount) || 0)}</strong> đ — Còn nợ NCC: <strong style={{ color: '#DC2626' }}>{fmt(thanhTien - (Number(paidAmount) || 0))}</strong> đ
                 </div>
               )}
               <div style={{ marginTop: 4, fontSize: 11 }}>Số tiền đã TT sẽ tự động đồng bộ 1 dòng &quot;Chi&quot; tương ứng trong tab Dòng tiền — không cần nhập lại.</div>

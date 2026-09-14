@@ -1,4 +1,8 @@
 'use client'
+// LƯU Ý: cần thêm field `vatPercent?: number` vào type NhaThau (mức VAT mặc định của hợp đồng)
+// và type NghiemThu (mức VAT thực tế theo hoá đơn từng đợt) trong ../_lib/types.ts.
+// Quy ước: contractValue và value (giá trị nghiệm thu) là giá trị CHƯA VAT; VAT cộng thêm theo %
+// để ra tổng tiền — giữ lại bảo hành vẫn tính trên phần CHƯA VAT, chỉ cộng thêm VAT vào lúc thanh toán.
 import { useState, useEffect } from 'react'
 import {
   NhaThau, NhaThauStatus, NghiemThu, NghiemThuStatus, DoiTac, HangMuc, KhoanVay, fmt,
@@ -46,13 +50,17 @@ export function TabNhaThau({ projectId }: { projectId: string }) {
   useEffect(() => { const unsub = khoanVayStore.subscribe(projectId, setKhoanVays); return () => unsub() }, [projectId])
 
   const totalContract = items.reduce((s, i) => s + i.contractValue, 0)
+  const totalContractVAT = items.reduce((s, i) => s + i.contractValue * ((i.vatPercent ?? 0) / 100), 0)
+  const totalContractGross = totalContract + totalContractVAT
   const hangMucName = (id: string) => hangMucs.find(h => h.id === id)?.name ?? '—'
 
   return (
     <>
       <div className="stc-kpi-row">
         <div className="stc-kpi"><div className="stc-kpi-label">Số nhà thầu phụ</div><div className="stc-kpi-val">{items.length}</div></div>
-        <div className="stc-kpi gold"><div className="stc-kpi-label">Tổng giá trị hợp đồng</div><div className="stc-kpi-val">{fmt(totalContract)} đ</div></div>
+        <div className="stc-kpi"><div className="stc-kpi-label">Tổng GT HĐ (chưa VAT)</div><div className="stc-kpi-val">{fmt(totalContract)} đ</div></div>
+        <div className="stc-kpi"><div className="stc-kpi-label">Tổng VAT</div><div className="stc-kpi-val">{fmt(totalContractVAT)} đ</div></div>
+        <div className="stc-kpi gold"><div className="stc-kpi-label">Tổng GT HĐ (gồm VAT)</div><div className="stc-kpi-val">{fmt(totalContractGross)} đ</div></div>
       </div>
 
       <div className="stc-panel">
@@ -63,11 +71,14 @@ export function TabNhaThau({ projectId }: { projectId: string }) {
         <div className="stc-panel-body" style={{ padding: 0 }}>
           <table className="stc-table">
             <thead>
-              <tr><th>Nhà thầu</th><th>Số HĐ</th><th>Phạm vi công việc</th><th>Hạng mục phụ trách</th><th>Giá trị HĐ (đ)</th><th>Giữ lại BH</th><th>Trạng thái</th><th></th></tr>
+              <tr><th>Nhà thầu</th><th>Số HĐ</th><th>Phạm vi công việc</th><th>Hạng mục phụ trách</th><th>GT HĐ chưa VAT (đ)</th><th>VAT</th><th>Tổng GT HĐ (đ)</th><th>Giữ lại BH</th><th>Trạng thái</th><th></th></tr>
             </thead>
             <tbody>
-              {!items.length && <tr className="stc-empty-row"><td colSpan={7}>Chưa có nhà thầu phụ nào.</td></tr>}
-              {items.map(i => (
+              {!items.length && <tr className="stc-empty-row"><td colSpan={10}>Chưa có nhà thầu phụ nào.</td></tr>}
+              {items.map(i => {
+                const vatPercent = i.vatPercent ?? 0
+                const vatAmount = i.contractValue * vatPercent / 100
+                return (
                 <tr key={i.id} onClick={() => setPanelId(i.id)} style={{ cursor: 'pointer' }}>
                   <td style={{ fontWeight: 600 }}>{i.name}</td>
                   <td style={{ fontSize: 11.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{i.soHopDong || '—'}</td>
@@ -82,6 +93,8 @@ export function TabNhaThau({ projectId }: { projectId: string }) {
                       : <span style={{ color: 'var(--muted)' }}>—</span>}
                   </td>
                   <td className="num">{fmt(i.contractValue)}</td>
+                  <td className="num" style={{ color: 'var(--muted)' }}>{vatPercent > 0 ? `${vatPercent}%` : '—'}</td>
+                  <td className="num" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmt(i.contractValue + vatAmount)}</td>
                   <td className="num">{i.retainPct}%</td>
                   <td><span className={`stc-badge stc-badge-${i.status === 'done' ? 'done' : i.status === 'paused' ? 'upcoming' : 'active'}`}>{NT_STATUS_LABEL[i.status]}</span></td>
                   <td onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 6 }}>
@@ -89,7 +102,7 @@ export function TabNhaThau({ projectId }: { projectId: string }) {
                     <button className="btn-del-icon" onClick={() => { if (confirm('Xoá nhà thầu này?')) nhaThauStore.remove(projectId, i.id) }}>🗑</button>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
@@ -129,6 +142,7 @@ function NhaThauModal({
   const [hangMucIds, setHangMucIds] = useState<string[]>(value?.hangMucIds ?? [])
   const [soHopDong, setSoHopDong] = useState(value?.soHopDong ?? '')
   const [contractValue, setContractValue] = useState(String(value?.contractValue ?? ''))
+  const [vatPercent, setVatPercent] = useState(String(value?.vatPercent ?? 10))
   const [retainPct, setRetainPct] = useState(String(value?.retainPct ?? 5))
   const [status, setStatus] = useState<NhaThauStatus>(value?.status ?? 'active')
   const [saving, setSaving] = useState(false)
@@ -146,7 +160,7 @@ function NhaThauModal({
         doiTacId, name: name.trim(), scope: scope.trim() || undefined,
         soHopDong: soHopDong.trim() || undefined,
         hangMucIds: hangMucIds.length ? hangMucIds : undefined,
-        contractValue: Number(contractValue), retainPct: Number(retainPct) || 0, status,
+        contractValue: Number(contractValue), vatPercent: Number(vatPercent) || 0, retainPct: Number(retainPct) || 0, status,
       }
       if (value) await nhaThauStore.update(projectId, value.id, data)
       else await nhaThauStore.add(projectId, data)
@@ -191,7 +205,16 @@ function NhaThauModal({
           </div>
 
           <div className="stc-field"><label>Số hợp đồng</label><input value={soHopDong} onChange={e => setSoHopDong(e.target.value)} placeholder="VD: HĐ-2026/001" /></div>
-          <div className="stc-field"><label>Giá trị hợp đồng (đ) *</label><NumberInput value={contractValue} onChange={setContractValue} /></div>
+          <div className="stc-field"><label>Giá trị hợp đồng chưa VAT (đ) *</label><NumberInput value={contractValue} onChange={setContractValue} /></div>
+          <div className="stc-field">
+            <label>Thuế suất VAT (%)</label>
+            <select value={vatPercent} onChange={e => setVatPercent(e.target.value)}>
+              <option value="0">0% (không VAT)</option>
+              <option value="5">5%</option>
+              <option value="8">8%</option>
+              <option value="10">10%</option>
+            </select>
+          </div>
           <div className="stc-field"><label>% Giữ lại bảo hành</label><input type="number" min={0} max={20} value={retainPct} onChange={e => setRetainPct(e.target.value)} /></div>
           <div className="stc-field stc-field--full">
             <label>Trạng thái</label>
@@ -229,6 +252,8 @@ function NghiemThuPanel({
   }, [projectId, subcon.id])
 
   const totalVal = acs.reduce((s, a) => s + a.value, 0)
+  const totalVATAmount = acs.reduce((s, a) => s + a.value * ((a.vatPercent ?? 0) / 100), 0)
+  const totalGross = totalVal + totalVATAmount
   const totalRetain = acs.reduce((s, a) => s + a.retain, 0)
   const totalPaid = acs.reduce((s, a) => s + a.paid, 0)
   const totalUnpaid = acs.reduce((s, a) => s + (a.netPayable - a.paid), 0)
@@ -244,14 +269,16 @@ function NghiemThuPanel({
         <div className="stc-modal-head">
           <div>
             <div className="stc-modal-title">Nghiệm thu – {subcon.name}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2 }}>{subcon.scope} &nbsp;|&nbsp; Giá trị HĐ: <strong style={{ color: 'var(--gold2)' }}>{fmt(subcon.contractValue)} đ</strong> &nbsp;|&nbsp; Giữ lại BH: {subcon.retainPct}%</div>
+            <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2 }}>{subcon.scope} &nbsp;|&nbsp; Giá trị HĐ (chưa VAT): <strong style={{ color: 'var(--gold2)' }}>{fmt(subcon.contractValue)} đ</strong> &nbsp;|&nbsp; Giữ lại BH: {subcon.retainPct}%</div>
           </div>
           <button className="stc-modal-close" onClick={onClose}>✕</button>
         </div>
         <div style={{ padding: '14px 20px 0' }}>
           <div className="stc-kpi-row" style={{ marginBottom: 12 }}>
             <div className="stc-kpi"><div className="stc-kpi-label">Số đợt NT</div><div className="stc-kpi-val">{acs.length}</div></div>
-            <div className="stc-kpi green"><div className="stc-kpi-label">Tổng GT nghiệm thu</div><div className="stc-kpi-val">{fmt(totalVal)} đ</div></div>
+            <div className="stc-kpi"><div className="stc-kpi-label">GT nghiệm thu (chưa VAT)</div><div className="stc-kpi-val">{fmt(totalVal)} đ</div></div>
+            <div className="stc-kpi"><div className="stc-kpi-label">Tổng VAT</div><div className="stc-kpi-val">{fmt(totalVATAmount)} đ</div></div>
+            <div className="stc-kpi green"><div className="stc-kpi-label">Tổng GT (gồm VAT)</div><div className="stc-kpi-val">{fmt(totalGross)} đ</div></div>
             <div className="stc-kpi red"><div className="stc-kpi-label">Giữ lại BH</div><div className="stc-kpi-val">{fmt(totalRetain)} đ</div></div>
             <div className="stc-kpi green"><div className="stc-kpi-label">Đã thanh toán</div><div className="stc-kpi-val">{fmt(totalPaid)} đ</div></div>
             <div className="stc-kpi red"><div className="stc-kpi-label">Còn phải TT</div><div className="stc-kpi-val">{fmt(totalUnpaid)} đ</div></div>
@@ -263,16 +290,20 @@ function NghiemThuPanel({
           </div>
           <table className="stc-table">
             <thead>
-              <tr><th>Đợt</th><th>GT đợt (đ)</th><th>Giữ lại BH</th><th>Phải TT</th><th>Đã TT</th><th>Còn nợ</th><th>GN ngân hàng</th><th>Trạng thái</th><th></th></tr>
+              <tr><th>Đợt</th><th>GT chưa VAT</th><th>VAT</th><th>Tổng GT (đ)</th><th>Giữ lại BH</th><th>Phải TT</th><th>Đã TT</th><th>Còn nợ</th><th>GN ngân hàng</th><th>Trạng thái</th><th></th></tr>
             </thead>
             <tbody>
-              {!acs.length && <tr className="stc-empty-row"><td colSpan={9}>Chưa có đợt nghiệm thu nào.</td></tr>}
+              {!acs.length && <tr className="stc-empty-row"><td colSpan={11}>Chưa có đợt nghiệm thu nào.</td></tr>}
               {acs.map(a => {
                 const unpaid = a.netPayable - a.paid
+                const vatPercent = a.vatPercent ?? 0
+                const vatAmount = a.value * vatPercent / 100
                 return (
                   <tr key={a.id} onClick={() => setModal(a)} style={{ cursor: 'pointer' }}>
                     <td>{a.dot}</td>
                     <td className="num">{fmt(a.value)}</td>
+                    <td className="num" style={{ color: 'var(--muted)' }}>{vatPercent > 0 ? `${vatPercent}%` : '—'}</td>
+                    <td className="num" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmt(a.value + vatAmount)}</td>
                     <td className="num">{fmt(a.retain)}</td>
                     <td className="num">{fmt(a.netPayable)}</td>
                     <td className="num" style={{ color: 'var(--green)' }}>{fmt(a.paid)}</td>
@@ -311,6 +342,7 @@ function NghiemThuModal({
 }) {
   const [dot, setDot] = useState(value?.dot ?? `Đợt ${acCount + 1}`)
   const [val, setVal] = useState(String(value?.value ?? ''))
+  const [vatPercent, setVatPercent] = useState(String(value?.vatPercent ?? (subcon.vatPercent ?? 10)))
   const [retainPct, setRetainPct] = useState(String(value?.retainPct ?? (subcon.retainPct || 5)))
   const [paid, setPaid] = useState(String(value?.paid ?? 0))
   const [khoanVayId, setKhoanVayId] = useState(value?.khoanVayId)
@@ -324,15 +356,17 @@ function NghiemThuModal({
   const [err, setErr] = useState('')
 
   const valNum = Number(val) || 0
+  const vatPct = Number(vatPercent) || 0
+  const vatAmount = valNum * vatPct / 100
   const retNum = Math.round(valNum * (Number(retainPct) || 0) / 100)
-  const netPayable = valNum - retNum
+  const netPayable = valNum + vatAmount - retNum
 
   async function handleSave() {
     if (!valNum) { setErr('Vui lòng nhập giá trị nghiệm thu'); return }
     setSaving(true); setErr('')
     try {
       const data = {
-        dot, value: valNum, retainPct: Number(retainPct) || 0, retain: retNum, netPayable,
+        dot, value: valNum, vatPercent: vatPct, retainPct: Number(retainPct) || 0, retain: retNum, netPayable,
         paid: Number(paid) || 0, khoanVayId,
         bbNo: bbNo.trim() || undefined, bbDate: bbDate || undefined,
         invNo: invNo.trim() || undefined, invDate: invDate || undefined,
@@ -353,7 +387,16 @@ function NghiemThuModal({
         <div className="stc-modal-body">
           {err && <div className="stc-err">{err}</div>}
           <div className="stc-field"><label>Tên đợt</label><input value={dot} onChange={e => setDot(e.target.value)} /></div>
-          <div className="stc-field"><label>Giá trị nghiệm thu (đ) *</label><NumberInput value={val} onChange={setVal} /></div>
+          <div className="stc-field"><label>Giá trị nghiệm thu chưa VAT (đ) *</label><NumberInput value={val} onChange={setVal} /></div>
+          <div className="stc-field">
+            <label>Thuế suất VAT (%)</label>
+            <select value={vatPercent} onChange={e => setVatPercent(e.target.value)}>
+              <option value="0">0% (không VAT)</option>
+              <option value="5">5%</option>
+              <option value="8">8%</option>
+              <option value="10">10%</option>
+            </select>
+          </div>
           <div className="stc-field"><label>Số biên bản NT</label><input value={bbNo} onChange={e => setBbNo(e.target.value)} /></div>
           <div className="stc-field"><label>Ngày ký biên bản</label><input type="date" value={bbDate} onChange={e => setBbDate(e.target.value)} /></div>
           <div className="stc-field"><label>Số hoá đơn</label><input value={invNo} onChange={e => setInvNo(e.target.value)} /></div>
@@ -376,7 +419,8 @@ function NghiemThuModal({
           </div>
           {valNum > 0 && (
             <div className="stc-hint stc-field--full">
-              GT nghiệm thu: <strong>{fmt(valNum)}</strong> đ — Giữ lại {retainPct}%: <strong style={{ color: '#DC2626' }}>{fmt(retNum)}</strong> đ — Thực nhận: <strong style={{ color: 'var(--green)' }}>{fmt(netPayable)}</strong> đ
+              GT nghiệm thu chưa VAT: <strong>{fmt(valNum)}</strong> đ + VAT ({vatPct}%): <strong>{fmt(vatAmount)}</strong> đ = tổng <strong>{fmt(valNum + vatAmount)}</strong> đ
+              <div style={{ marginTop: 4 }}>Giữ lại {retainPct}% (tính trên GT chưa VAT): <strong style={{ color: '#DC2626' }}>{fmt(retNum)}</strong> đ — Thực nhận (gồm VAT, trừ giữ lại BH): <strong style={{ color: 'var(--green)' }}>{fmt(netPayable)}</strong> đ</div>
               <div style={{ marginTop: 4, fontSize: 11 }}>Số tiền &quot;Đã thanh toán&quot; sẽ tự động đồng bộ 1 dòng &quot;Chi&quot; tương ứng trong tab Dòng tiền — không cần nhập lại.</div>
             </div>
           )}
