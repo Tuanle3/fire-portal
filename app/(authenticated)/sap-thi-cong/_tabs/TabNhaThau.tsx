@@ -159,9 +159,9 @@ function NhaThauModal({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 8px', maxHeight: 140, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px' }}>
               {!hangMucs.length && <span style={{ fontSize: 11.5, color: 'var(--muted)', gridColumn: '1/-1' }}>Chưa có hạng mục nào ở tab Tiến độ.</span>}
               {hangMucs.map(h => (
-                <label key={h.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '4px 6px', borderRadius: 6, background: hangMucIds.includes(h.id) ? 'var(--surf2)' : 'transparent', cursor: 'pointer', minWidth: 0 }}>
-                  <input type="checkbox" style={{ flexShrink: 0 }} checked={hangMucIds.includes(h.id)} onChange={() => toggleHangMuc(h.id)} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.parentId ? `↳ ${h.name}` : h.name}</span>
+                <label key={h.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11.5, padding: '4px 6px', borderRadius: 6, background: hangMucIds.includes(h.id) ? 'var(--surf2)' : 'transparent', cursor: 'pointer' }}>
+                  <input type="checkbox" style={{ flexShrink: 0, marginTop: 2 }} checked={hangMucIds.includes(h.id)} onChange={() => toggleHangMuc(h.id)} />
+                  <span>{h.parentId ? `↳ ${h.name}` : h.name}</span>
                 </label>
               ))}
             </div>
