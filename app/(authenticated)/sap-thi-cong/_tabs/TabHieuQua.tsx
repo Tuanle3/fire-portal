@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, type ReactElement } from 'react'
 import { HangMuc, DongTienItem, DoiTac, fmt } from '../_lib/types'
 import { hangMucStore, dongTienStore, doiTacStore } from '@/lib/firebase-sap-thi-cong'
 
@@ -88,9 +88,9 @@ export function TabHieuQua({ projectId }: { projectId: string }) {
   const expandAll = () => setExpanded(new Set(hangMucs.filter(h => byParent.get(h.id)?.length).map(h => h.id)))
   const collapseAll = () => setExpanded(new Set())
 
-  function renderRows(parentKey: string, depth: number): JSX.Element[] {
+  function renderRows(parentKey: string, depth: number): ReactElement[] {
     const kids = byParent.get(parentKey) ?? []
-    const out: JSX.Element[] = []
+    const out: ReactElement[] = []
     for (const h of kids) {
       const r = rowsById.get(h.id)
       if (!r) continue
