@@ -41,7 +41,7 @@ export function TabVatTu({ projectId }: { projectId: string }) {
         <div className="stc-panel-body" style={{ padding: 0 }}>
           <table className="stc-table">
             <thead>
-              <tr><th>Tên vật tư</th><th>ĐVT</th><th>KH</th><th>Đã dùng</th><th>Đơn giá (đ)</th><th>Thành tiền (đ)</th><th>Đã TT (đ)</th><th>NCC</th><th></th></tr>
+              <tr><th>Tên vật tư</th><th>ĐVT</th><th>KH</th><th>Đã dùng</th><th>Đơn giá (đ)</th><th>Thành tiền (đ)</th><th>Đã TT (đ)</th><th>NCC</th><th>Số HĐ/PO</th><th></th></tr>
             </thead>
             <tbody>
               {!items.length && <tr className="stc-empty-row"><td colSpan={9}>Chưa có vật tư nào.</td></tr>}
@@ -59,6 +59,7 @@ export function TabVatTu({ projectId }: { projectId: string }) {
                     <td className="num" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmt(thanhTien)}</td>
                     <td className="num" style={{ color: conNo > 0 ? '#DC2626' : 'var(--green)', fontWeight: 700 }}>{fmt(i.paidAmount || 0)}</td>
                     <td style={{ fontSize: 11.5, color: 'var(--muted)' }}>{i.supplier || '—'}</td>
+                    <td style={{ fontSize: 11.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{i.soHopDong || '—'}</td>
                     <td onClick={e => e.stopPropagation()}>
                       <button className="btn-del-icon" onClick={() => { if (confirm('Xoá vật tư này? (Dòng tiền thanh toán liên kết sẽ bị xoá theo)')) removeVatTuWithSync(projectId, i) }}>🗑</button>
                     </td>
@@ -97,6 +98,7 @@ function VatTuModal({
   const [unitPrice, setUnitPrice] = useState(String(value?.unitPrice ?? ''))
   const [doiTacId, setDoiTacId] = useState(value?.doiTacId)
   const [supplier, setSupplier] = useState(value?.supplier ?? '')
+  const [soHopDong, setSoHopDong] = useState(value?.soHopDong ?? '')
   const [paidAmount, setPaidAmount] = useState(String(value?.paidAmount ?? 0))
   const [date, setDate] = useState(value?.date ?? '')
   const [note, setNote] = useState(value?.note ?? '')
@@ -114,6 +116,7 @@ function VatTuModal({
         qtyPlanned: Number(qtyPlanned) || 0, qtyUsed: Number(qtyUsed) || 0,
         unitPrice: Number(unitPrice) || 0,
         doiTacId, supplier: supplier.trim() || undefined,
+        soHopDong: soHopDong.trim() || undefined,
         paidAmount: Number(paidAmount) || 0,
         date: date || undefined, note: note.trim() || undefined,
       }
@@ -137,6 +140,7 @@ function VatTuModal({
           <div className="stc-field"><label>Khối lượng kế hoạch</label><NumberInput value={qtyPlanned} onChange={setQtyPlanned} /></div>
           <div className="stc-field"><label>Khối lượng đã dùng</label><NumberInput value={qtyUsed} onChange={setQtyUsed} /></div>
           <div className="stc-field"><label>Ngày nhập</label><input type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
+          <div className="stc-field"><label>Số hợp đồng / PO</label><input value={soHopDong} onChange={e => setSoHopDong(e.target.value)} placeholder="VD: PO-2026/012" /></div>
 
           <div className="stc-field stc-field--full">
             <label>Nhà cung cấp</label>

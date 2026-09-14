@@ -63,7 +63,7 @@ export function TabNhaThau({ projectId }: { projectId: string }) {
         <div className="stc-panel-body" style={{ padding: 0 }}>
           <table className="stc-table">
             <thead>
-              <tr><th>Nhà thầu</th><th>Phạm vi công việc</th><th>Hạng mục phụ trách</th><th>Giá trị HĐ (đ)</th><th>Giữ lại BH</th><th>Trạng thái</th><th></th></tr>
+              <tr><th>Nhà thầu</th><th>Số HĐ</th><th>Phạm vi công việc</th><th>Hạng mục phụ trách</th><th>Giá trị HĐ (đ)</th><th>Giữ lại BH</th><th>Trạng thái</th><th></th></tr>
             </thead>
             <tbody>
               {!items.length && <tr className="stc-empty-row"><td colSpan={7}>Chưa có nhà thầu phụ nào.</td></tr>}
@@ -126,6 +126,7 @@ function NhaThauModal({
   const [name, setName] = useState(value?.name ?? '')
   const [scope, setScope] = useState(value?.scope ?? '')
   const [hangMucIds, setHangMucIds] = useState<string[]>(value?.hangMucIds ?? [])
+  const [soHopDong, setSoHopDong] = useState(value?.soHopDong ?? '')
   const [contractValue, setContractValue] = useState(String(value?.contractValue ?? ''))
   const [retainPct, setRetainPct] = useState(String(value?.retainPct ?? 5))
   const [status, setStatus] = useState<NhaThauStatus>(value?.status ?? 'active')
@@ -142,6 +143,7 @@ function NhaThauModal({
     try {
       const data = {
         doiTacId, name: name.trim(), scope: scope.trim() || undefined,
+        soHopDong: soHopDong.trim() || undefined,
         hangMucIds: hangMucIds.length ? hangMucIds : undefined,
         contractValue: Number(contractValue), retainPct: Number(retainPct) || 0, status,
       }
@@ -187,6 +189,7 @@ function NhaThauModal({
             </div>
           </div>
 
+          <div className="stc-field"><label>Số hợp đồng</label><input value={soHopDong} onChange={e => setSoHopDong(e.target.value)} placeholder="VD: HĐ-2026/001" /></div>
           <div className="stc-field"><label>Giá trị hợp đồng (đ) *</label><NumberInput value={contractValue} onChange={setContractValue} /></div>
           <div className="stc-field"><label>% Giữ lại bảo hành</label><input type="number" min={0} max={20} value={retainPct} onChange={e => setRetainPct(e.target.value)} /></div>
           <div className="stc-field stc-field--full">
