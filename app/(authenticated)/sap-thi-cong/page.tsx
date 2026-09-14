@@ -179,7 +179,15 @@ export default function SapThiCongPage() {
                 </div>
               </div>
               <div className="stc-subtabs">
-                {SAP_TABS.map(t => (
+                {([
+                  { id: 'tien-do',   label: 'Gói thầu / Tiến độ' },
+                  { id: 'doi-tac',   label: 'Đối tác' },
+                  { id: 'nha-thau',  label: 'Nhà thầu phụ' },
+                  { id: 'vat-tu',    label: 'Vật tư' },
+                  { id: 'vay',       label: 'Vay & giải ngân' },
+                  { id: 'dong-tien', label: 'Dòng tiền' },
+                  { id: 'nguon-von', label: 'Nguồn vốn' },
+                ] as { id: SapTab; label: string }[]).map(t => (
                   <button
                     key={t.id}
                     className={`stc-subtab${activeTab === t.id ? ' active' : ''}`}
