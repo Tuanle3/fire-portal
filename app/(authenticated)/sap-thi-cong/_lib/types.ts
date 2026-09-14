@@ -104,6 +104,7 @@ export type VatTuItem = {
   qtyPlanned: number
   qtyUsed: number
   unitPrice: number
+  soHopDong?: string
   doiTacId?: string    // liên kết Đối tác (NCC) — ưu tiên dùng thay cho `supplier` tự do
   supplier?: string    // tên NCC hiển thị (đồng bộ theo doiTacId nếu có, hoặc nhập tay cho dữ liệu cũ)
   paidAmount: number   // đã thanh toán cho NCC — tự động đồng bộ 1 dòng "chi" tương ứng
@@ -140,6 +141,7 @@ export type NhaThau = {
   name: string
   scope?: string
   hangMucIds?: string[]    // các hạng mục thi công mà nhà thầu này phụ trách (nhiều-nhiều)
+  soHopDong?: string
   contractValue: number
   retainPct: number
   status: NhaThauStatus
