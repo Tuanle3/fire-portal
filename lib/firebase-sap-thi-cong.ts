@@ -143,15 +143,22 @@ export async function saveNghiemThuWithSync(
   projectId: string,
   subconId: string,
   subconName: string,
+  subconHangMucIds: string[] | undefined,
   data: Omit<NghiemThu, 'id' | 'dongTienId'>,
   existing?: NghiemThu,
 ) {
   await ensureAnonAuth()
+  // Nhà thầu phụ có thể phụ trách NHIỀU hạng mục cùng lúc (hangMucIds), trong khi 1 dòng tiền chỉ
+  // gắn được 1 hạng mục — nếu nhà thầu chỉ có đúng 1 hạng mục thì gán thẳng (trường hợp phổ biến
+  // nhất), còn phụ trách nhiều hạng mục thì để trống, người dùng tự chọn tay ở tab Dòng tiền nếu
+  // cần chính xác đợt nghiệm thu này thuộc hạng mục nào.
+  const inferredHangMucId = subconHangMucIds?.length === 1 ? subconHangMucIds[0] : undefined
   const buildCash = (sourceId: string): Omit<DongTienItem, 'id'> => ({
     date: data.bbDate || new Date().toISOString().slice(0, 10),
     type: 'chi',
     category: `Thanh toán nghiệm thu – ${subconName} (${data.dot})`,
     amount: data.paid,
+    hangMucId: inferredHangMucId,
     note: data.note,
     auto: true,
     sourceType: 'nghiem-thu',
@@ -195,6 +202,7 @@ export async function saveVatTuWithSync(
     category: `Thanh toán vật tư – ${data.name}${data.supplier ? ` (${data.supplier})` : ''}`,
     amount: data.paidAmount,
     doiTacId: data.doiTacId,
+    hangMucId: data.hangMucId,
     note: data.note,
     auto: true,
     sourceType: 'vat-tu',

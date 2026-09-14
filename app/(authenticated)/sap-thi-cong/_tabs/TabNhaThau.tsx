@@ -338,7 +338,7 @@ function NghiemThuModal({
         invNo: invNo.trim() || undefined, invDate: invDate || undefined,
         status, note: note.trim() || undefined,
       }
-      await saveNghiemThuWithSync(projectId, subcon.id, subcon.name, data, value ?? undefined)
+      await saveNghiemThuWithSync(projectId, subcon.id, subcon.name, subcon.hangMucIds, data, value ?? undefined)
       onClose()
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Lưu thất bại') } finally { setSaving(false) }
   }
