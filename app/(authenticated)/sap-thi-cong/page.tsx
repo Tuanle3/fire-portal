@@ -11,6 +11,7 @@ import { TabNhaThau } from './_tabs/TabNhaThau'
 import { TabDoiTac } from './_tabs/TabDoiTac'
 import { TabVay } from './_tabs/TabVay'
 import { TabNguonVon } from './_tabs/TabNguonVon'
+import { TabHieuQua } from './_tabs/TabHieuQua'
 
 export default function SapThiCongPage() {
   const { loading, can } = useUserSession()
@@ -187,6 +188,7 @@ export default function SapThiCongPage() {
                   { id: 'vay',       label: 'Vay & giải ngân' },
                   { id: 'dong-tien', label: 'Dòng tiền' },
                   { id: 'nguon-von', label: 'Nguồn vốn' },
+                  { id: 'hieu-qua',  label: 'Hiệu quả' },
                 ] as { id: SapTab; label: string }[]).map(t => (
                   <button
                     key={t.id}
@@ -206,6 +208,7 @@ export default function SapThiCongPage() {
               {activeTab === 'doi-tac'   && <TabDoiTac   projectId={project.id} />}
               {activeTab === 'vay'       && <TabVay      projectId={project.id} />}
               {activeTab === 'nguon-von' && <TabNguonVon projectId={project.id} />}
+              {activeTab === 'hieu-qua'  && <TabHieuQua  projectId={project.id} />}
             </div>
           </div>
         )}

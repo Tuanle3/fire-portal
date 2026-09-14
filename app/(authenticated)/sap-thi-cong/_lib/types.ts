@@ -187,6 +187,7 @@ export const SAP_TABS = [
   { id: 'doi-tac',   label: 'Đối tác' },
   { id: 'vay',       label: 'Vay & giải ngân' },
   { id: 'nguon-von', label: 'Nguồn vốn' },
+  { id: 'hieu-qua',  label: 'Hiệu quả' },
 ] as const
 
 export type SapTab = typeof SAP_TABS[number]['id']
