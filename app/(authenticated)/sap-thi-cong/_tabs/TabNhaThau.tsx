@@ -156,12 +156,12 @@ function NhaThauModal({
 
           <div className="stc-field stc-field--full">
             <label>Hạng mục phụ trách (1 hạng mục có thể do nhiều nhà thầu cùng làm)</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 140, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-              {!hangMucs.length && <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>Chưa có hạng mục nào ở tab Tiến độ.</span>}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 8px', maxHeight: 140, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px' }}>
+              {!hangMucs.length && <span style={{ fontSize: 11.5, color: 'var(--muted)', gridColumn: '1/-1' }}>Chưa có hạng mục nào ở tab Tiến độ.</span>}
               {hangMucs.map(h => (
-                <label key={h.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, background: hangMucIds.includes(h.id) ? 'var(--surf2)' : 'transparent', padding: '3px 8px', borderRadius: 999, border: '1px solid var(--border)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={hangMucIds.includes(h.id)} onChange={() => toggleHangMuc(h.id)} />
-                  {h.parentId ? `↳ ${h.name}` : h.name}
+                <label key={h.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '4px 6px', borderRadius: 6, background: hangMucIds.includes(h.id) ? 'var(--surf2)' : 'transparent', cursor: 'pointer', minWidth: 0 }}>
+                  <input type="checkbox" style={{ flexShrink: 0 }} checked={hangMucIds.includes(h.id)} onChange={() => toggleHangMuc(h.id)} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.parentId ? `↳ ${h.name}` : h.name}</span>
                 </label>
               ))}
             </div>

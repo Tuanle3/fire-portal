@@ -181,8 +181,8 @@ function HangMucModal({
             <label>Thuộc hạng mục cha (nếu là hạng mục con)</label>
             <select value={parentId ?? ''} onChange={e => setParentId(e.target.value)}>
               <option value="">— Hạng mục gốc —</option>
-              {items.filter(i => !value || i.id !== value.id).map(i => (
-                <option key={i.id} value={i.id}>{i.name}</option>
+              {sortHierarchical(items.filter(i => !value || i.id !== value.id)).map(i => (
+                <option key={i.id} value={i.id}>{i.parentId ? `\u00A0\u00A0↳ ${i.name}` : i.name}</option>
               ))}
             </select>
           </div>
