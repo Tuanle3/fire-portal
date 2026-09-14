@@ -52,7 +52,7 @@ export function TabVatTu({ projectId }: { projectId: string }) {
   const hangMucName = (id?: string) => (id && hangMucs.find(h => h.id === id)?.name) || '—'
 
   const totalChuaVAT = items.reduce((s, i) => s + i.qtyUsed * i.unitPrice, 0)
-  const totalVAT = items.reduce((s, i) => s + (i.qtyUsed * i.unitPrice) * ((i.vatPercent ?? 0) / 100), 0)
+  const totalVAT = items.reduce((s, i) => s + (i.vatAmount ?? Math.round((i.qtyUsed * i.unitPrice) * ((i.vatPercent ?? 0) / 100))), 0)
   const totalCost = totalChuaVAT + totalVAT
   const totalPaid = items.reduce((s, i) => s + (i.paidAmount || 0), 0)
   const overCount = items.filter(i => i.qtyUsed > i.qtyPlanned).length
@@ -84,7 +84,7 @@ export function TabVatTu({ projectId }: { projectId: string }) {
                 const over = i.qtyUsed > i.qtyPlanned
                 const vatPercent = i.vatPercent ?? 0
                 const chuaVAT = i.qtyUsed * i.unitPrice
-                const vatAmount = chuaVAT * vatPercent / 100
+                const vatAmount = i.vatAmount ?? Math.round(chuaVAT * vatPercent / 100)
                 const tongTien = chuaVAT + vatAmount
                 const conNo = tongTien - (i.paidAmount || 0)
                 return (
@@ -141,6 +141,8 @@ function VatTuModal({
   const [qtyUsed, setQtyUsed] = useState(String(value?.qtyUsed ?? 0))
   const [unitPrice, setUnitPrice] = useState(String(value?.unitPrice ?? ''))
   const [vatPercent, setVatPercent] = useState(String(value?.vatPercent ?? 10))
+  const [vatAmount, setVatAmount] = useState(String(value?.vatAmount ?? ''))
+  const [vatAmountTouched, setVatAmountTouched] = useState(false)
   const [hangMucId, setHangMucId] = useState(value?.hangMucId)
   const [doiTacId, setDoiTacId] = useState(value?.doiTacId)
   const [supplier, setSupplier] = useState(value?.supplier ?? '')
@@ -154,15 +156,24 @@ function VatTuModal({
   // Quy ra tiền cả 2 chiều: "dự kiến" theo khối lượng KẾ HOẠCH (để biết trước khi mua sẽ tốn bao
   // nhiêu) và "thực tế" theo khối lượng ĐÃ DÙNG (dùng để đối chiếu công nợ NCC) — trước đây chỉ
   // tính theo đã dùng nên nhập khối lượng kế hoạch xong không thấy quy ra tiền ước tính.
-  // Đơn giá nhập vào được coi là đơn giá CHƯA VAT — VAT cộng thêm theo % khai báo để ra tổng tiền
-  // thực phải trả NCC, tránh nhầm giữa giá trị hàng và tổng tiền trên hoá đơn.
+  // Đơn giá nhập vào được coi là đơn giá CHƯA VAT. Số tiền VAT THỰC TẾ (dùng để đối chiếu công nợ)
+  // tự tính theo % nhưng cho gõ tay đè lên — vì số trên hoá đơn NCC xuất ra có thể lệch vài đồng
+  // do cách làm tròn khác nhau, gõ tay để khớp đúng hoá đơn thay vì chấp nhận số lẻ do tự tính.
   const vatPct = Number(vatPercent) || 0
   const duKienChuaVAT = (Number(qtyPlanned) || 0) * (Number(unitPrice) || 0)
-  const duKienVAT = duKienChuaVAT * vatPct / 100
+  const duKienVAT = Math.round(duKienChuaVAT * vatPct / 100)
   const duKien = duKienChuaVAT + duKienVAT
   const thanhTienChuaVAT = (Number(qtyUsed) || 0) * (Number(unitPrice) || 0)
-  const thanhTienVAT = thanhTienChuaVAT * vatPct / 100
+  const thanhTienVATTinhTu = Math.round(thanhTienChuaVAT * vatPct / 100)
+  const thanhTienVAT = vatAmount !== '' ? (Number(vatAmount) || 0) : thanhTienVATTinhTu
   const thanhTien = thanhTienChuaVAT + thanhTienVAT
+
+  // Tự điền lại ô "Số tiền VAT" theo % mỗi khi % hoặc số tiền hàng thay đổi — CHO ĐẾN KHI người
+  // dùng tự gõ tay vào ô đó (vatAmountTouched), lúc đó số gõ tay là số cuối cùng, không bị ghi đè.
+  useEffect(() => {
+    if (!vatAmountTouched) setVatAmount(thanhTienVATTinhTu ? String(thanhTienVATTinhTu) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thanhTienVATTinhTu, vatAmountTouched])
 
   async function handleSave() {
     if (!name.trim() || !unit.trim()) { setErr('Vui lòng nhập tên vật tư và đơn vị tính'); return }
@@ -173,6 +184,7 @@ function VatTuModal({
         qtyPlanned: Number(qtyPlanned) || 0, qtyUsed: Number(qtyUsed) || 0,
         unitPrice: Number(unitPrice) || 0,
         vatPercent: vatPct,
+        vatAmount: thanhTienVAT,
         hangMucId,
         doiTacId, supplier: supplier.trim() || undefined,
         soHopDong: soHopDong.trim() || undefined,
@@ -198,12 +210,41 @@ function VatTuModal({
           <div className="stc-field"><label>Đơn giá chưa VAT (đ)</label><NumberInput value={unitPrice} onChange={setUnitPrice} /></div>
           <div className="stc-field">
             <label>Thuế suất VAT (%)</label>
-            <select value={vatPercent} onChange={e => setVatPercent(e.target.value)}>
+            <select
+              value={['0', '5', '8', '10'].includes(vatPercent) ? vatPercent : 'custom'}
+              onChange={e => setVatPercent(e.target.value === 'custom' ? '' : e.target.value)}
+            >
               <option value="0">0% (không VAT)</option>
               <option value="5">5%</option>
               <option value="8">8%</option>
               <option value="10">10%</option>
+              <option value="custom">Khác (nhập tay)...</option>
             </select>
+            {!['0', '5', '8', '10'].includes(vatPercent) && (
+              <input
+                type="number" min={0} max={100} step="0.1"
+                style={{ marginTop: 6 }}
+                value={vatPercent}
+                onChange={e => setVatPercent(e.target.value)}
+                placeholder="Nhập % VAT khác, VD: 3"
+              />
+            )}
+          </div>
+          <div className="stc-field">
+            <label>Số tiền VAT thực tế (đ)</label>
+            <NumberInput
+              value={vatAmount}
+              onChange={v => { setVatAmount(v); setVatAmountTouched(true) }}
+            />
+            {vatAmountTouched && (
+              <button
+                type="button"
+                onClick={() => { setVatAmountTouched(false); setVatAmount(thanhTienVATTinhTu ? String(thanhTienVATTinhTu) : '') }}
+                style={{ marginTop: 4, fontSize: 11, background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+              >
+                ↺ Tính lại tự động theo %
+              </button>
+            )}
           </div>
           <div className="stc-field"><label>Khối lượng kế hoạch</label><NumberInput decimal value={qtyPlanned} onChange={setQtyPlanned} placeholder="VD: 3,204" /></div>
           <div className="stc-field"><label>Khối lượng đã dùng</label><NumberInput decimal value={qtyUsed} onChange={setQtyUsed} /></div>

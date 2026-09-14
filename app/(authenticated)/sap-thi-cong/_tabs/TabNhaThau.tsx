@@ -50,7 +50,7 @@ export function TabNhaThau({ projectId }: { projectId: string }) {
   useEffect(() => { const unsub = khoanVayStore.subscribe(projectId, setKhoanVays); return () => unsub() }, [projectId])
 
   const totalContract = items.reduce((s, i) => s + i.contractValue, 0)
-  const totalContractVAT = items.reduce((s, i) => s + i.contractValue * ((i.vatPercent ?? 0) / 100), 0)
+  const totalContractVAT = items.reduce((s, i) => s + (i.vatAmount ?? Math.round(i.contractValue * ((i.vatPercent ?? 0) / 100))), 0)
   const totalContractGross = totalContract + totalContractVAT
   const hangMucName = (id: string) => hangMucs.find(h => h.id === id)?.name ?? '—'
 
@@ -77,7 +77,7 @@ export function TabNhaThau({ projectId }: { projectId: string }) {
               {!items.length && <tr className="stc-empty-row"><td colSpan={10}>Chưa có nhà thầu phụ nào.</td></tr>}
               {items.map(i => {
                 const vatPercent = i.vatPercent ?? 0
-                const vatAmount = i.contractValue * vatPercent / 100
+                const vatAmount = i.vatAmount ?? Math.round(i.contractValue * vatPercent / 100)
                 return (
                 <tr key={i.id} onClick={() => setPanelId(i.id)} style={{ cursor: 'pointer' }}>
                   <td style={{ fontWeight: 600 }}>{i.name}</td>
@@ -143,10 +143,23 @@ function NhaThauModal({
   const [soHopDong, setSoHopDong] = useState(value?.soHopDong ?? '')
   const [contractValue, setContractValue] = useState(String(value?.contractValue ?? ''))
   const [vatPercent, setVatPercent] = useState(String(value?.vatPercent ?? 10))
+  const [vatAmount, setVatAmount] = useState(String(value?.vatAmount ?? ''))
+  const [vatAmountTouched, setVatAmountTouched] = useState(false)
   const [retainPct, setRetainPct] = useState(String(value?.retainPct ?? 5))
   const [status, setStatus] = useState<NhaThauStatus>(value?.status ?? 'active')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+
+  const vatPct = Number(vatPercent) || 0
+  const vatAmountTinhTu = Math.round((Number(contractValue) || 0) * vatPct / 100)
+  const vatAmountFinal = vatAmount !== '' ? (Number(vatAmount) || 0) : vatAmountTinhTu
+
+  // Tự điền ô "Số tiền VAT" theo % cho đến khi người dùng gõ tay đè lên — tránh số lẻ do làm tròn
+  // khác cách hoá đơn thực tế của nhà thầu xuất ra.
+  useEffect(() => {
+    if (!vatAmountTouched) setVatAmount(vatAmountTinhTu ? String(vatAmountTinhTu) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vatAmountTinhTu, vatAmountTouched])
 
   function toggleHangMuc(id: string) {
     setHangMucIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -160,7 +173,7 @@ function NhaThauModal({
         doiTacId, name: name.trim(), scope: scope.trim() || undefined,
         soHopDong: soHopDong.trim() || undefined,
         hangMucIds: hangMucIds.length ? hangMucIds : undefined,
-        contractValue: Number(contractValue), vatPercent: Number(vatPercent) || 0, retainPct: Number(retainPct) || 0, status,
+        contractValue: Number(contractValue), vatPercent: vatPct, vatAmount: vatAmountFinal, retainPct: Number(retainPct) || 0, status,
       }
       if (value) await nhaThauStore.update(projectId, value.id, data)
       else await nhaThauStore.add(projectId, data)
@@ -208,12 +221,41 @@ function NhaThauModal({
           <div className="stc-field"><label>Giá trị hợp đồng chưa VAT (đ) *</label><NumberInput value={contractValue} onChange={setContractValue} /></div>
           <div className="stc-field">
             <label>Thuế suất VAT (%)</label>
-            <select value={vatPercent} onChange={e => setVatPercent(e.target.value)}>
+            <select
+              value={['0', '5', '8', '10'].includes(vatPercent) ? vatPercent : 'custom'}
+              onChange={e => setVatPercent(e.target.value === 'custom' ? '' : e.target.value)}
+            >
               <option value="0">0% (không VAT)</option>
               <option value="5">5%</option>
               <option value="8">8%</option>
               <option value="10">10%</option>
+              <option value="custom">Khác (nhập tay)...</option>
             </select>
+            {!['0', '5', '8', '10'].includes(vatPercent) && (
+              <input
+                type="number" min={0} max={100} step="0.1"
+                style={{ marginTop: 6 }}
+                value={vatPercent}
+                onChange={e => setVatPercent(e.target.value)}
+                placeholder="Nhập % VAT khác, VD: 3"
+              />
+            )}
+          </div>
+          <div className="stc-field">
+            <label>Số tiền VAT (đ)</label>
+            <NumberInput
+              value={vatAmount}
+              onChange={v => { setVatAmount(v); setVatAmountTouched(true) }}
+            />
+            {vatAmountTouched && (
+              <button
+                type="button"
+                onClick={() => { setVatAmountTouched(false); setVatAmount(vatAmountTinhTu ? String(vatAmountTinhTu) : '') }}
+                style={{ marginTop: 4, fontSize: 11, background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+              >
+                ↺ Tính lại tự động theo %
+              </button>
+            )}
           </div>
           <div className="stc-field"><label>% Giữ lại bảo hành</label><input type="number" min={0} max={20} value={retainPct} onChange={e => setRetainPct(e.target.value)} /></div>
           <div className="stc-field stc-field--full">
@@ -252,7 +294,7 @@ function NghiemThuPanel({
   }, [projectId, subcon.id])
 
   const totalVal = acs.reduce((s, a) => s + a.value, 0)
-  const totalVATAmount = acs.reduce((s, a) => s + a.value * ((a.vatPercent ?? 0) / 100), 0)
+  const totalVATAmount = acs.reduce((s, a) => s + (a.vatAmount ?? Math.round(a.value * ((a.vatPercent ?? 0) / 100))), 0)
   const totalGross = totalVal + totalVATAmount
   const totalRetain = acs.reduce((s, a) => s + a.retain, 0)
   const totalPaid = acs.reduce((s, a) => s + a.paid, 0)
@@ -297,7 +339,7 @@ function NghiemThuPanel({
               {acs.map(a => {
                 const unpaid = a.netPayable - a.paid
                 const vatPercent = a.vatPercent ?? 0
-                const vatAmount = a.value * vatPercent / 100
+                const vatAmount = a.vatAmount ?? Math.round(a.value * vatPercent / 100)
                 return (
                   <tr key={a.id} onClick={() => setModal(a)} style={{ cursor: 'pointer' }}>
                     <td>{a.dot}</td>
@@ -343,6 +385,8 @@ function NghiemThuModal({
   const [dot, setDot] = useState(value?.dot ?? `Đợt ${acCount + 1}`)
   const [val, setVal] = useState(String(value?.value ?? ''))
   const [vatPercent, setVatPercent] = useState(String(value?.vatPercent ?? (subcon.vatPercent ?? 10)))
+  const [vatAmount, setVatAmount] = useState(String(value?.vatAmount ?? ''))
+  const [vatAmountTouched, setVatAmountTouched] = useState(false)
   const [retainPct, setRetainPct] = useState(String(value?.retainPct ?? (subcon.retainPct || 5)))
   const [paid, setPaid] = useState(String(value?.paid ?? 0))
   const [khoanVayId, setKhoanVayId] = useState(value?.khoanVayId)
@@ -357,16 +401,24 @@ function NghiemThuModal({
 
   const valNum = Number(val) || 0
   const vatPct = Number(vatPercent) || 0
-  const vatAmount = valNum * vatPct / 100
+  const vatAmountTinhTu = Math.round(valNum * vatPct / 100)
+  const vatAmountFinal = vatAmount !== '' ? (Number(vatAmount) || 0) : vatAmountTinhTu
   const retNum = Math.round(valNum * (Number(retainPct) || 0) / 100)
-  const netPayable = valNum + vatAmount - retNum
+  const netPayable = valNum + vatAmountFinal - retNum
+
+  // Tự điền ô "Số tiền VAT" theo % cho đến khi gõ tay đè lên — số trên hoá đơn thực tế của nhà
+  // thầu xuất ra có thể lệch vài đồng so với công thức làm tròn, gõ tay để khớp đúng hoá đơn.
+  useEffect(() => {
+    if (!vatAmountTouched) setVatAmount(vatAmountTinhTu ? String(vatAmountTinhTu) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vatAmountTinhTu, vatAmountTouched])
 
   async function handleSave() {
     if (!valNum) { setErr('Vui lòng nhập giá trị nghiệm thu'); return }
     setSaving(true); setErr('')
     try {
       const data = {
-        dot, value: valNum, vatPercent: vatPct, retainPct: Number(retainPct) || 0, retain: retNum, netPayable,
+        dot, value: valNum, vatPercent: vatPct, vatAmount: vatAmountFinal, retainPct: Number(retainPct) || 0, retain: retNum, netPayable,
         paid: Number(paid) || 0, khoanVayId,
         bbNo: bbNo.trim() || undefined, bbDate: bbDate || undefined,
         invNo: invNo.trim() || undefined, invDate: invDate || undefined,
@@ -390,12 +442,41 @@ function NghiemThuModal({
           <div className="stc-field"><label>Giá trị nghiệm thu chưa VAT (đ) *</label><NumberInput value={val} onChange={setVal} /></div>
           <div className="stc-field">
             <label>Thuế suất VAT (%)</label>
-            <select value={vatPercent} onChange={e => setVatPercent(e.target.value)}>
+            <select
+              value={['0', '5', '8', '10'].includes(vatPercent) ? vatPercent : 'custom'}
+              onChange={e => setVatPercent(e.target.value === 'custom' ? '' : e.target.value)}
+            >
               <option value="0">0% (không VAT)</option>
               <option value="5">5%</option>
               <option value="8">8%</option>
               <option value="10">10%</option>
+              <option value="custom">Khác (nhập tay)...</option>
             </select>
+            {!['0', '5', '8', '10'].includes(vatPercent) && (
+              <input
+                type="number" min={0} max={100} step="0.1"
+                style={{ marginTop: 6 }}
+                value={vatPercent}
+                onChange={e => setVatPercent(e.target.value)}
+                placeholder="Nhập % VAT khác, VD: 3"
+              />
+            )}
+          </div>
+          <div className="stc-field">
+            <label>Số tiền VAT (đ) — theo hoá đơn</label>
+            <NumberInput
+              value={vatAmount}
+              onChange={v => { setVatAmount(v); setVatAmountTouched(true) }}
+            />
+            {vatAmountTouched && (
+              <button
+                type="button"
+                onClick={() => { setVatAmountTouched(false); setVatAmount(vatAmountTinhTu ? String(vatAmountTinhTu) : '') }}
+                style={{ marginTop: 4, fontSize: 11, background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+              >
+                ↺ Tính lại tự động theo %
+              </button>
+            )}
           </div>
           <div className="stc-field"><label>Số biên bản NT</label><input value={bbNo} onChange={e => setBbNo(e.target.value)} /></div>
           <div className="stc-field"><label>Ngày ký biên bản</label><input type="date" value={bbDate} onChange={e => setBbDate(e.target.value)} /></div>
@@ -419,7 +500,7 @@ function NghiemThuModal({
           </div>
           {valNum > 0 && (
             <div className="stc-hint stc-field--full">
-              GT nghiệm thu chưa VAT: <strong>{fmt(valNum)}</strong> đ + VAT ({vatPct}%): <strong>{fmt(vatAmount)}</strong> đ = tổng <strong>{fmt(valNum + vatAmount)}</strong> đ
+              GT nghiệm thu chưa VAT: <strong>{fmt(valNum)}</strong> đ + VAT ({vatPct}%): <strong>{fmt(vatAmountFinal)}</strong> đ = tổng <strong>{fmt(valNum + vatAmountFinal)}</strong> đ
               <div style={{ marginTop: 4 }}>Giữ lại {retainPct}% (tính trên GT chưa VAT): <strong style={{ color: '#DC2626' }}>{fmt(retNum)}</strong> đ — Thực nhận (gồm VAT, trừ giữ lại BH): <strong style={{ color: 'var(--green)' }}>{fmt(netPayable)}</strong> đ</div>
               <div style={{ marginTop: 4, fontSize: 11 }}>Số tiền &quot;Đã thanh toán&quot; sẽ tự động đồng bộ 1 dòng &quot;Chi&quot; tương ứng trong tab Dòng tiền — không cần nhập lại.</div>
             </div>
