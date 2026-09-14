@@ -70,6 +70,7 @@ export function TabNhaThau({ projectId }: { projectId: string }) {
               {items.map(i => (
                 <tr key={i.id} onClick={() => setPanelId(i.id)} style={{ cursor: 'pointer' }}>
                   <td style={{ fontWeight: 600 }}>{i.name}</td>
+                  <td style={{ fontSize: 11.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{i.soHopDong || '—'}</td>
                   <td style={{ fontSize: 11.5, color: 'var(--muted)' }}>{i.scope || '—'}</td>
                   <td style={{ fontSize: 11, maxWidth: 200 }}>
                     {i.hangMucIds?.length
