@@ -2,7 +2,10 @@
 import { useState, useEffect } from 'react'
 import { KhoanVay, KyTraNo, fmt } from '../_lib/types'
 import { NumberInput } from '../_lib/NumberInput'
-import { khoanVayStore, kyTraNoStore } from '@/lib/firebase-sap-thi-cong'
+import {
+  khoanVayStore, kyTraNoStore, saveKhoanVayWithSync, removeKhoanVayWithSync,
+  saveKyTraNoWithSync, removeKyTraNoWithSync,
+} from '@/lib/firebase-sap-thi-cong'
 
 export function TabVay({ projectId }: { projectId: string }) {
   const [items, setItems] = useState<KhoanVay[]>([])
@@ -45,7 +48,7 @@ export function TabVay({ projectId }: { projectId: string }) {
                   <td style={{ fontSize: 11.5, color: 'var(--muted)' }}>{i.note || '—'}</td>
                   <td onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 6 }}>
                     <button className="btn-ghost" onClick={() => setEditing(i)}>Sửa</button>
-                    <button className="btn-del-icon" onClick={() => { if (confirm('Xoá khoản vay này?')) khoanVayStore.remove(projectId, i.id) }}>🗑</button>
+                    <button className="btn-del-icon" onClick={() => { if (confirm('Xoá khoản vay này? (Dòng tiền giải ngân liên kết cũng sẽ bị xoá)')) removeKhoanVayWithSync(projectId, i) }}>🗑</button>
                   </td>
                 </tr>
               ))}
@@ -75,8 +78,7 @@ function KhoanVayModal({ projectId, value, onClose }: { projectId: string; value
     setSaving(true); setErr('')
     try {
       const data = { batch: batch.trim(), date, amount: Number(amount), bank: bank.trim() || undefined, interestRate: interestRate ? Number(interestRate) : undefined, note: note.trim() || undefined }
-      if (value) await khoanVayStore.update(projectId, value.id, data)
-      else await khoanVayStore.add(projectId, data)
+      await saveKhoanVayWithSync(projectId, data, value ?? undefined)
       onClose()
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Lưu thất bại') } finally { setSaving(false) }
   }
@@ -96,9 +98,10 @@ function KhoanVayModal({ projectId, value, onClose }: { projectId: string; value
           <div className="stc-field"><label>Ngân hàng</label><input value={bank} onChange={e => setBank(e.target.value)} /></div>
           <div className="stc-field"><label>Lãi suất (%/năm)</label><input type="number" value={interestRate} onChange={e => setInterestRate(e.target.value)} /></div>
           <div className="stc-field stc-field--full"><label>Ghi chú</label><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} /></div>
+          <div className="stc-hint stc-field--full" style={{ fontSize: 11 }}>Khoản giải ngân này sẽ tự động đồng bộ 1 dòng &quot;Thu&quot; tương ứng trong tab Dòng tiền — không cần nhập lại.</div>
         </div>
         <div className="stc-modal-foot">
-          {value && <button className="btn-ghost" style={{ color: '#DC2626', marginRight: 'auto' }} onClick={() => { if (confirm('Xoá khoản vay này?')) { khoanVayStore.remove(projectId, value.id); onClose() } }}>Xoá</button>}
+          {value && <button className="btn-ghost" style={{ color: '#DC2626', marginRight: 'auto' }} onClick={() => { if (confirm('Xoá khoản vay này?')) { removeKhoanVayWithSync(projectId, value); onClose() } }}>Xoá</button>}
           <button className="btn-ghost" onClick={onClose}>Huỷ</button>
           <button className="btn-primary" disabled={saving} onClick={handleSave}>{saving ? 'Đang lưu...' : 'Lưu'}</button>
         </div>
@@ -155,24 +158,24 @@ function LichTraNoPanel({ projectId, vay, onClose }: { projectId: string; vay: K
                     <button
                       className={`stc-badge stc-badge-${k.paid ? 'done' : 'active'}`}
                       style={{ border: 'none', cursor: 'pointer' }}
-                      onClick={() => kyTraNoStore.remove(projectId, vay.id, k.id).then(() => kyTraNoStore.add(projectId, vay.id, { dueDate: k.dueDate, goc: k.goc, lai: k.lai, paid: !k.paid }))}
+                      onClick={() => saveKyTraNoWithSync(projectId, vay.id, vay.batch, { dueDate: k.dueDate, goc: k.goc, lai: k.lai, paid: !k.paid }, k)}
                     >
                       {k.paid ? 'Đã trả' : 'Chưa trả'}
                     </button>
                   </td>
-                  <td><button className="btn-del-icon" onClick={() => { if (confirm('Xoá kỳ trả nợ này?')) kyTraNoStore.remove(projectId, vay.id, k.id) }}>🗑</button></td>
+                  <td><button className="btn-del-icon" onClick={() => { if (confirm('Xoá kỳ trả nợ này?')) removeKyTraNoWithSync(projectId, vay.id, k) }}>🗑</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-      {showAdd && <KyTraNoAddModal projectId={projectId} vayId={vay.id} onClose={() => setShowAdd(false)} />}
+      {showAdd && <KyTraNoAddModal projectId={projectId} vay={vay} onClose={() => setShowAdd(false)} />}
     </div>
   )
 }
 
-function KyTraNoAddModal({ projectId, vayId, onClose }: { projectId: string; vayId: string; onClose: () => void }) {
+function KyTraNoAddModal({ projectId, vay, onClose }: { projectId: string; vay: KhoanVay; onClose: () => void }) {
   const [dueDate, setDueDate] = useState('')
   const [goc, setGoc] = useState('')
   const [lai, setLai] = useState('')
@@ -183,7 +186,7 @@ function KyTraNoAddModal({ projectId, vayId, onClose }: { projectId: string; vay
     if (!dueDate) { setErr('Vui lòng chọn ngày đến hạn'); return }
     setSaving(true); setErr('')
     try {
-      await kyTraNoStore.add(projectId, vayId, { dueDate, goc: Number(goc) || 0, lai: Number(lai) || 0, paid: false })
+      await saveKyTraNoWithSync(projectId, vay.id, vay.batch, { dueDate, goc: Number(goc) || 0, lai: Number(lai) || 0, paid: false })
       onClose()
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Lưu thất bại') } finally { setSaving(false) }
   }
@@ -200,6 +203,7 @@ function KyTraNoAddModal({ projectId, vayId, onClose }: { projectId: string; vay
           <div className="stc-field stc-field--full"><label>Ngày đến hạn *</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
           <div className="stc-field"><label>Gốc (đ)</label><NumberInput value={goc} onChange={setGoc} /></div>
           <div className="stc-field"><label>Lãi (đ)</label><NumberInput value={lai} onChange={setLai} /></div>
+          <div className="stc-hint stc-field--full" style={{ fontSize: 11 }}>Khi bấm &quot;Đã trả&quot; ở danh sách, hệ thống sẽ tự động đồng bộ 1 dòng &quot;Chi&quot; (gốc + lãi) tương ứng trong tab Dòng tiền.</div>
         </div>
         <div className="stc-modal-foot">
           <button className="btn-ghost" onClick={onClose}>Huỷ</button>

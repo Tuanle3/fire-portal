@@ -8,6 +8,7 @@ import { TabTienDo } from './_tabs/TabTienDo'
 import { TabDongTien } from './_tabs/TabDongTien'
 import { TabVatTu } from './_tabs/TabVatTu'
 import { TabNhaThau } from './_tabs/TabNhaThau'
+import { TabDoiTac } from './_tabs/TabDoiTac'
 import { TabVay } from './_tabs/TabVay'
 import { TabNguonVon } from './_tabs/TabNguonVon'
 
@@ -194,6 +195,7 @@ export default function SapThiCongPage() {
               {activeTab === 'dong-tien' && <TabDongTien projectId={project.id} />}
               {activeTab === 'vat-tu'    && <TabVatTu    projectId={project.id} />}
               {activeTab === 'nha-thau'  && <TabNhaThau  projectId={project.id} />}
+              {activeTab === 'doi-tac'   && <TabDoiTac   projectId={project.id} />}
               {activeTab === 'vay'       && <TabVay      projectId={project.id} />}
               {activeTab === 'nguon-von' && <TabNguonVon projectId={project.id} />}
             </div>

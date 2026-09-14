@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { HangMuc, HangMucStatus } from '../_lib/types'
-import { hangMucStore } from '@/lib/firebase-sap-thi-cong'
+import { HangMuc, HangMucStatus, NhaThau } from '../_lib/types'
+import { hangMucStore, nhaThauStore } from '@/lib/firebase-sap-thi-cong'
 
 const STATUS_LABEL: Record<HangMucStatus, string> = {
   todo: 'Chưa bắt đầu', active: 'Đang thi công', done: 'Hoàn thành', delay: 'Trễ tiến độ',
@@ -36,6 +36,7 @@ function sortHierarchical(items: HangMuc[]): HangMuc[] {
 
 export function TabTienDo({ projectId }: { projectId: string }) {
   const [items, setItems] = useState<HangMuc[]>([])
+  const [nhaThaus, setNhaThaus] = useState<NhaThau[]>([])
   const [editing, setEditing] = useState<HangMuc | 'new' | null>(null)
 
   useEffect(() => {
@@ -43,10 +44,16 @@ export function TabTienDo({ projectId }: { projectId: string }) {
     return () => unsub()
   }, [projectId])
 
+  useEffect(() => {
+    const unsub = nhaThauStore.subscribe(projectId, setNhaThaus)
+    return () => unsub()
+  }, [projectId])
+
   const sorted = sortHierarchical(items)
   const avgPct = items.length ? Math.round(items.reduce((s, i) => s + (i.progressPct || 0), 0) / items.length) : 0
   const delayCount = items.filter(i => i.status === 'delay').length
   const doneCount = items.filter(i => i.status === 'done').length
+  const nhaThauByHangMuc = (hangMucId: string) => nhaThaus.filter(n => n.hangMucIds?.includes(hangMucId))
 
   return (
     <>
@@ -66,30 +73,38 @@ export function TabTienDo({ projectId }: { projectId: string }) {
           <table className="stc-table">
             <thead>
               <tr>
-                <th>Hạng mục</th><th>Bắt đầu</th><th>Kết thúc</th><th style={{ width: 200 }}>Tiến độ</th><th>Trạng thái</th><th></th>
+                <th>Hạng mục</th><th>Bắt đầu</th><th>Kết thúc</th><th style={{ width: 200 }}>Tiến độ</th><th>Trạng thái</th><th>Nhà thầu phụ trách</th><th></th>
               </tr>
             </thead>
             <tbody>
               {!sorted.length && (
-                <tr className="stc-empty-row"><td colSpan={6}>Chưa có hạng mục nào. Bấm &quot;+ Thêm hạng mục&quot; để nhập.</td></tr>
+                <tr className="stc-empty-row"><td colSpan={7}>Chưa có hạng mục nào. Bấm &quot;+ Thêm hạng mục&quot; để nhập.</td></tr>
               )}
-              {sorted.map(i => (
-                <tr key={i.id} onClick={() => setEditing(i)} style={{ cursor: 'pointer' }}>
-                  <td>{i.parentId ? <span style={{ paddingLeft: 16, color: 'var(--muted)' }}>↳ </span> : null}{i.name}</td>
-                  <td>{i.startDate || '—'}</td>
-                  <td>{i.endDate || '—'}</td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div className="stc-progress-bar"><div className={`stc-progress-fill ${STATUS_CLASS[i.status]}`} style={{ width: `${i.progressPct}%` }} /></div>
-                      <span style={{ fontSize: 11, fontWeight: 700, width: 30, textAlign: 'right' }}>{i.progressPct}%</span>
-                    </div>
-                  </td>
-                  <td><span className={`stc-badge stc-badge-${i.status === 'done' ? 'done' : i.status === 'delay' ? 'active' : 'upcoming'}`}>{STATUS_LABEL[i.status]}</span></td>
-                  <td onClick={e => e.stopPropagation()}>
-                    <button className="btn-del-icon" onClick={() => { if (confirm('Xoá hạng mục này?')) hangMucStore.remove(projectId, i.id) }}>🗑</button>
-                  </td>
-                </tr>
-              ))}
+              {sorted.map(i => {
+                const nts = nhaThauByHangMuc(i.id)
+                return (
+                  <tr key={i.id} onClick={() => setEditing(i)} style={{ cursor: 'pointer' }}>
+                    <td>{i.parentId ? <span style={{ paddingLeft: 16, color: 'var(--muted)' }}>↳ </span> : null}{i.name}</td>
+                    <td>{i.startDate || '—'}</td>
+                    <td>{i.endDate || '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className="stc-progress-bar"><div className={`stc-progress-fill ${STATUS_CLASS[i.status]}`} style={{ width: `${i.progressPct}%` }} /></div>
+                        <span style={{ fontSize: 11, fontWeight: 700, width: 30, textAlign: 'right' }}>{i.progressPct}%</span>
+                      </div>
+                    </td>
+                    <td><span className={`stc-badge stc-badge-${i.status === 'done' ? 'done' : i.status === 'delay' ? 'active' : 'upcoming'}`}>{STATUS_LABEL[i.status]}</span></td>
+                    <td style={{ fontSize: 11, maxWidth: 180 }}>
+                      {nts.length
+                        ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{nts.map(n => <span key={n.id} className="stc-badge stc-badge-upcoming">{n.name}</span>)}</div>
+                        : <span style={{ color: 'var(--muted)' }}>Tự thi công</span>}
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <button className="btn-del-icon" onClick={() => { if (confirm('Xoá hạng mục này?')) hangMucStore.remove(projectId, i.id) }}>🗑</button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -189,6 +204,9 @@ function HangMucModal({
           <div className="stc-field stc-field--full">
             <label>Ghi chú</label>
             <textarea rows={2} value={note} onChange={e => setNote(e.target.value)} />
+          </div>
+          <div className="stc-hint stc-field--full" style={{ fontSize: 11 }}>
+            Việc phân công nhà thầu phụ trách hạng mục này được gán từ tab <strong>Nhà thầu phụ</strong> (1 hạng mục có thể do nhiều nhà thầu cùng làm). Nếu không gán nhà thầu nào, hạng mục coi như tự thi công.
           </div>
         </div>
         <div className="stc-modal-foot">
