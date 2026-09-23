@@ -1,12 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { subscribeHopDong, subscribeLichTraNo, setGocTraCoDinh, tinhHanMucKhaDung, tinhDuNoHienTai } from '@/lib/han-muc-store'
+import { subscribeHopDong, subscribeLichTraNo, setGocTraCoDinh, tinhHanMucKhaDung, tinhDuNoHienTai, deleteHopDong } from '@/lib/han-muc-store'
 import { HopDongTinDung, KyTraNo, EntityType } from '@/lib/han-muc-types'
 import HopDongForm from '@/components/han-muc/HopDongForm'
 import LichTraNoTable from '@/components/han-muc/LichTraNoTable'
 import CoCauDialog from '@/components/han-muc/CoCauDialog'
-import { Pencil, Check, X } from 'lucide-react'
+import { Pencil, Check, X, Trash2 } from 'lucide-react'
 
 const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 
@@ -160,6 +160,19 @@ export function TabHanMuc() {
   const [coCauOpen, setCoCauOpen]       = useState(false)
   const [kyMap, setKyMap]               = useState<Record<string, KyTraNo[]>>({})
   const [presetKhungId, setPresetKhungId] = useState<string | undefined>(undefined)
+  const [deletingId, setDeletingId]     = useState<string | null>(null)
+
+  const handleDelete = async (h: HopDongTinDung) => {
+    const label = h.soBoHoSo || h.soHopDong
+    if (!confirm(`Xoá hợp đồng "${label}"? Toàn bộ lịch trả nợ liên quan sẽ bị xoá vĩnh viễn.`)) return
+    setDeletingId(h.id)
+    try {
+      await deleteHopDong(h.id)
+      if (selected?.id === h.id) setSelected(null)
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   useEffect(() => subscribeHopDong(setHopDongs, entityFilter), [entityFilter])
 
@@ -239,6 +252,15 @@ export function TabHanMuc() {
               />
               <button className="btn-ghost" onClick={() => { setEditing(selected); setFormOpen(true) }}>Sửa hợp đồng</button>
               <button className="btn-primary" onClick={() => setCoCauOpen(true)}>↻ Cơ cấu nợ</button>
+              <button
+                className="btn-danger"
+                disabled={deletingId === selected.id}
+                onClick={() => handleDelete(selected)}
+                title="Xoá hợp đồng"
+              >
+                <Trash2 size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+                {deletingId === selected.id ? 'Đang xoá...' : 'Xoá hợp đồng'}
+              </button>
             </div>
           </div>
           <div className="nh-card-body">
@@ -486,6 +508,7 @@ export function TabHanMuc() {
                 <th className="r">Dư nợ gốc còn lại</th>
                 <th>Đáo hạn</th>
                 <th>Trạng thái</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -536,11 +559,22 @@ export function TabHanMuc() {
                     </td>
                     <td>{h.ngayDaoHan}</td>
                     <td><span className={`nh-badge ${HD_BADGE[h.trangThai]}`}>{HD_LABEL[h.trangThai]}</span></td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <button
+                        className="btn-danger"
+                        disabled={deletingId === h.id}
+                        onClick={() => handleDelete(h)}
+                        title="Xoá hợp đồng"
+                        style={{ padding: '4px 8px' }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
                   </tr>
                 )
               })}
               {hopDongs.length === 0 && (
-                <tr><td colSpan={12} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 24 }}>Chưa có hợp đồng tín dụng nào.</td></tr>
+                <tr><td colSpan={13} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 24 }}>Chưa có hợp đồng tín dụng nào.</td></tr>
               )}
             </tbody>
           </table>

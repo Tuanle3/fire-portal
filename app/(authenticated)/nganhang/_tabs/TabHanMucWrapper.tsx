@@ -4,8 +4,8 @@
  * TabHanMucWrapper
  * ─────────────────────────────────────────────────────────────
  * Wrapper gộp 2 module tín dụng thành 1 giao diện có sub-tab:
- *   • "Dài hạn"   → TabHanMuc   (hợp đồng tín dụng thông thường)
  *   • "Ngắn hạn"  → TabHanMucNganHan (hạn mức khung + bộ hồ sơ giải ngân)
+ *   • "Dài hạn"   → TabHanMuc   (hợp đồng tín dụng thông thường)
  *
  * Sử dụng:
  *   import { TabHanMucWrapper } from './_tabs/TabHanMucWrapper'
@@ -20,12 +20,12 @@ import { TabHanMucNganHan }  from './TabHanMucNganHan'
 type SubTab = 'dai-han' | 'ngan-han'
 
 const TAB_ITEMS: { key: SubTab; label: string; icon: string }[] = [
-  { key: 'dai-han',  label: 'Tín dụng dài hạn',  icon: '📋' },
   { key: 'ngan-han', label: 'Hạn mức ngắn hạn',  icon: '⚡' },
+  { key: 'dai-han',  label: 'Tín dụng dài hạn',  icon: '📋' },
 ]
 
 export function TabHanMucWrapper() {
-  const [activeTab, setActiveTab] = useState<SubTab>('dai-han')
+  const [activeTab, setActiveTab] = useState<SubTab>('ngan-han')
 
   return (
     <div>
