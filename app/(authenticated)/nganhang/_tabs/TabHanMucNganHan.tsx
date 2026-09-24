@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   subscribeHanMucNganHan, subscribeBoHoSo, subscribeAllKyThuNH, subscribeKyThuNH, subscribeTraGocGiuaKy,
   saveHanMucNganHan, deleteHanMucNganHan,
@@ -66,6 +66,37 @@ const fmtVndInput = (v: string) => {
 const todayStr = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// ─── Layout: khung tự chiếm hết chiều cao còn lại của màn hình ──
+// Tiêu đề/toolbar cố định, chỉ vùng bảng cuộn.
+function useFillHeight(deps: unknown[] = []) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [h, setH] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    const calc = () => {
+      if (!ref.current) return
+      const top = ref.current.getBoundingClientRect().top
+      setH(Math.max(420, window.innerHeight - top - 14))
+    }
+    calc()
+    const t = setTimeout(calc, 60)   // đo lại sau khi layout ổn định
+    window.addEventListener('resize', calc)
+    return () => { clearTimeout(t); window.removeEventListener('resize', calc) }
+  }, deps)  // eslint-disable-line react-hooks/exhaustive-deps
+  return { ref, h }
+}
+const stickyTh: React.CSSProperties = { position: 'sticky', top: 0, zIndex: 3, background: '#eef2f7', boxShadow: '0 1px 0 #cbd5e1' }
+const stickyTf: React.CSSProperties = { position: 'sticky', bottom: 0, zIndex: 3, background: '#eef2f7', boxShadow: '0 -1px 0 #cbd5e1' }
+
+function MiniStat({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+  return (
+    <div style={{ minWidth: 120 }}>
+      <div style={{ fontSize: 10, color: 'var(--nh-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
+      <div style={{ fontSize: 14.5, fontWeight: 700, color: color ?? 'var(--nh-txt)', lineHeight: 1.25 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10.5, color: 'var(--nh-muted)' }}>{sub}</div>}
+    </div>
+  )
 }
 
 // ─── Reusable UI atoms ────────────────────────────────────────
@@ -806,6 +837,11 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
   const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [thuKy, setThuKy]                 = useState<KyThuNH | null>(null)
+  const [selKy, setSelKy]                 = useState<Set<string>>(new Set())
+  const [ngayThuChung, setNgayThuChung]   = useState(todayStr())
+  const [showQuaHanCu, setShowQuaHanCu]   = useState(true)
+  const [bulkSaving, setBulkSaving]       = useState(false)
 
   useEffect(() => subscribeBoHoSo(khung.id, setBoList), [khung.id])
   useEffect(() => subscribeTraGocGiuaKy(khung.id, setTraGocList), [khung.id])
@@ -819,8 +855,49 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
     () => tinhKhaDung(khung, boList, kyThuMap, traGocList),
     [khung, boList, kyThuMap, traGocList],
   )
-  const kyThang = useMemo(() => filterKyThuTheoThang(kyThuMap, calMonth), [kyThuMap, calMonth])
   const boMap   = useMemo(() => Object.fromEntries(boList.map(b => [b.id, b])), [boList])
+  // Kỳ tháng đang chọn + (tuỳ chọn) các kỳ tháng trước chưa thu (bỏ qua bộ hồ sơ đã tất toán)
+  const kyThang = useMemo(() => {
+    const trongThang = filterKyThuTheoThang(kyThuMap, calMonth)
+    if (!showQuaHanCu) return trongThang
+    const cu = Object.values(kyThuMap).flat()
+      .filter(k => k.ngayThu < `${calMonth}-01` && k.trangThai !== 'da-thu' && boMap[k.boHoSoId]?.trangThai !== 'tat-toan')
+      .sort((a, b) => a.ngayThu.localeCompare(b.ngayThu))
+    return [...cu, ...trongThang]
+  }, [kyThuMap, calMonth, showQuaHanCu, boMap])
+  const kyChuaThu = kyThang.filter(k => k.trangThai !== 'da-thu')
+  const kyDaChon  = kyChuaThu.filter(k => selKy.has(k.id))
+  const tongDaChon = kyDaChon.reduce((s, k) => s + k.tongThu, 0)
+  const toggleKy  = (id: string) => setSelKy(prev => {
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n
+  })
+  const toggleAll = () => setSelKy(kyDaChon.length === kyChuaThu.length ? new Set() : new Set(kyChuaThu.map(k => k.id)))
+  const thuNhieuKy = async () => {
+    if (!kyDaChon.length) return
+    if (!ngayThuChung) return alert('Nhập ngày thu thực tế')
+    if (!confirm(`Xác nhận đã thu ${kyDaChon.length} kỳ, tổng ${fmt(tongDaChon)} đ (ngày ${ngayThuChung})?\nSố tiền lấy theo kế hoạch.`)) return
+    setBulkSaving(true)
+    try {
+      for (const k of kyDaChon) {  // tuần tự để _syncTrangThaiBoHoSo không bị chạy đua
+        await markKyThuDaThu(k.hanMucId, k.boHoSoId, k.id, ngayThuChung, k.gocThu, k.laiThu)
+      }
+      setSelKy(new Set())
+    } catch (e: any) { alert(e.message) }
+    finally { setBulkSaving(false) }
+  }
+
+  const { ref: fillRef, h: fillH } = useFillHeight([view, !!selectedBo])
+  const boRows = useMemo(() => boList.map(bo => {
+    const kyList   = kyThuMap[bo.id] ?? []
+    const tgList   = traGocList.filter(t => t.boHoSoId === bo.id)
+    const gocDaTra = tinhGocDaTraBoHoSo(bo.id, kyList, tgList)
+    return { bo, gocDaTra, duNo: Math.max(0, bo.soTienGiaiNgan - gocDaTra), kyQuaHan: kyList.filter(k => k.trangThai === 'qua-han').length }
+  }), [boList, kyThuMap, traGocList])
+  const tongGN   = boRows.reduce((s, r) => s + r.bo.soTienGiaiNgan, 0)
+  const tongGoc  = boRows.reduce((s, r) => s + r.gocDaTra, 0)
+  const tongDuNo = boRows.reduce((s, r) => s + r.duNo, 0)
+  const tongConPhaiThu = kyChuaThu.reduce((s, k) => s + k.tongThu, 0)
+  const tongDaThu      = kyThang.filter(k => k.trangThai === 'da-thu').reduce((s, k) => s + (k.tongThucThu ?? k.tongThu), 0)
 
   if (selectedBo) {
     return <ChiTietBoHoSo bo={selectedBo} khung={khung} onBack={() => setSelectedBo(null)} />
@@ -837,188 +914,183 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
     setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
+  const tabBtn = (active: boolean): React.CSSProperties => ({
+    border: 'none', background: 'none', cursor: 'pointer', padding: '7px 14px', fontSize: 13,
+    fontWeight: active ? 700 : 500, color: active ? 'var(--nh-navy)' : '#6b7280',
+    borderBottom: active ? '2px solid var(--nh-navy)' : '2px solid transparent', marginBottom: -1,
+    display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+  })
+  const cardFlex: React.CSSProperties = { marginBottom: 0 }
+
   return (
-    <div>
-      {/* Header card */}
-      <div className="nh-card">
-        <div className="nh-card-head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button className="btn-ghost" onClick={onBack} style={{ fontSize: 12, padding: '5px 10px' }}>
-              <ChevronLeft size={13} style={{ marginRight: 3 }} />Quay lại
+    <div ref={fillRef} style={{ display: 'flex', flexDirection: 'column', height: fillH, gap: 8, minHeight: 0 }}>
+      {/* ── Header gọn: 1 dòng thông tin + 1 dải chỉ số ── */}
+      <div className="nh-card" style={{ ...cardFlex, flex: '0 0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', flexWrap: 'wrap' }}>
+          <button className="btn-ghost" onClick={onBack} style={{ fontSize: 12, padding: '4px 10px' }}>
+            <ChevronLeft size={13} style={{ marginRight: 3 }} />Quay lại
+          </button>
+          <span className="nh-card-title">{khung.soHopDong}</span>
+          <Badge cls={BADGE_KHUNG[khung.trangThai]} label={LABEL_KHUNG[khung.trangThai]} />
+          <span style={{ fontSize: 11.5, color: 'var(--nh-muted)' }}>
+            {khung.entity} · {khung.nganHang}{khung.chiNhanh ? ` · ${khung.chiNhanh}` : ''}
+            {khung.nguoiVay ? ` · ${khung.nguoiVay}` : ''}
+            {' · '}{khung.ngayHieuLuc} → {khung.ngayHetHan}
+            {khung.laiSuatMacDinh ? ` · LS gợi ý ${khung.laiSuatMacDinh}%` : ''}
+          </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button className="btn-ghost" style={{ padding: '4px 10px' }} disabled={boList.length === 0}
+              onClick={() => exportKhungNganHanExcel(khung, boList, kyThuMap, traGocList, tinhGocDaTraBoHoSo)}>
+              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Xuất Excel
             </button>
-            <span className="nh-card-title">{khung.soHopDong}</span>
-            <Badge cls={BADGE_KHUNG[khung.trangThai]} label={LABEL_KHUNG[khung.trangThai]} />
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              className="btn-ghost"
-              disabled={boList.length === 0}
-              onClick={() => exportKhungNganHanExcel(khung, boList, kyThuMap, traGocList, tinhGocDaTraBoHoSo)}
-            >
-              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
-              Xuất Excel
-            </button>
-            <button className="btn-primary" onClick={() => { setEditingBo(null); setBoFormOpen(true) }}>
-              <Plus size={13} style={{ marginRight: 4 }} />Giải ngân bộ hồ sơ mới
+            <button className="btn-primary" style={{ padding: '4px 12px' }} onClick={() => { setEditingBo(null); setBoFormOpen(true) }}>
+              <Plus size={13} style={{ marginRight: 4 }} />Giải ngân mới
             </button>
           </div>
         </div>
-
-        <div className="nh-card-body">
-          <div style={{ fontSize: 11.5, color: 'var(--nh-muted)', marginBottom: 12 }}>
-            {khung.entity} · {khung.nganHang}{khung.chiNhanh ? ` · ${khung.chiNhanh}` : ''}
-            {khung.nguoiVay ? ` · ${khung.nguoiVay}` : ''}
-            {' · Hiệu lực: '}{khung.ngayHieuLuc} → {khung.ngayHetHan}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 28, padding: '6px 12px 8px', borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+          <MiniStat label="Tổng hạn mức" value={fmtTien(khaDung.tongHanMuc)} color="#1C3557" />
+          <MiniStat label="Dư nợ hiện tại" value={fmtTien(khaDung.duNoHienTai)} sub={`${khaDung.soBoDangVay} bộ hồ sơ đang vay`} color="#b45309" />
+          <MiniStat label="Khả dụng" value={fmtTien(khaDung.khaDung)} color={khaDung.phanTramSuDung >= 90 ? '#b91c1c' : '#15803d'} />
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontSize: 10, color: 'var(--nh-muted)', fontWeight: 600, marginBottom: 3 }}>
+              SỬ DỤNG {khaDung.phanTramSuDung}%{khaDung.phanTramSuDung >= 90 ? ' ⚠️ gần chạm hạn mức' : ''}
+            </div>
+            <ProgressBar pct={khaDung.phanTramSuDung} warn={khaDung.phanTramSuDung >= 70} />
           </div>
+        </div>
+      </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 8, marginBottom: 12 }}>
-            <KpiCard label="Tổng hạn mức"     value={fmtTien(khaDung.tongHanMuc)}   sub="Hiện tại sau điều chỉnh" color="#1C3557" />
-            <KpiCard label="Dư nợ hiện tại"   value={fmtTien(khaDung.duNoHienTai)}  sub={`${khaDung.soBoDangVay} bộ hồ sơ đang vay`} color="#b45309" />
-            <KpiCard label="Hạn mức khả dụng" value={fmtTien(khaDung.khaDung)}
-              sub={khaDung.phanTramSuDung >= 90 ? '⚠️ Gần chạm hạn mức' : 'Có thể giải ngân tiếp'}
-              color={khaDung.phanTramSuDung >= 90 ? '#b91c1c' : '#15803d'} />
-            <KpiCard label="Sử dụng"          value={`${khaDung.phanTramSuDung}%`} />
-          </div>
-          <ProgressBar pct={khaDung.phanTramSuDung} warn={khaDung.phanTramSuDung >= 70} />
+      {/* ── Khối chính: tab + toolbar cố định, bảng cuộn ── */}
+      <div className="nh-card" style={{ ...cardFlex, flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Tab + toolbar */}
+        <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 12, padding: '0 12px', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', background: '#fff' }}>
+          <button style={tabBtn(view === 'list')} onClick={() => setView('list')}>Danh sách bộ hồ sơ ({boList.length})</button>
+          <button style={tabBtn(view === 'calendar')} onClick={() => setView('calendar')}>
+            <Calendar size={13} />Lịch thu tổng hợp
+          </button>
 
-          {khung.laiSuatMacDinh && (
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
-              Lãi suất gợi ý: <b>{khung.laiSuatMacDinh}%/năm</b>
+          {view === 'calendar' && (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', flexWrap: 'wrap' }}>
+              <button className="btn-ghost" onClick={prevMonth} style={{ padding: '3px 9px' }}>‹</button>
+              <input type="month" value={calMonth} onChange={e => e.target.value && setCalMonth(e.target.value)}
+                style={{ ...inputBaseCls, width: 140 }} />
+              <button className="btn-ghost" onClick={nextMonth} style={{ padding: '3px 9px' }}>›</button>
+              <label style={{ fontSize: 12, color: 'var(--nh-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                <input type="checkbox" checked={showQuaHanCu} onChange={e => setShowQuaHanCu(e.target.checked)} />
+                Kèm kỳ chưa thu tháng trước
+              </label>
+              <span style={{ fontSize: 12.5, color: 'var(--nh-muted)' }}>
+                {kyThang.length} kỳ · Còn phải thu <b style={{ color: '#b91c1c' }}>{fmtM(tongConPhaiThu)} đ</b>
+                {' · '}Đã thu <b style={{ color: '#15803d' }}>{fmtM(tongDaThu)} đ</b>
+              </span>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Toggle view */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        <button
-          className="btn-ghost" onClick={() => setView('list')}
-          style={view === 'list' ? { background: 'var(--nh-navy)', color: '#fff', borderColor: 'var(--nh-navy)' } : undefined}
-        >
-          Danh sách bộ hồ sơ
-        </button>
-        <button
-          className="btn-ghost" onClick={() => setView('calendar')}
-          style={view === 'calendar' ? { background: 'var(--nh-navy)', color: '#fff', borderColor: 'var(--nh-navy)' } : undefined}
-        >
-          <Calendar size={13} style={{ marginRight: 4 }} />Lịch thu tổng hợp
-        </button>
-      </div>
+        {/* Thanh thu hàng loạt (cố định, không cuộn) */}
+        {view === 'calendar' && kyChuaThu.length > 0 && (
+          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', background: kyDaChon.length ? '#eff6ff' : '#f8fafc', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', fontSize: 12.5 }}>
+            <span>Đã chọn <b>{kyDaChon.length}</b>/{kyChuaThu.length} kỳ · <b>{fmt(tongDaChon)} đ</b></span>
+            <span style={{ marginLeft: 'auto', color: 'var(--nh-muted)' }}>Ngày thu:</span>
+            <input type="date" value={ngayThuChung} onChange={e => setNgayThuChung(e.target.value)} style={{ ...inputBaseCls, width: 140 }} />
+            <button className="btn-primary" style={{ padding: '4px 12px' }} disabled={!kyDaChon.length || bulkSaving} onClick={thuNhieuKy}>
+              <Check size={13} style={{ marginRight: 4 }} />{bulkSaving ? 'Đang lưu…' : `Xác nhận đã thu ${kyDaChon.length} kỳ`}
+            </button>
+          </div>
+        )}
 
-      {/* ── DANH SÁCH BỘ HỒ SƠ ── */}
-      {view === 'list' && (
-        <div className="nh-card">
-          <div className="nh-card-body" style={{ padding: 0, overflowX: 'auto' }}>
-            <table className="nh-tbl" style={{ minWidth: 820 }}>
+        {/* Vùng bảng — chỉ vùng này cuộn; tiêu đề & dòng tổng dính (sticky) */}
+        <div style={{ flex: '1 1 0', minHeight: 0, overflow: 'auto' }}>
+          {view === 'list' && (
+            <table className="nh-tbl" style={{ minWidth: 820, borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Bộ hồ sơ</th>
-                  <th>Ngày GN</th>
-                  <th>Đáo hạn</th>
-                  <th className="r">Giải ngân</th>
-                  <th className="r">Gốc đã trả</th>
-                  <th className="r">Dư nợ còn</th>
-                  <th>Lãi suất</th>
-                  <th>Kỳ lãi</th>
-                  <th>Trạng thái</th>
-                  <th></th>
+                  <th style={stickyTh}>Bộ hồ sơ</th>
+                  <th style={stickyTh}>Ngày GN</th>
+                  <th style={stickyTh}>Đáo hạn</th>
+                  <th className="r" style={stickyTh}>Giải ngân</th>
+                  <th className="r" style={stickyTh}>Gốc đã trả</th>
+                  <th className="r" style={stickyTh}>Dư nợ còn</th>
+                  <th style={stickyTh}>Lãi suất</th>
+                  <th style={stickyTh}>Kỳ lãi</th>
+                  <th style={stickyTh}>Trạng thái</th>
+                  <th style={stickyTh}></th>
                 </tr>
               </thead>
               <tbody>
-                {boList.map(bo => {
-                  const kyList   = kyThuMap[bo.id] ?? []
-                  const tgList   = traGocList.filter(t => t.boHoSoId === bo.id)
-                  const gocDaTra = tinhGocDaTraBoHoSo(bo.id, kyList, tgList)
-                  const duNo     = Math.max(0, bo.soTienGiaiNgan - gocDaTra)
-                  const kyQuaHan = kyList.filter(k => k.trangThai === 'qua-han').length
-                  return (
-                    <tr key={bo.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedBo(bo)}>
-                      <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>
-                        {bo.soBoHoSo}
-                        {kyQuaHan > 0 && <span style={{ marginLeft: 5, fontSize: 10, color: '#b91c1c' }}>⚠️ {kyQuaHan} kỳ QH</span>}
-                      </td>
-                      <td>{bo.ngayGiaiNgan}</td>
-                      <td style={{ color: bo.trangThai === 'qua-han' ? '#b91c1c' : bo.trangThai === 'gan-dao-han' ? '#D4A64A' : undefined }}>
-                        {bo.ngayDaoHan}
-                      </td>
-                      <td className="r">{fmtTien(bo.soTienGiaiNgan)}</td>
-                      <td className="r" style={{ color: '#15803d' }}>{gocDaTra > 0 ? fmtTien(gocDaTra) : '—'}</td>
-                      <td className="r" style={{ fontWeight: 700, color: duNo > 0 ? '#b91c1c' : '#15803d' }}>
-                        {fmtTien(duNo)}
-                      </td>
-                      <td>{bo.laiSuat}%</td>
-                      <td>{KY_TRA_LABEL[bo.kyTraLai]}</td>
-                      <td><Badge cls={BADGE_BO[bo.trangThai]} label={LABEL_BO[bo.trangThai]} /></td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button
-                            onClick={() => { setEditingBo(bo); setBoFormOpen(true) }}
-                            style={{ border: '1px solid #cbd5e1', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280', padding: '3px 6px' }}
-                            title="Sửa bộ hồ sơ"
-                          >
-                            <Pencil size={12} />
-                          </button>
-                          <button
-                            onClick={async () => {
-                              if (!confirm(`Xoá bộ hồ sơ ${bo.soBoHoSo}?`)) return
-                              try { await deleteBoHoSo(khung.id, bo.id) }
-                              catch (e: any) { alert(e.message) }
-                            }}
-                            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', padding: 4 }}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
+                {boRows.map(({ bo, gocDaTra, duNo, kyQuaHan }) => (
+                  <tr key={bo.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedBo(bo)}>
+                    <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>
+                      {bo.soBoHoSo}
+                      {kyQuaHan > 0 && <span style={{ marginLeft: 5, fontSize: 10, color: '#b91c1c' }}>⚠️ {kyQuaHan} kỳ QH</span>}
+                    </td>
+                    <td>{bo.ngayGiaiNgan}</td>
+                    <td style={{ color: bo.trangThai === 'qua-han' ? '#b91c1c' : bo.trangThai === 'gan-dao-han' ? '#D4A64A' : undefined }}>{bo.ngayDaoHan}</td>
+                    <td className="r">{fmtTien(bo.soTienGiaiNgan)}</td>
+                    <td className="r" style={{ color: '#15803d' }}>{gocDaTra > 0 ? fmtTien(gocDaTra) : '—'}</td>
+                    <td className="r" style={{ fontWeight: 700, color: duNo > 0 ? '#b91c1c' : '#15803d' }}>{fmtTien(duNo)}</td>
+                    <td>{bo.laiSuat}%</td>
+                    <td>{KY_TRA_LABEL[bo.kyTraLai]}</td>
+                    <td><Badge cls={BADGE_BO[bo.trangThai]} label={LABEL_BO[bo.trangThai]} /></td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={() => { setEditingBo(bo); setBoFormOpen(true) }}
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280', padding: '3px 6px' }}
+                          title="Sửa bộ hồ sơ"
+                        ><Pencil size={12} /></button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Xoá bộ hồ sơ ${bo.soBoHoSo}?`)) return
+                            try { await deleteBoHoSo(khung.id, bo.id) } catch (e: any) { alert(e.message) }
+                          }}
+                          style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', padding: 4 }}
+                        ><Trash2 size={13} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
                 {boList.length === 0 && (
                   <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 28 }}>
-                    Chưa có bộ hồ sơ giải ngân nào. Bấm "+ Giải ngân bộ hồ sơ mới" để bắt đầu.
+                    Chưa có bộ hồ sơ giải ngân nào. Bấm "+ Giải ngân mới" để bắt đầu.
                   </td></tr>
                 )}
               </tbody>
+              {boList.length > 0 && (
+                <tfoot>
+                  <tr style={{ fontWeight: 700 }}>
+                    <td colSpan={3} style={{ ...stickyTf, textAlign: 'right', color: 'var(--nh-muted)', paddingRight: 12 }}>Tổng cộng ({boList.length} bộ):</td>
+                    <td className="r" style={stickyTf}>{fmtTien(tongGN)}</td>
+                    <td className="r" style={{ ...stickyTf, color: '#15803d' }}>{fmtTien(tongGoc)}</td>
+                    <td className="r" style={{ ...stickyTf, color: '#b91c1c' }}>{fmtTien(tongDuNo)}</td>
+                    <td colSpan={4} style={stickyTf}></td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ── LỊCH THU TỔNG HỢP ── */}
-      {view === 'calendar' && (
-        <div className="nh-card">
-          <div className="nh-card-head">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className="btn-ghost" onClick={prevMonth} style={{ padding: '4px 10px' }}>‹</button>
-              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--nh-navy)', minWidth: 110, textAlign: 'center' }}>
-                {calMonth.replace(/(\d{4})-(\d{2})/, 'Tháng $2/$1')}
-              </span>
-              <button className="btn-ghost" onClick={nextMonth} style={{ padding: '4px 10px' }}>›</button>
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--nh-muted)' }}>
-              {kyThang.length} kỳ thu · tổng:{' '}
-              <b style={{ color: 'var(--nh-navy)' }}>
-                {fmtM(kyThang.reduce((s, k) => s + k.tongThu, 0))} đ
-              </b>
-            </div>
-          </div>
-          <div className="nh-card-body" style={{ padding: 0, overflowX: 'auto' }}>
-            {kyThang.length === 0 ? (
+          {view === 'calendar' && (
+            kyThang.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 32, color: 'var(--nh-muted2)', fontSize: 13 }}>
                 Không có kỳ thu nào trong tháng này
               </div>
             ) : (
-              <table className="nh-tbl" style={{ minWidth: 720 }}>
+              <table className="nh-tbl" style={{ minWidth: 780, borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}>
                 <thead>
                   <tr>
-                    <th>Ngày thu</th>
-                    <th>Bộ hồ sơ</th>
-                    <th>Loại</th>
-                    <th className="r">Gốc</th>
-                    <th className="r">Lãi</th>
-                    <th className="r">Tổng thu</th>
-                    <th>Trạng thái</th>
-                    <th></th>
+                    <th style={{ ...stickyTh, width: 28 }}>
+                      <input type="checkbox" checked={kyChuaThu.length > 0 && kyDaChon.length === kyChuaThu.length} onChange={toggleAll} disabled={!kyChuaThu.length} />
+                    </th>
+                    <th style={stickyTh}>Ngày thu</th>
+                    <th style={stickyTh}>Bộ hồ sơ</th>
+                    <th style={stickyTh}>Loại</th>
+                    <th className="r" style={stickyTh}>Gốc</th>
+                    <th className="r" style={stickyTh}>Lãi</th>
+                    <th className="r" style={stickyTh}>Tổng thu</th>
+                    <th style={stickyTh}>Trạng thái</th>
+                    <th style={stickyTh}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1028,22 +1100,21 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
                     const isQuaHan = k.trangThai === 'qua-han'
                     return (
                       <tr key={k.id} style={{ background: isDaThu ? '#f0fdf4' : isQuaHan ? '#fff5f5' : undefined }}>
+                        <td>{!isDaThu && <input type="checkbox" checked={selKy.has(k.id)} onChange={() => toggleKy(k.id)} />}</td>
                         <td style={{ fontWeight: 600 }}>{k.ngayThu}</td>
                         <td>
-                          <button
-                            onClick={() => bo && setSelectedBo(bo)}
-                            style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--nh-navy)', fontWeight: 700, padding: 0, fontSize: 13 }}
-                          >
+                          <button onClick={() => bo && setSelectedBo(bo)}
+                            style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--nh-navy)', fontWeight: 700, padding: 0, fontSize: 13 }}>
                             {bo?.soBoHoSo ?? k.boHoSoId}
                           </button>
                         </td>
                         <td>
                           <span style={{
                             fontSize: 11, padding: '2px 6px', borderRadius: 4, fontWeight: 600,
-                            background: k.loai === 'goc-va-lai' ? '#fef3c7' : '#eff6ff',
-                            color:      k.loai === 'goc-va-lai' ? '#92400e' : '#1d4ed8',
+                            background: k.loai === 'lai' ? '#eff6ff' : '#fef3c7',
+                            color:      k.loai === 'lai' ? '#1d4ed8' : '#92400e',
                           }}>
-                            {k.loai === 'goc-va-lai' ? 'Gốc + Lãi' : 'Lãi'}
+                            {k.loai === 'goc-va-lai' ? 'Gốc + Lãi' : k.loai === 'goc' ? 'Gốc' : 'Lãi'}
                           </span>
                         </td>
                         <td className="r" style={{ color: k.gocThu > 0 ? '#b91c1c' : '#94a3b8', fontWeight: k.gocThu > 0 ? 700 : undefined }}>
@@ -1052,18 +1123,16 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
                         <td className="r" style={{ color: '#b45309' }}>{fmt(k.laiThu)}</td>
                         <td className="r" style={{ fontWeight: 700 }}>{fmt(k.tongThu)}</td>
                         <td>
-                          {isDaThu      ? <span className="nh-badge nh-b-green">Đã thu</span>
+                          {isDaThu ? <span className="nh-badge nh-b-green">Đã thu</span>
                             : k.trangThai === 'gan-han' ? <span className="nh-badge nh-b-amber">Gần hạn</span>
-                            : isQuaHan  ? <span className="nh-badge nh-b-red">Quá hạn</span>
+                            : isQuaHan ? <span className="nh-badge nh-b-red">Quá hạn</span>
                             : <span className="nh-badge nh-b-grey">Chưa thu</span>}
                         </td>
                         <td>
                           {!isDaThu && (
-                            <button
-                              onClick={() => bo && setSelectedBo(bo)}
-                              style={{ fontSize: 11, padding: '3px 8px', border: 'none', borderRadius: 4, background: '#1C3557', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
-                            >
-                              Xem
+                            <button onClick={() => setThuKy(k)}
+                              style={{ fontSize: 11, padding: '3px 10px', border: 'none', borderRadius: 4, background: '#1C3557', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                              Thu
                             </button>
                           )}
                         </td>
@@ -1072,19 +1141,19 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
-                    <td colSpan={3} style={{ textAlign: 'right', fontSize: 12.5, color: 'var(--nh-muted)', paddingRight: 12 }}>Tổng tháng:</td>
-                    <td className="r" style={{ color: '#b91c1c' }}>{fmt(kyThang.reduce((s, k) => s + k.gocThu, 0))}</td>
-                    <td className="r" style={{ color: '#b45309' }}>{fmt(kyThang.reduce((s, k) => s + k.laiThu, 0))}</td>
-                    <td className="r" style={{ color: 'var(--nh-navy)', fontSize: 14 }}>{fmt(kyThang.reduce((s, k) => s + k.tongThu, 0))}</td>
-                    <td colSpan={2}></td>
+                  <tr style={{ fontWeight: 700 }}>
+                    <td colSpan={4} style={{ ...stickyTf, textAlign: 'right', fontSize: 12.5, color: 'var(--nh-muted)', paddingRight: 12 }}>Tổng cộng ({kyThang.length} kỳ):</td>
+                    <td className="r" style={{ ...stickyTf, color: '#b91c1c' }}>{fmt(kyThang.reduce((s, k) => s + k.gocThu, 0))}</td>
+                    <td className="r" style={{ ...stickyTf, color: '#b45309' }}>{fmt(kyThang.reduce((s, k) => s + k.laiThu, 0))}</td>
+                    <td className="r" style={{ ...stickyTf, color: 'var(--nh-navy)', fontSize: 14 }}>{fmt(kyThang.reduce((s, k) => s + k.tongThu, 0))}</td>
+                    <td colSpan={2} style={stickyTf}></td>
                   </tr>
                 </tfoot>
               </table>
-            )}
-          </div>
+            )
+          )}
         </div>
-      )}
+      </div>
 
       <BoHoSoForm
         open={boFormOpen}
@@ -1093,6 +1162,7 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
         editing={editingBo}
         onClose={() => { setBoFormOpen(false); setEditingBo(null) }}
       />
+      <ThuKyDialog ky={thuKy} onClose={() => setThuKy(null)} />
     </div>
   )
 }
