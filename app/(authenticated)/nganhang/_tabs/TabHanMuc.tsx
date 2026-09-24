@@ -6,7 +6,8 @@ import { HopDongTinDung, KyTraNo, EntityType } from '@/lib/han-muc-types'
 import HopDongForm from '@/components/han-muc/HopDongForm'
 import LichTraNoTable from '@/components/han-muc/LichTraNoTable'
 import CoCauDialog from '@/components/han-muc/CoCauDialog'
-import { Pencil, Check, X, Trash2 } from 'lucide-react'
+import { exportHopDongDaiHanExcel, exportDanhSachHopDongDaiHanExcel } from '@/lib/han-muc-excel-export'
+import { Pencil, Check, X, Trash2, FileSpreadsheet } from 'lucide-react'
 
 const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 
@@ -251,6 +252,10 @@ export function TabHanMuc() {
                 onSaved={() => {/* Firestore listener tự refresh */}}
               />
               <button className="btn-ghost" onClick={() => { setEditing(selected); setFormOpen(true) }}>Sửa hợp đồng</button>
+              <button className="btn-ghost" onClick={() => exportHopDongDaiHanExcel(selected, kyList)}>
+                <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+                Xuất Excel
+              </button>
               <button className="btn-primary" onClick={() => setCoCauOpen(true)}>↻ Cơ cấu nợ</button>
               <button
                 className="btn-danger"
@@ -487,7 +492,17 @@ export function TabHanMuc() {
               </button>
             ))}
           </div>
-          <button className="btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }}>+ Thêm hợp đồng</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn-ghost"
+              disabled={hopDongs.length === 0}
+              onClick={() => exportDanhSachHopDongDaiHanExcel(hopDongs, kyMap)}
+            >
+              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+              Xuất Excel
+            </button>
+            <button className="btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }}>+ Thêm hợp đồng</button>
+          </div>
         </div>
         <div className="nh-card-body" style={{ padding: 0, overflowX: 'auto' }}>
           <table className="nh-tbl" style={{ minWidth: 1100 }}>

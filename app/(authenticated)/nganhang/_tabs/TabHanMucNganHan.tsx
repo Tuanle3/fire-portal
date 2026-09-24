@@ -15,8 +15,11 @@ import type {
   KhaDungSnapshot, TrangThaiBoHoSo, KyTraLaiNH,
 } from '@/lib/han-muc-ngan-han-types'
 import type { BankName, EntityType } from '@/lib/han-muc-types'
+import {
+  exportBoHoSoNganHanExcel, exportKhungNganHanExcel, exportDanhSachKhungNganHanExcel,
+} from '@/lib/han-muc-excel-export'
 import EntitySelect from '@/components/han-muc/EntitySelect'
-import { Pencil, Trash2, Plus, ChevronLeft, X, Check, AlertCircle, Calendar } from 'lucide-react'
+import { Pencil, Trash2, Plus, ChevronLeft, X, Check, AlertCircle, Calendar, FileSpreadsheet } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────
 const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
@@ -615,6 +618,10 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
               </button>
             )}
             <button className="btn-ghost" onClick={() => setEditOpen(true)}>Sửa bộ hồ sơ</button>
+            <button className="btn-ghost" onClick={() => exportBoHoSoNganHanExcel(bo, khung, kyList, boTraGoc)}>
+              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+              Xuất Excel
+            </button>
           </div>
         </div>
 
@@ -839,9 +846,19 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
             <span className="nh-card-title">{khung.soHopDong}</span>
             <Badge cls={BADGE_KHUNG[khung.trangThai]} label={LABEL_KHUNG[khung.trangThai]} />
           </div>
-          <button className="btn-primary" onClick={() => { setEditingBo(null); setBoFormOpen(true) }}>
-            <Plus size={13} style={{ marginRight: 4 }} />Giải ngân bộ hồ sơ mới
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn-ghost"
+              disabled={boList.length === 0}
+              onClick={() => exportKhungNganHanExcel(khung, boList, kyThuMap, traGocList, tinhGocDaTraBoHoSo)}
+            >
+              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+              Xuất Excel
+            </button>
+            <button className="btn-primary" onClick={() => { setEditingBo(null); setBoFormOpen(true) }}>
+              <Plus size={13} style={{ marginRight: 4 }} />Giải ngân bộ hồ sơ mới
+            </button>
+          </div>
         </div>
 
         <div className="nh-card-body">
@@ -1224,9 +1241,19 @@ export function TabHanMucNganHan() {
               </button>
             ))}
           </div>
-          <button className="btn-primary" onClick={() => { setEditingKhung(null); setKhungFormOpen(true) }}>
-            <Plus size={13} style={{ marginRight: 4 }} />Thêm hạn mức khung
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn-ghost"
+              disabled={khungList.length === 0}
+              onClick={() => exportDanhSachKhungNganHanExcel(khungList)}
+            >
+              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+              Xuất Excel
+            </button>
+            <button className="btn-primary" onClick={() => { setEditingKhung(null); setKhungFormOpen(true) }}>
+              <Plus size={13} style={{ marginRight: 4 }} />Thêm hạn mức khung
+            </button>
+          </div>
         </div>
 
         {khungList.length === 0 ? (
