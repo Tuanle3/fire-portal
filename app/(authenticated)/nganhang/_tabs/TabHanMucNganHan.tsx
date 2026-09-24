@@ -14,11 +14,12 @@ import type {
   HanMucNganHan, BoHoSoGiaiNgan, KyThuNH, TraGocGiuaKy,
   KhaDungSnapshot, TrangThaiBoHoSo, KyTraLaiNH,
 } from '@/lib/han-muc-ngan-han-types'
-import type { BankName } from '@/lib/han-muc-types'
+import type { BankName, EntityType } from '@/lib/han-muc-types'
 import EntitySelect from '@/components/han-muc/EntitySelect'
 import { Pencil, Trash2, Plus, ChevronLeft, X, Check, AlertCircle, Calendar } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────
+const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 const BANK_LIST: BankName[] = [
   'Agribank','Vietcombank','BIDV','Vietinbank','ACB','MB Bank','Techcombank',
   'VPBank','Sacombank','HDBank','VIB','TPBank','MSB','SeABank','LPBank',
@@ -1079,14 +1080,14 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
   )
 }
 
-// ─── Card hạn mức khung (summary trên list) ──────────────────
-interface KhungCardProps {
+// ─── Dòng hạn mức khung trong bảng danh sách (dạng bảng, gọn) ─
+interface KhungRowProps {
   khung:    HanMucNganHan
   onSelect: () => void
   onEdit:   () => void
   onDelete: () => void
 }
-function KhungCard({ khung, onSelect, onEdit, onDelete }: KhungCardProps) {
+function KhungRow({ khung, onSelect, onEdit, onDelete }: KhungRowProps) {
   const [boList, setBoList]         = useState<BoHoSoGiaiNgan[]>([])
   const [kyThuMap, setKyThuMap]     = useState<Record<string, KyThuNH[]>>({})
   const [traGocList, setTraGocList] = useState<TraGocGiuaKy[]>([])
@@ -1101,59 +1102,53 @@ function KhungCard({ khung, onSelect, onEdit, onDelete }: KhungCardProps) {
 
   const khaDung  = useMemo(() => tinhKhaDung(khung, boList, kyThuMap, traGocList), [khung, boList, kyThuMap, traGocList])
   const kyQuaHan = useMemo(() => Object.values(kyThuMap).flat().filter(k => k.trangThai === 'qua-han' || k.trangThai === 'gan-han').length, [kyThuMap])
+  const pctColor = khaDung.phanTramSuDung >= 90 ? '#b91c1c' : khaDung.phanTramSuDung >= 70 ? '#D4A64A' : '#15803d'
 
   return (
-    <div style={{
-      border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px',
-      cursor: 'pointer', transition: 'box-shadow .15s',
-    }}
-      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 12px #0001')}
-      onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
-      onClick={onSelect}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--nh-navy)' }}>🏦 {khung.soHopDong}</span>
-            <Badge cls={BADGE_KHUNG[khung.trangThai]} label={LABEL_KHUNG[khung.trangThai]} />
-            {kyQuaHan > 0 && (
-              <span style={{ fontSize: 11, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '1px 6px' }}>
-                ⚠️ {kyQuaHan} kỳ cần thu
-              </span>
-            )}
+    <tr style={{ cursor: 'pointer' }} onClick={onSelect}>
+      <td style={{ fontWeight: 700, color: 'var(--nh-navy)', whiteSpace: 'nowrap' }}>
+        🏦 {khung.soHopDong}
+        {kyQuaHan > 0 && (
+          <span style={{ marginLeft: 6, fontSize: 10, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '1px 5px' }}>
+            ⚠ {kyQuaHan} kỳ
+          </span>
+        )}
+      </td>
+      <td>{khung.entity}</td>
+      <td>{khung.nganHang}{khung.chiNhanh ? ` · ${khung.chiNhanh}` : ''}</td>
+      <td style={{ whiteSpace: 'nowrap', fontSize: 11.5, color: 'var(--nh-muted)' }}>
+        {khung.ngayHieuLuc} → {khung.ngayHetHan}
+      </td>
+      <td className="r" style={{ fontWeight: 700, color: 'var(--nh-navy)', whiteSpace: 'nowrap' }}>
+        {fmtM(khaDung.tongHanMuc)} đ
+      </td>
+      <td className="r" style={{ whiteSpace: 'nowrap' }}>
+        <div style={{ fontWeight: 700, color: '#b45309' }}>{fmtM(khaDung.duNoHienTai)} đ</div>
+        <div style={{ fontSize: 10.5, color: '#6b7280' }}>{khaDung.soBoDangVay} bộ hồ sơ</div>
+      </td>
+      <td className="r" style={{ fontWeight: 700, whiteSpace: 'nowrap', color: khaDung.khaDung <= 0 ? '#b91c1c' : '#15803d' }}>
+        {fmtM(khaDung.khaDung)} đ
+      </td>
+      <td style={{ minWidth: 110 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ flex: 1, height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ width: `${Math.min(khaDung.phanTramSuDung, 100)}%`, height: '100%', background: pctColor }} />
           </div>
-          <div style={{ fontSize: 12, color: 'var(--nh-muted)' }}>
-            {khung.entity} · {khung.nganHang}{khung.chiNhanh ? ` · ${khung.chiNhanh}` : ''}
-            {' · '}{khung.ngayHieuLuc} → {khung.ngayHetHan}
-          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, color: pctColor, minWidth: 30, textAlign: 'right' }}>
+            {khaDung.phanTramSuDung}%
+          </span>
         </div>
-        <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+      </td>
+      <td><Badge cls={BADGE_KHUNG[khung.trangThai]} label={LABEL_KHUNG[khung.trangThai]} /></td>
+      <td onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn-ghost" onClick={onEdit} style={{ padding: '4px 8px' }}><Pencil size={12} /></button>
           <button onClick={onDelete} style={{ border: '1px solid #fecaca', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#dc2626', padding: '4px 8px' }}>
             <Trash2 size={12} />
           </button>
         </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 10 }}>
-        <div>
-          <div style={{ fontSize: 10.5, color: 'var(--nh-muted)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tổng hạn mức</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--nh-navy)' }}>{fmtM(khaDung.tongHanMuc)} đ</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 10.5, color: 'var(--nh-muted)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>Đang sử dụng</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#b45309' }}>{fmtM(khaDung.duNoHienTai)} đ</div>
-          <div style={{ fontSize: 11, color: '#6b7280' }}>{khaDung.soBoDangVay} bộ hồ sơ · {khaDung.phanTramSuDung}%</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 10.5, color: 'var(--nh-muted)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>Khả dụng</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: khaDung.phanTramSuDung >= 90 ? '#b91c1c' : '#15803d' }}>
-            {fmtM(khaDung.khaDung)} đ
-          </div>
-        </div>
-      </div>
-      <ProgressBar pct={khaDung.phanTramSuDung} warn={khaDung.phanTramSuDung >= 70} />
-    </div>
+      </td>
+    </tr>
   )
 }
 
@@ -1165,8 +1160,9 @@ export function TabHanMucNganHan() {
   const [selectedKhung, setSelectedKhung] = useState<HanMucNganHan | null>(null)
   const [khungFormOpen, setKhungFormOpen] = useState(false)
   const [editingKhung, setEditingKhung]   = useState<HanMucNganHan | null>(null)
+  const [entityFilter, setEntityFilter]   = useState<'all' | EntityType>('all')
 
-  useEffect(() => subscribeHanMucNganHan(setKhungList), [])
+  useEffect(() => subscribeHanMucNganHan(setKhungList, entityFilter), [entityFilter])
 
   // Cập nhật selectedKhung khi data thay đổi (VD sau khi sửa)
   useEffect(() => {
@@ -1219,7 +1215,18 @@ export function TabHanMucNganHan() {
       {/* Danh sách hạn mức khung */}
       <div className="nh-card">
         <div className="nh-card-head">
-          <span className="nh-card-title">Hạn mức tín dụng ngắn hạn</span>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {ENTITY_TABS.map(t => (
+              <button
+                key={t}
+                onClick={() => setEntityFilter(t)}
+                className="btn-ghost"
+                style={entityFilter === t ? { background: 'var(--nh-navy)', color: '#fff', borderColor: 'var(--nh-navy)' } : undefined}
+              >
+                {t === 'all' ? 'Tất cả' : t}
+              </button>
+            ))}
+          </div>
           <button className="btn-primary" onClick={() => { setEditingKhung(null); setKhungFormOpen(true) }}>
             <Plus size={13} style={{ marginRight: 4 }} />Thêm hạn mức khung
           </button>
@@ -1230,20 +1237,38 @@ export function TabHanMucNganHan() {
             Chưa có hạn mức ngắn hạn nào. Bấm "+ Thêm hạn mức khung" để bắt đầu.
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: 10, padding: 14 }}>
-            {khungList.map(khung => (
-              <KhungCard
-                key={khung.id}
-                khung={khung}
-                onSelect={() => setSelectedKhung(khung)}
-                onEdit={() => { setEditingKhung(khung); setKhungFormOpen(true) }}
-                onDelete={async () => {
-                  if (!confirm(`Xoá hạn mức ${khung.soHopDong}?`)) return
-                  try { await deleteHanMucNganHan(khung.id) }
-                  catch (e: any) { alert(e.message) }
-                }}
-              />
-            ))}
+          <div className="nh-card-body" style={{ padding: 0, overflowX: 'auto' }}>
+            <table className="nh-tbl" style={{ minWidth: 1080 }}>
+              <thead>
+                <tr>
+                  <th>Hợp đồng</th>
+                  <th>Pháp nhân</th>
+                  <th>Ngân hàng</th>
+                  <th>Hiệu lực</th>
+                  <th className="r">Tổng hạn mức</th>
+                  <th className="r">Đang sử dụng</th>
+                  <th className="r">Khả dụng</th>
+                  <th>Mức dùng</th>
+                  <th>Trạng thái</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {khungList.map(khung => (
+                  <KhungRow
+                    key={khung.id}
+                    khung={khung}
+                    onSelect={() => setSelectedKhung(khung)}
+                    onEdit={() => { setEditingKhung(khung); setKhungFormOpen(true) }}
+                    onDelete={async () => {
+                      if (!confirm(`Xoá hạn mức ${khung.soHopDong}?`)) return
+                      try { await deleteHanMucNganHan(khung.id) }
+                      catch (e: any) { alert(e.message) }
+                    }}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
