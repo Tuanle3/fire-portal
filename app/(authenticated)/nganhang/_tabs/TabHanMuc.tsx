@@ -7,6 +7,7 @@ import HopDongForm from '@/components/han-muc/HopDongForm'
 import LichTraNoTable from '@/components/han-muc/LichTraNoTable'
 import CoCauDialog from '@/components/han-muc/CoCauDialog'
 import { exportHopDongDaiHanExcel, exportDanhSachHopDongDaiHanExcel } from '@/lib/han-muc-excel-export'
+import { useDonViTien } from '@/lib/don-vi-tien-context'
 import { Pencil, Check, X, Trash2, FileSpreadsheet } from 'lucide-react'
 
 const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
@@ -152,6 +153,7 @@ function GocCungEditor({ hopDong, onSaved }: { hopDong: HopDongTinDung; onSaved:
 }
 
 export function TabHanMuc() {
+  const { fmtTien } = useDonViTien()
   const [entityFilter, setEntityFilter] = useState<'all' | EntityType>('all')
   const [hopDongs, setHopDongs]         = useState<HopDongTinDung[]>([])
   const [selected, setSelected]         = useState<HopDongTinDung | null>(null)
@@ -288,8 +290,8 @@ export function TabHanMuc() {
               ) : null
             })()}
             <div className="nh-form-grid" style={{ marginBottom: 0 }}>
-              <Stat label="Hạn mức" value={`${fmt(selected.hanMuc)} đ`} />
-              <Stat label="Giải ngân" value={`${fmt(selected.soTienGiaiNgan)} đ`} />
+              <Stat label="Hạn mức" value={fmtTien(selected.hanMuc)} />
+              <Stat label="Giải ngân" value={fmtTien(selected.soTienGiaiNgan)} />
               {selected.laiSuatLoai === 'tha-noi' ? (
                 <>
                   <Stat label="Lãi ưu đãi" value={`${selected.laiSuat}%/năm`} />
@@ -322,20 +324,20 @@ export function TabHanMuc() {
                 />
                 <PayStat
                   label="Gốc đã trả"
-                  value={`${fmt(tongGocDaTra)} đ`}
+                  value={fmtTien(tongGocDaTra)}
                   sub={`${((tongGocDaTra / selected.soTienGiaiNgan) * 100 || 0).toFixed(1)}% dư nợ gốc`}
                   color="#1C3557"
                 />
                 <PayStat
                   label="Dư nợ gốc còn lại"
-                  value={`${fmt(dunNoGocConLai)} đ`}
-                  sub={`Trên tổng ${fmt(selected.soTienGiaiNgan)} đ`}
+                  value={fmtTien(dunNoGocConLai)}
+                  sub={`Trên tổng ${fmtTien(selected.soTienGiaiNgan)}`}
                   color="#b91c1c"
                 />
                 <PayStat
                   label="Lãi đã trả"
-                  value={`${fmt(tongLaiDaTra)} đ`}
-                  sub={`Tổng đã trả: ${fmt(tongGocDaTra + tongLaiDaTra)} đ`}
+                  value={fmtTien(tongLaiDaTra)}
+                  sub={`Tổng đã trả: ${fmtTien(tongGocDaTra + tongLaiDaTra)}`}
                   color="#b45309"
                 />
               </div>
@@ -369,17 +371,17 @@ export function TabHanMuc() {
         </div>
         <div className="nh-kpi">
           <span className="nh-kpi-label">Tổng hạn mức</span>
-          <span className="nh-kpi-val">{fmt(tongHanMuc)}<span style={{ fontSize: 12 }}> đồng</span></span>
+          <span className="nh-kpi-val">{fmtTien(tongHanMuc)}</span>
           <span className="nh-kpi-sub">Trên các hợp đồng</span>
         </div>
         <div className="nh-kpi">
           <span className="nh-kpi-label">Tổng dư nợ giải ngân</span>
-          <span className="nh-kpi-val">{fmt(tongDuNo)}<span style={{ fontSize: 12 }}> đồng</span></span>
+          <span className="nh-kpi-val">{fmtTien(tongDuNo)}</span>
           <span className="nh-kpi-sub">Đã giải ngân</span>
         </div>
         <div className="nh-kpi">
           <span className="nh-kpi-label">Dư nợ gốc còn lại</span>
-          <span className="nh-kpi-val" style={{ color: '#b91c1c' }}>{fmt(tongDuNoConLai)}<span style={{ fontSize: 12 }}> đồng</span></span>
+          <span className="nh-kpi-val" style={{ color: '#b91c1c' }}>{fmtTien(tongDuNoConLai)}</span>
           <span className="nh-kpi-sub">Sau khi trừ gốc đã trả</span>
         </div>
         <div className="nh-kpi">
@@ -422,11 +424,11 @@ export function TabHanMuc() {
                 </div>
                 <div className="nh-card-body">
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 10 }}>
-                    <PayStat label="Tổng hạn mức" value={`${fmt(kd.tongHanMuc)} đ`} sub={`Hết hiệu lực: ${k.ngayDaoHan}`} color="#1C3557" />
-                    <PayStat label="Đã sử dụng" value={`${fmt(kd.daSuDung)} đ`} sub={`${kd.soBoDangVay} bộ hồ sơ đang vay`} color="#b45309" />
+                    <PayStat label="Tổng hạn mức" value={fmtTien(kd.tongHanMuc)} sub={`Hết hiệu lực: ${k.ngayDaoHan}`} color="#1C3557" />
+                    <PayStat label="Đã sử dụng" value={fmtTien(kd.daSuDung)} sub={`${kd.soBoDangVay} bộ hồ sơ đang vay`} color="#b45309" />
                     <PayStat
                       label="Khả dụng"
-                      value={`${fmt(kd.khaDung)} đ`}
+                      value={fmtTien(kd.khaDung)}
                       sub={pct >= 90 ? '⚠️ Gần chạm hạn mức' : 'Có thể giải ngân tiếp'}
                       color={pct >= 90 ? '#b91c1c' : '#15803d'}
                     />
@@ -459,9 +461,9 @@ export function TabHanMuc() {
                                 <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>{bo.soBoHoSo || bo.soHopDong}</td>
                                 <td>{bo.ngayKy}</td>
                                 <td>{bo.ngayDaoHan}</td>
-                                <td className="r">{fmt(bo.soTienGiaiNgan)}</td>
+                                <td className="r">{fmtTien(bo.soTienGiaiNgan)}</td>
                                 <td className="r" style={{ fontWeight: 700, color: duNo > 0 ? '#b91c1c' : '#15803d' }}>
-                                  {fmt(duNo)}
+                                  {fmtTien(duNo)}
                                 </td>
                                 <td><span className={`nh-badge ${HD_BADGE[bo.trangThai]}`}>{HD_LABEL[bo.trangThai]}</span></td>
                               </tr>
@@ -541,8 +543,8 @@ export function TabHanMuc() {
                     </td>
                     <td>{h.entity}</td>
                     <td>{h.nganHang}{h.chiNhanh ? ` · ${h.chiNhanh}` : ''}</td>
-                    <td className="r">{fmt(h.hanMuc)}</td>
-                    <td className="r">{fmt(h.soTienGiaiNgan)}</td>
+                    <td className="r">{fmtTien(h.hanMuc)}</td>
+                    <td className="r">{fmtTien(h.soTienGiaiNgan)}</td>
                     <td className="r">
                       {h.laiSuat}%
                       {h.laiSuatLoai === 'tha-noi' && h.laiSuatSauUuDai != null && (
@@ -564,13 +566,13 @@ export function TabHanMuc() {
                       ) : '—'}
                     </td>
                     <td className="r" style={{ whiteSpace: 'nowrap', color: '#1C3557', fontWeight: 600 }}>
-                      {ps.soKyGocDaTra > 0 ? fmt(ps.goc) : '—'}
+                      {ps.soKyGocDaTra > 0 ? fmtTien(ps.goc) : '—'}
                     </td>
                     <td className="r" style={{ whiteSpace: 'nowrap', color: '#b45309', fontWeight: 600 }}>
-                      {ps.soKyLaiDaTra > 0 ? fmt(ps.lai) : '—'}
+                      {ps.soKyLaiDaTra > 0 ? fmtTien(ps.lai) : '—'}
                     </td>
                     <td className="r" style={{ whiteSpace: 'nowrap', color: '#b91c1c', fontWeight: 700 }}>
-                      {fmt(ps.conLai)}
+                      {fmtTien(ps.conLai)}
                     </td>
                     <td>{h.ngayDaoHan}</td>
                     <td><span className={`nh-badge ${HD_BADGE[h.trangThai]}`}>{HD_LABEL[h.trangThai]}</span></td>

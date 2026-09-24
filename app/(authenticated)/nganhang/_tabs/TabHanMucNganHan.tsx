@@ -18,6 +18,7 @@ import type { BankName, EntityType } from '@/lib/han-muc-types'
 import {
   exportBoHoSoNganHanExcel, exportKhungNganHanExcel, exportDanhSachKhungNganHanExcel,
 } from '@/lib/han-muc-excel-export'
+import { useDonViTien } from '@/lib/don-vi-tien-context'
 import EntitySelect from '@/components/han-muc/EntitySelect'
 import { Pencil, Trash2, Plus, ChevronLeft, X, Check, AlertCircle, Calendar, FileSpreadsheet } from 'lucide-react'
 
@@ -575,6 +576,7 @@ interface ChiTietBoHoSoProps {
   onBack: () => void
 }
 function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
+  const { fmtTien } = useDonViTien()
   const [kyList, setKyList]         = useState<KyThuNH[]>([])
   const [traGocList, setTraGocList] = useState<TraGocGiuaKy[]>([])
   const [thuKy, setThuKy]           = useState<KyThuNH | null>(null)
@@ -632,15 +634,15 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 8, marginBottom: 14 }}>
-            <KpiCard label="Giải ngân" value={`${fmtM(bo.soTienGiaiNgan)} đ`} sub={bo.ngayGiaiNgan} />
-            <KpiCard label="Dư nợ còn lại" value={`${fmtM(duNoConLai)} đ`}
+            <KpiCard label="Giải ngân" value={fmtTien(bo.soTienGiaiNgan)} sub={bo.ngayGiaiNgan} />
+            <KpiCard label="Dư nợ còn lại" value={fmtTien(duNoConLai)}
               sub={`${((gocDaTra / bo.soTienGiaiNgan) * 100 || 0).toFixed(1)}% đã trả`}
               color={duNoConLai > 0 ? '#b91c1c' : '#15803d'} />
             <KpiCard label="Lãi suất" value={`${bo.laiSuat}%/năm`} sub={KY_TRA_LABEL[bo.kyTraLai]} />
             <KpiCard label="Đáo hạn" value={bo.ngayDaoHan}
               color={bo.trangThai === 'qua-han' ? '#b91c1c' : bo.trangThai === 'gan-dao-han' ? '#D4A64A' : undefined} />
-            <KpiCard label="Lãi đã thu" value={`${fmtM(tongLaiDaThu)} đ`} sub="Lũy kế" color="#b45309" />
-            <KpiCard label="Gốc đã trả" value={`${fmtM(gocDaTra)} đ`} sub={`${boTraGoc.length} lần giữa kỳ + kỳ thu`} />
+            <KpiCard label="Lãi đã thu" value={fmtTien(tongLaiDaThu)} sub="Lũy kế" color="#b45309" />
+            <KpiCard label="Gốc đã trả" value={fmtTien(gocDaTra)} sub={`${boTraGoc.length} lần giữa kỳ + kỳ thu`} />
           </div>
 
           {(bo.mucDichVay || bo.taiSanDamBao) && (
@@ -792,6 +794,7 @@ interface ChiTietKhungProps {
   onBack: () => void
 }
 function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
+  const { fmtTien } = useDonViTien()
   const [boList, setBoList]         = useState<BoHoSoGiaiNgan[]>([])
   const [kyThuMap, setKyThuMap]     = useState<Record<string, KyThuNH[]>>({})
   const [traGocList, setTraGocList] = useState<TraGocGiuaKy[]>([])
@@ -869,9 +872,9 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 8, marginBottom: 12 }}>
-            <KpiCard label="Tổng hạn mức"     value={`${fmtM(khaDung.tongHanMuc)} đ`}   sub="Hiện tại sau điều chỉnh" color="#1C3557" />
-            <KpiCard label="Dư nợ hiện tại"   value={`${fmtM(khaDung.duNoHienTai)} đ`}  sub={`${khaDung.soBoDangVay} bộ hồ sơ đang vay`} color="#b45309" />
-            <KpiCard label="Hạn mức khả dụng" value={`${fmtM(khaDung.khaDung)} đ`}
+            <KpiCard label="Tổng hạn mức"     value={fmtTien(khaDung.tongHanMuc)}   sub="Hiện tại sau điều chỉnh" color="#1C3557" />
+            <KpiCard label="Dư nợ hiện tại"   value={fmtTien(khaDung.duNoHienTai)}  sub={`${khaDung.soBoDangVay} bộ hồ sơ đang vay`} color="#b45309" />
+            <KpiCard label="Hạn mức khả dụng" value={fmtTien(khaDung.khaDung)}
               sub={khaDung.phanTramSuDung >= 90 ? '⚠️ Gần chạm hạn mức' : 'Có thể giải ngân tiếp'}
               color={khaDung.phanTramSuDung >= 90 ? '#b91c1c' : '#15803d'} />
             <KpiCard label="Sử dụng"          value={`${khaDung.phanTramSuDung}%`} />
@@ -938,10 +941,10 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
                       <td style={{ color: bo.trangThai === 'qua-han' ? '#b91c1c' : bo.trangThai === 'gan-dao-han' ? '#D4A64A' : undefined }}>
                         {bo.ngayDaoHan}
                       </td>
-                      <td className="r">{fmtM(bo.soTienGiaiNgan)} đ</td>
-                      <td className="r" style={{ color: '#15803d' }}>{gocDaTra > 0 ? `${fmtM(gocDaTra)} đ` : '—'}</td>
+                      <td className="r">{fmtTien(bo.soTienGiaiNgan)}</td>
+                      <td className="r" style={{ color: '#15803d' }}>{gocDaTra > 0 ? fmtTien(gocDaTra) : '—'}</td>
                       <td className="r" style={{ fontWeight: 700, color: duNo > 0 ? '#b91c1c' : '#15803d' }}>
-                        {fmtM(duNo)} đ
+                        {fmtTien(duNo)}
                       </td>
                       <td>{bo.laiSuat}%</td>
                       <td>{KY_TRA_LABEL[bo.kyTraLai]}</td>
@@ -1102,6 +1105,7 @@ interface KhungRowProps {
   onDelete: () => void
 }
 function KhungRow({ khung, onSelect, onEdit, onDelete }: KhungRowProps) {
+  const { fmtTien } = useDonViTien()
   const [boList, setBoList]         = useState<BoHoSoGiaiNgan[]>([])
   const [kyThuMap, setKyThuMap]     = useState<Record<string, KyThuNH[]>>({})
   const [traGocList, setTraGocList] = useState<TraGocGiuaKy[]>([])
@@ -1134,14 +1138,14 @@ function KhungRow({ khung, onSelect, onEdit, onDelete }: KhungRowProps) {
         {khung.ngayHieuLuc} → {khung.ngayHetHan}
       </td>
       <td className="r" style={{ fontWeight: 700, color: 'var(--nh-navy)', whiteSpace: 'nowrap' }}>
-        {fmtM(khaDung.tongHanMuc)} đ
+        {fmtTien(khaDung.tongHanMuc)}
       </td>
       <td className="r" style={{ whiteSpace: 'nowrap' }}>
-        <div style={{ fontWeight: 700, color: '#b45309' }}>{fmtM(khaDung.duNoHienTai)} đ</div>
+        <div style={{ fontWeight: 700, color: '#b45309' }}>{fmtTien(khaDung.duNoHienTai)}</div>
         <div style={{ fontSize: 10.5, color: '#6b7280' }}>{khaDung.soBoDangVay} bộ hồ sơ</div>
       </td>
       <td className="r" style={{ fontWeight: 700, whiteSpace: 'nowrap', color: khaDung.khaDung <= 0 ? '#b91c1c' : '#15803d' }}>
-        {fmtM(khaDung.khaDung)} đ
+        {fmtTien(khaDung.khaDung)}
       </td>
       <td style={{ minWidth: 110 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1170,6 +1174,7 @@ function KhungRow({ khung, onSelect, onEdit, onDelete }: KhungRowProps) {
 // MAIN TAB — Export
 // ═════════════════════════════════════════════════════════════
 export function TabHanMucNganHan() {
+  const { fmtTien } = useDonViTien()
   const [khungList, setKhungList]       = useState<HanMucNganHan[]>([])
   const [selectedKhung, setSelectedKhung] = useState<HanMucNganHan | null>(null)
   const [khungFormOpen, setKhungFormOpen] = useState(false)
@@ -1214,7 +1219,7 @@ export function TabHanMucNganHan() {
         </div>
         <div className="nh-kpi">
           <span className="nh-kpi-label">Tổng hạn mức</span>
-          <span className="nh-kpi-val">{fmtM(tongHanMuc)}<span style={{ fontSize: 12 }}> đồng</span></span>
+          <span className="nh-kpi-val">{fmtTien(tongHanMuc)}</span>
           <span className="nh-kpi-sub">Toàn bộ hạn mức khung</span>
         </div>
         {soGanHetHan > 0 && (

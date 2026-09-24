@@ -16,6 +16,8 @@
 import { useState } from 'react'
 import { TabHanMuc }         from './TabHanMuc'
 import { TabHanMucNganHan }  from './TabHanMucNganHan'
+import { DonViTienProvider } from '@/lib/don-vi-tien-context'
+import DonViTienSelect from '@/components/han-muc/DonViTienSelect'
 
 type SubTab = 'dai-han' | 'ngan-han'
 
@@ -28,45 +30,52 @@ export function TabHanMucWrapper() {
   const [activeTab, setActiveTab] = useState<SubTab>('ngan-han')
 
   return (
-    <div>
-      {/* Sub-tab switcher */}
-      <div style={{
-        display: 'flex', gap: 4, marginBottom: 16,
-        borderBottom: '2px solid #e2e8f0', paddingBottom: 0,
-      }}>
-        {TAB_ITEMS.map(tab => {
-          const isActive = activeTab === tab.key
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              style={{
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                padding: '8px 18px',
-                fontSize: 13.5,
-                fontWeight: isActive ? 700 : 500,
-                color: isActive ? 'var(--nh-navy)' : '#6b7280',
-                borderBottom: isActive ? '2px solid var(--nh-navy)' : '2px solid transparent',
-                marginBottom: -2,  // overlap border
-                transition: 'all .15s',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span>{tab.icon}</span>
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
+    <DonViTienProvider>
+      <div>
+        {/* Sub-tab switcher */}
+        <div style={{
+          display: 'flex', gap: 4, marginBottom: 16, alignItems: 'center', justifyContent: 'space-between',
+          borderBottom: '2px solid #e2e8f0', paddingBottom: 0, flexWrap: 'wrap',
+        }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {TAB_ITEMS.map(tab => {
+              const isActive = activeTab === tab.key
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    padding: '8px 18px',
+                    fontSize: 13.5,
+                    fontWeight: isActive ? 700 : 500,
+                    color: isActive ? 'var(--nh-navy)' : '#6b7280',
+                    borderBottom: isActive ? '2px solid var(--nh-navy)' : '2px solid transparent',
+                    marginBottom: -2,  // overlap border
+                    transition: 'all .15s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span>{tab.icon}</span>
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ marginBottom: 6 }}>
+            <DonViTienSelect />
+          </div>
+        </div>
 
-      {/* Tab content */}
-      {activeTab === 'dai-han'  && <TabHanMuc />}
-      {activeTab === 'ngan-han' && <TabHanMucNganHan />}
-    </div>
+        {/* Tab content */}
+        {activeTab === 'dai-han'  && <TabHanMuc />}
+        {activeTab === 'ngan-han' && <TabHanMucNganHan />}
+      </div>
+    </DonViTienProvider>
   )
 }
