@@ -1,11 +1,35 @@
 'use client'
 
 import { useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Check, X, CalendarDays, Banknote, Pencil } from 'lucide-react'
 import { markKyDaTraThucTe } from '@/lib/han-muc-store'
 import { HopDongTinDung, KyTraNo } from '@/lib/han-muc-types'
 
 const fmt = (n: number) => n.toLocaleString('vi-VN')
+
+// ── Ô nhập số tiền có dấu chấm phân cách hàng nghìn ─────────
+// Hiển thị dạng "50.000.000" trong khi gõ, nhưng value/onChange bên ngoài
+// vẫn là chuỗi số thuần (chỉ chữ số) để không đổi logic tính toán hiện có.
+function formatSoTien(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (!digits) return ''
+  return Number(digits).toLocaleString('vi-VN')
+}
+
+function SoTienInput({
+  value, onChange, style,
+}: { value: string; onChange: (v: string) => void; style?: CSSProperties }) {
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={formatSoTien(value)}
+      onChange={e => onChange(e.target.value.replace(/\D/g, ''))}
+      style={style}
+    />
+  )
+}
 
 const STATUS_STYLE: Record<KyTraNo['trangThai'], string> = {
   'chua-tra': 'bg-slate-100 text-slate-500 border border-slate-200',
@@ -135,13 +159,13 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
           <div>
             <div style={{ fontSize: 10, marginBottom: 2, color: '#1C3557', fontWeight: 600 }}>Gốc (₫)</div>
-            <input type="number" value={gocThucTra} onChange={e => setGocThucTra(e.target.value)}
+            <SoTienInput value={gocThucTra} onChange={setGocThucTra}
               style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #1C355733', borderRadius: 5, background: '#fff', color: '#1C3557' }}
             />
           </div>
           <div>
             <div style={{ fontSize: 10, marginBottom: 2, color: '#b45309', fontWeight: 600 }}>Lãi (₫)</div>
-            <input type="number" value={laiThucTra} onChange={e => setLaiThucTra(e.target.value)}
+            <SoTienInput value={laiThucTra} onChange={setLaiThucTra}
               style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #D4A64A55', borderRadius: 5, background: '#fff', color: '#b45309' }}
             />
           </div>
@@ -211,7 +235,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
           </div>
           <div style={{ marginBottom: 6 }}>
             <div style={{ fontSize: 10, marginBottom: 2, color: '#b45309', fontWeight: 600 }}>Lãi thực trả (₫)</div>
-            <input type="number" value={laiThucTra} onChange={e => setLaiThucTra(e.target.value)}
+            <SoTienInput value={laiThucTra} onChange={setLaiThucTra}
               style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #D4A64A55', borderRadius: 5, background: '#fff', color: '#b45309' }}
             />
           </div>

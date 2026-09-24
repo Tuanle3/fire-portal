@@ -212,7 +212,7 @@ export default function HopDongForm({
   }
 
   return (
-    <div className="nh-modal-overlay" onClick={onClose}>
+    <div className="nh-modal-overlay">
       <div className="nh-modal-card" onClick={e => e.stopPropagation()}>
         <div className="nh-modal-head">
           <span className="nh-modal-title">{editing ? 'Sửa hợp đồng tín dụng' : 'Thêm hợp đồng tín dụng'}</span>
