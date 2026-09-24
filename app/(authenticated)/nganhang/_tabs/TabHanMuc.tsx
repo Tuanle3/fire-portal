@@ -8,7 +8,8 @@ import LichTraNoTable from '@/components/han-muc/LichTraNoTable'
 import CoCauDialog from '@/components/han-muc/CoCauDialog'
 import { exportHopDongDaiHanExcel, exportDanhSachHopDongDaiHanExcel } from '@/lib/han-muc-excel-export'
 import { useDonViTien } from '@/lib/don-vi-tien-context'
-import { Pencil, Check, X, Trash2, FileSpreadsheet } from 'lucide-react'
+import { Pencil, Check, X, Trash2, FileSpreadsheet, ChevronDown, ChevronRight } from 'lucide-react'
+import { useFillHeight, MiniStat, fillCard } from '@/components/han-muc/FillLayout'
 
 const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 
@@ -164,6 +165,7 @@ export function TabHanMuc() {
   const [kyMap, setKyMap]               = useState<Record<string, KyTraNo[]>>({})
   const [presetKhungId, setPresetKhungId] = useState<string | undefined>(undefined)
   const [deletingId, setDeletingId]     = useState<string | null>(null)
+  const [khungOpen, setKhungOpen]       = useState(false)
 
   const handleDelete = async (h: HopDongTinDung) => {
     const label = h.soBoHoSo || h.soHopDong
@@ -236,118 +238,78 @@ export function TabHanMuc() {
   const { tongKyGoc: detailTongKyGoc, tongKyLai: detailTongKyLai } =
     selected ? calcTongKy(selected, kyList) : { tongKyGoc: 0, tongKyLai: 0 }
 
+  const { ref: fillRef, h: fillH } = useFillHeight([!!selected, khungOpen])
+  const rootStyle = { display: 'flex', flexDirection: 'column', height: fillH, gap: 8, minHeight: 0 } as const
+  const strip = { display: 'flex', flexWrap: 'wrap', gap: '8px 28px', padding: '8px 12px', borderTop: '1px solid #e2e8f0', alignItems: 'flex-start' } as const
+
   if (selected) {
+    const khungCha = selected.hanMucKhungId ? hopDongs.find(h => h.id === selected.hanMucKhungId) : undefined
+    const kdCha    = khungCha ? khaDungMap[khungCha.id] : null
     return (
-      <div>
-        <div className="nh-card">
-          <div className="nh-card-head">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className="btn-ghost" onClick={() => setSelected(null)} style={{ fontSize: 12, padding: '5px 10px' }}>
-                ← Quay lại
-              </button>
-              <span className="nh-card-title">{selected.soHopDong}</span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              {/* ── Widget gốc cứng ── */}
-              <GocCungEditor
-                hopDong={selected}
-                onSaved={() => {/* Firestore listener tự refresh */}}
-              />
-              <button className="btn-ghost" onClick={() => { setEditing(selected); setFormOpen(true) }}>Sửa hợp đồng</button>
-              <button className="btn-ghost" onClick={() => exportHopDongDaiHanExcel(selected, kyList)}>
-                <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
-                Xuất Excel
-              </button>
-              <button className="btn-primary" onClick={() => setCoCauOpen(true)}>↻ Cơ cấu nợ</button>
-              <button
-                className="btn-danger"
-                disabled={deletingId === selected.id}
-                onClick={() => handleDelete(selected)}
-                title="Xoá hợp đồng"
-              >
-                <Trash2 size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
-                {deletingId === selected.id ? 'Đang xoá...' : 'Xoá hợp đồng'}
-              </button>
-            </div>
-          </div>
-          <div className="nh-card-body">
-            <div style={{ fontSize: 11.5, color: 'var(--nh-muted)', marginBottom: 10 }}>
+      <div ref={fillRef} style={rootStyle}>
+        {/* ── Header cố định: tiêu đề + chỉ số ── */}
+        <div className="nh-card" style={{ marginBottom: 0, flex: '0 0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', flexWrap: 'wrap' }}>
+            <button className="btn-ghost" onClick={() => setSelected(null)} style={{ fontSize: 12, padding: '4px 10px' }}>← Quay lại</button>
+            <span className="nh-card-title">{selected.soBoHoSo || selected.soHopDong}</span>
+            <span className={`nh-badge ${HD_BADGE[selected.trangThai]}`}>{HD_LABEL[selected.trangThai]}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--nh-muted)' }}>
               {selected.entity} · {selected.nganHang}{selected.chiNhanh ? ` · ${selected.chiNhanh}` : ''}
               {selected.nguoiVay ? ` · ${selected.nguoiVay}` : ''}
+            </span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <GocCungEditor hopDong={selected} onSaved={() => {/* Firestore listener tự refresh */}} />
+              <button className="btn-ghost" style={{ padding: '4px 10px' }} onClick={() => { setEditing(selected); setFormOpen(true) }}>Sửa hợp đồng</button>
+              <button className="btn-ghost" style={{ padding: '4px 10px' }} onClick={() => exportHopDongDaiHanExcel(selected, kyList)}>
+                <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Xuất Excel
+              </button>
+              <button className="btn-primary" style={{ padding: '4px 12px' }} onClick={() => setCoCauOpen(true)}>↻ Cơ cấu nợ</button>
+              <button className="btn-danger" style={{ padding: '4px 10px' }} disabled={deletingId === selected.id}
+                onClick={() => handleDelete(selected)} title="Xoá hợp đồng">
+                <Trash2 size={13} style={{ marginRight: 4, verticalAlign: -2 }} />{deletingId === selected.id ? 'Đang xoá...' : 'Xoá'}
+              </button>
             </div>
-
-            {selected.hanMucKhungId && (() => {
-              const khung = hopDongs.find(h => h.id === selected.hanMucKhungId)
-              const kd    = khung ? khaDungMap[khung.id] : null
-              return khung ? (
-                <div style={{
-                  fontSize: 11.5, color: '#92600a', background: '#fffbf0',
-                  border: '1px solid #D4A64A55', borderRadius: 6, padding: '6px 10px', marginBottom: 10,
-                }}>
-                  🏦 Bộ hồ sơ giải ngân thuộc hạn mức khung <b>{khung.soHopDong}</b>
-                  {kd && ` · khả dụng hiện tại: ${fmt(kd.khaDung)} đ / ${fmt(kd.tongHanMuc)} đ`}
-                </div>
-              ) : null
-            })()}
-            <div className="nh-form-grid" style={{ marginBottom: 0 }}>
-              <Stat label="Hạn mức" value={fmtTien(selected.hanMuc)} />
-              <Stat label="Giải ngân" value={fmtTien(selected.soTienGiaiNgan)} />
-              {selected.laiSuatLoai === 'tha-noi' ? (
-                <>
-                  <Stat label="Lãi ưu đãi" value={`${selected.laiSuat}%/năm`} />
-                  <Stat label="Số tháng ưu đãi" value={`${selected.soThangUuDai} tháng`} />
-                  <Stat label="Lãi sau ưu đãi" value={`${selected.laiSuatSauUuDai}%/năm (thả nổi)`} />
-                </>
-              ) : (
-                <Stat label="Lãi suất" value={`${selected.laiSuat}%/năm (cố định)`} />
-              )}
-              <Stat label="Kỳ trả" value={selected.kyTra === 'monthly' ? 'Hàng tháng' : 'Hàng quý'} />
-              <Stat label="Đáo hạn" value={selected.ngayDaoHan} />
-              <Stat label="Trạng thái" badge={<span className={`nh-badge ${HD_BADGE[selected.trangThai]}`}>{HD_LABEL[selected.trangThai]}</span>} />
-              {selected.gocTraCoDinh && (
-                <Stat label="Gốc cứng/kỳ (NH)" value={`${fmt(selected.gocTraCoDinh)} đ`} />
-              )}
-            </div>
-
-            {kyList.length > 0 && (
-              <div style={{
-                marginTop: 14,
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                gap: 8,
-              }}>
-                <PayStat
-                  label="Số kỳ đã trả"
-                  value={`Gốc: ${soKyGocDaTra} / ${detailTongKyGoc}`}
-                  sub={`Lãi: ${soKyLaiDaTra} / ${detailTongKyLai} kỳ${kyConLai > 0 ? ` · còn ${kyConLai}` : ' · hết'}`}
-                  color="#1C3557"
-                />
-                <PayStat
-                  label="Gốc đã trả"
-                  value={fmtTien(tongGocDaTra)}
-                  sub={`${((tongGocDaTra / selected.soTienGiaiNgan) * 100 || 0).toFixed(1)}% dư nợ gốc`}
-                  color="#1C3557"
-                />
-                <PayStat
-                  label="Dư nợ gốc còn lại"
-                  value={fmtTien(dunNoGocConLai)}
-                  sub={`Trên tổng ${fmtTien(selected.soTienGiaiNgan)}`}
-                  color="#b91c1c"
-                />
-                <PayStat
-                  label="Lãi đã trả"
-                  value={fmtTien(tongLaiDaTra)}
-                  sub={`Tổng đã trả: ${fmtTien(tongGocDaTra + tongLaiDaTra)}`}
-                  color="#b45309"
-                />
-              </div>
-            )}
           </div>
+
+          {khungCha && (
+            <div style={{ fontSize: 11.5, color: '#92600a', background: '#fffbf0', borderTop: '1px solid #D4A64A55', padding: '5px 12px' }}>
+              🏦 Bộ hồ sơ giải ngân thuộc hạn mức khung <b>{khungCha.soHopDong}</b>
+              {kdCha && ` · khả dụng: ${fmt(kdCha.khaDung)} đ / ${fmt(kdCha.tongHanMuc)} đ`}
+            </div>
+          )}
+
+          <div style={strip}>
+            <MiniStat label="Hạn mức" value={fmtTien(selected.hanMuc)} />
+            <MiniStat label="Giải ngân" value={fmtTien(selected.soTienGiaiNgan)} />
+            {selected.laiSuatLoai === 'tha-noi' ? (
+              <>
+                <MiniStat label="Lãi ưu đãi" value={`${selected.laiSuat}%/năm`} sub={`${selected.soThangUuDai} tháng`} />
+                <MiniStat label="Lãi sau ưu đãi" value={`${selected.laiSuatSauUuDai}%/năm`} sub="thả nổi" />
+              </>
+            ) : (
+              <MiniStat label="Lãi suất" value={`${selected.laiSuat}%/năm`} sub="cố định" />
+            )}
+            <MiniStat label="Kỳ trả" value={selected.kyTra === 'monthly' ? 'Hàng tháng' : 'Hàng quý'} />
+            <MiniStat label="Đáo hạn" value={selected.ngayDaoHan} />
+            {selected.gocTraCoDinh && <MiniStat label="Gốc cứng/kỳ (NH)" value={`${fmt(selected.gocTraCoDinh)} đ`} />}
+          </div>
+
+          {kyList.length > 0 && (
+            <div style={{ ...strip, background: '#f8fafc' }}>
+              <MiniStat label="Số kỳ đã trả" value={`Gốc ${soKyGocDaTra}/${detailTongKyGoc}`}
+                sub={`Lãi ${soKyLaiDaTra}/${detailTongKyLai}${kyConLai > 0 ? ` · còn ${kyConLai}` : ' · hết'}`} color="#1C3557" />
+              <MiniStat label="Gốc đã trả" value={fmtTien(tongGocDaTra)}
+                sub={`${((tongGocDaTra / selected.soTienGiaiNgan) * 100 || 0).toFixed(1)}% dư nợ gốc`} color="#1C3557" />
+              <MiniStat label="Dư nợ gốc còn lại" value={fmtTien(dunNoGocConLai)} color="#b91c1c" />
+              <MiniStat label="Lãi đã trả" value={fmtTien(tongLaiDaTra)} sub={`Tổng đã trả ${fmtTien(tongGocDaTra + tongLaiDaTra)}`} color="#b45309" />
+            </div>
+          )}
         </div>
 
-        <div className="nh-card">
-          <div className="nh-card-body" style={{ padding: 0 }}>
-            <LichTraNoTable hopDong={selected} rows={kyList} />
+        {/* ── Lịch trả nợ: chỉ vùng này cuộn ── */}
+        <div className="nh-card" style={fillCard}>
+          <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
+            <LichTraNoTable hopDong={selected} rows={kyList} fill />
           </div>
         </div>
 
@@ -361,43 +323,47 @@ export function TabHanMuc() {
     )
   }
 
+  // Tổng cộng cho dòng cuối bảng (chỉ HĐ vay thật, không tính khung — khớp KPI)
+  const tot = nonKhungList.reduce((a, h) => {
+    const ps = getPayStats(kyMap[h.id], h)
+    a.gn += h.soTienGiaiNgan; a.goc += ps.goc; a.lai += ps.lai; a.con += ps.conLai
+    return a
+  }, { gn: 0, goc: 0, lai: 0, con: 0 })
+  const khungTong = khungList.reduce((a, k) => {
+    const kd = khaDungMap[k.id]
+    if (kd) { a.hm += kd.tongHanMuc; a.dung += kd.daSuDung; a.kha += kd.khaDung }
+    return a
+  }, { hm: 0, dung: 0, kha: 0 })
+
   return (
-    <div>
-      <div className="nh-kpi-row">
-        <div className="nh-kpi">
-          <span className="nh-kpi-label">Số hợp đồng</span>
-          <span className="nh-kpi-val">{hopDongs.length}</span>
-          <span className="nh-kpi-sub">Đang theo dõi</span>
-        </div>
-        <div className="nh-kpi">
-          <span className="nh-kpi-label">Tổng hạn mức</span>
-          <span className="nh-kpi-val">{fmtTien(tongHanMuc)}</span>
-          <span className="nh-kpi-sub">Trên các hợp đồng</span>
-        </div>
-        <div className="nh-kpi">
-          <span className="nh-kpi-label">Tổng dư nợ giải ngân</span>
-          <span className="nh-kpi-val">{fmtTien(tongDuNo)}</span>
-          <span className="nh-kpi-sub">Đã giải ngân</span>
-        </div>
-        <div className="nh-kpi">
-          <span className="nh-kpi-label">Dư nợ gốc còn lại</span>
-          <span className="nh-kpi-val" style={{ color: '#b91c1c' }}>{fmtTien(tongDuNoConLai)}</span>
-          <span className="nh-kpi-sub">Sau khi trừ gốc đã trả</span>
-        </div>
-        <div className="nh-kpi">
-          <span className="nh-kpi-label">Lãi suất bình quân</span>
-          <span className="nh-kpi-val" style={{ color: soQuaHan > 0 ? '#8C1F1F' : undefined }}>
-            {laiSuatBQ.toFixed(2)}%
-          </span>
-          <span className="nh-kpi-sub">{soQuaHan > 0 ? `${soQuaHan} hợp đồng quá hạn` : 'Trung bình các HĐ'}</span>
+    <div ref={fillRef} style={rootStyle}>
+      {/* ── Chỉ số tổng quan (1 dải gọn) ── */}
+      <div className="nh-card" style={{ marginBottom: 0, flex: '0 0 auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 36px', padding: '8px 14px', alignItems: 'center' }}>
+          <MiniStat label="Số hợp đồng" value={hopDongs.length} sub="Đang theo dõi" />
+          <MiniStat label="Tổng hạn mức" value={fmtTien(tongHanMuc)} sub="Trên các hợp đồng" color="#1C3557" />
+          <MiniStat label="Tổng dư nợ giải ngân" value={fmtTien(tongDuNo)} sub="Đã giải ngân" />
+          <MiniStat label="Dư nợ gốc còn lại" value={fmtTien(tongDuNoConLai)} sub="Sau khi trừ gốc đã trả" color="#b91c1c" />
+          <MiniStat label="Lãi suất bình quân" value={`${laiSuatBQ.toFixed(2)}%`}
+            sub={soQuaHan > 0 ? `${soQuaHan} hợp đồng quá hạn` : 'Trung bình các HĐ'} color={soQuaHan > 0 ? '#8C1F1F' : undefined} />
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════
-          HẠN MỨC KHUNG — giải ngân theo bộ hồ sơ
-      ══════════════════════════════════════════ */}
       {khungList.length > 0 && (
-        <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
+        <div className="nh-card" style={{ marginBottom: 0, flex: '0 0 auto' }}>
+          <button
+            onClick={() => setKhungOpen(o => !o)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', border: 'none', background: '#fff', cursor: 'pointer', textAlign: 'left', flexWrap: 'wrap' }}
+          >
+            {khungOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--nh-navy)' }}>🏦 Hạn mức khung ({khungList.length})</span>
+            <span style={{ fontSize: 12, color: 'var(--nh-muted)' }}>
+              Tổng {fmtTien(khungTong.hm)} · Đã dùng <b style={{ color: '#b45309' }}>{fmtTien(khungTong.dung)}</b> · Khả dụng <b style={{ color: '#15803d' }}>{fmtTien(khungTong.kha)}</b>
+            </span>
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--nh-muted)' }}>{khungOpen ? 'Thu gọn' : 'Mở rộng'}</span>
+          </button>
+          {khungOpen && (
+        <div style={{ display: 'grid', gap: 10, padding: 10, borderTop: '1px solid #e2e8f0', maxHeight: '42vh', overflow: 'auto' }}>
           {khungList.map(k => {
             const kd = khaDungMap[k.id] ?? { tongHanMuc: k.hanMuc, daSuDung: 0, khaDung: k.hanMuc, soBoDangVay: 0 }
             const pct = kd.tongHanMuc > 0 ? Math.min(100, Math.round((kd.daSuDung / kd.tongHanMuc) * 100)) : 0
@@ -478,10 +444,12 @@ export function TabHanMuc() {
             )
           })}
         </div>
+          )}
+        </div>
       )}
 
-      <div className="nh-card">
-        <div className="nh-card-head">
+      <div className="nh-card" style={fillCard}>
+        <div className="nh-card-head" style={{ flex: '0 0 auto' }}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {ENTITY_TABS.map(t => (
               <button
@@ -506,9 +474,9 @@ export function TabHanMuc() {
             <button className="btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }}>+ Thêm hợp đồng</button>
           </div>
         </div>
-        <div className="nh-card-body" style={{ padding: 0, overflowX: 'auto' }}>
+        <div className="nh-card-body nhp-stick" style={{ padding: 0, flex: '1 1 0', minHeight: 0, overflow: 'auto' }}>
           <table className="nh-tbl" style={{ minWidth: 1100 }}>
-            <thead style={{ position: 'sticky', top: 0, zIndex: 20 }}>
+            <thead>
               <tr>
                 <th>Số hợp đồng</th>
                 <th>Pháp nhân</th>
@@ -594,20 +562,32 @@ export function TabHanMuc() {
                 <tr><td colSpan={13} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 24 }}>Chưa có hợp đồng tín dụng nào.</td></tr>
               )}
             </tbody>
+            {hopDongs.length > 0 && (
+              <tfoot>
+                <tr>
+                  <td colSpan={3} style={{ textAlign: 'right', color: 'var(--nh-muted)', paddingRight: 12 }}>
+                    Tổng cộng ({nonKhungList.length} hợp đồng vay{khungList.length > 0 ? ` · ${khungList.length} khung` : ''})
+                  </td>
+                  <td className="r" style={{ whiteSpace: 'nowrap' }}>{fmtTien(tongHanMuc)}</td>
+                  <td className="r" style={{ whiteSpace: 'nowrap' }}>{fmtTien(tot.gn)}</td>
+                  <td className="r">{laiSuatBQ.toFixed(2)}%<div style={{ fontSize: 10, fontWeight: 400, color: 'var(--nh-muted)' }}>bình quân</div></td>
+                  <td></td>
+                  <td className="r" style={{ whiteSpace: 'nowrap', color: '#1C3557' }}>{fmtTien(tot.goc)}</td>
+                  <td className="r" style={{ whiteSpace: 'nowrap', color: '#b45309' }}>{fmtTien(tot.lai)}</td>
+                  <td className="r" style={{ whiteSpace: 'nowrap', color: '#b91c1c' }}>{fmtTien(tot.con)}</td>
+                  <td colSpan={3}></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
 
-      <HopDongForm key={editing?.id ?? 'new'} open={formOpen} onClose={() => { setFormOpen(false); setEditing(null) }} editing={editing} />
-    </div>
-  )
-}
-
-function Stat({ label, value, badge }: { label: string; value?: string; badge?: React.ReactNode }) {
-  return (
-    <div>
-      <span className="nh-label">{label}</span>
-      {badge ?? <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--nh-txt)' }}>{value}</div>}
+      <HopDongForm
+        key={editing?.id ?? 'new'} open={formOpen}
+        onClose={() => { setFormOpen(false); setEditing(null); setPresetKhungId(undefined) }}
+        editing={editing} khungList={khungList} khaDungMap={khaDungMap} presetHanMucKhungId={presetKhungId}
+      />
     </div>
   )
 }

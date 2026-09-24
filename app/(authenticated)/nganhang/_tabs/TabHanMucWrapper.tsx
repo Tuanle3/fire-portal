@@ -18,6 +18,7 @@ import { TabHanMuc }         from './TabHanMuc'
 import { TabHanMucNganHan }  from './TabHanMucNganHan'
 import { DonViTienProvider } from '@/lib/don-vi-tien-context'
 import DonViTienSelect from '@/components/han-muc/DonViTienSelect'
+import { FillStyles } from '@/components/han-muc/FillLayout'
 
 type SubTab = 'dai-han' | 'ngan-han'
 
@@ -32,9 +33,10 @@ export function TabHanMucWrapper() {
   return (
     <DonViTienProvider>
       <div>
+        <FillStyles />
         {/* Sub-tab switcher */}
         <div style={{
-          display: 'flex', gap: 4, marginBottom: 16, alignItems: 'center', justifyContent: 'space-between',
+          display: 'flex', gap: 4, marginBottom: 8, alignItems: 'center', justifyContent: 'space-between',
           borderBottom: '2px solid #e2e8f0', paddingBottom: 0, flexWrap: 'wrap',
         }}>
           <div style={{ display: 'flex', gap: 4 }}>

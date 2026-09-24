@@ -89,9 +89,21 @@ function groupByQuarter(rows: KyTraNo[], hasStub: boolean): { stub: KyTraNo | nu
 interface Props {
   hopDong: HopDongTinDung
   rows: KyTraNo[]
+  /** true: bảng lấp đầy khung cha (cha phải `position: relative` + có chiều cao) —
+   *  tiêu đề dính trên, dòng tổng dính dưới, cuộn ngay trong khung.
+   *  false (mặc định): giữ kiểu cũ (tự giới hạn chiều cao theo cửa sổ). */
+  fill?: boolean
 }
 
-export default function LichTraNoTable({ hopDong, rows }: Props) {
+// Khung cuộn khi ở chế độ fill
+const FILL_WRAP: CSSProperties = { position: 'absolute', inset: 0, overflow: 'auto' }
+// Dòng tổng cộng dính đáy
+const TF_CELL: CSSProperties = {
+  position: 'sticky', bottom: 0, zIndex: 20, background: '#eef2f7',
+  boxShadow: '0 -1px 0 #cbd5e1', padding: '10px 14px', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap',
+}
+
+export default function LichTraNoTable({ hopDong, rows, fill }: Props) {
   const isLaiThangGocQuy = hopDong.kyTra === 'monthly' && hopDong.kyTraGoc === 'quarterly'
 
   const [markingId, setMarkingId]     = useState<string | null>(null)
@@ -128,6 +140,15 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
     const d = (ky.gocThucTra + (ky.laiThucTra ?? 0)) - ky.tongTra
     return d === 0 ? null : d
   }
+
+  // ── Tổng cộng cả lịch (kế hoạch) + đã trả thực tế ─────────────
+  const sumGoc  = rows.reduce((a, k) => a + k.gocTra, 0)
+  const sumLai  = rows.reduce((a, k) => a + k.laiTra, 0)
+  const sumTong = rows.reduce((a, k) => a + k.tongTra, 0)
+  const paid    = rows.filter(k => k.trangThai === 'da-tra')
+  const paidGoc = paid.reduce((a, k) => a + (k.gocThucTra ?? k.gocTra), 0)
+  const paidLai = paid.reduce((a, k) => a + (k.laiThucTra ?? k.laiTra), 0)
+  const paidTxt = `Đã trả: gốc ${fmt(paidGoc)} · lãi ${fmt(paidLai)}`
 
   const toggleQuy = (soQuy: number) => {
     setExpandedQuy(prev => {
@@ -301,7 +322,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
     const totalQuarters = groups.length
 
     return (
-      <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)', width: '100%', position: 'relative' }}>
+      <div style={fill ? FILL_WRAP : { overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)', width: '100%', position: 'relative' }}>
         <table style={{ width: '100%', minWidth: 1500, borderCollapse: 'collapse', fontSize: 12 }}>
           <colgroup>
             <col style={{ width: '14%' }} />
@@ -572,6 +593,19 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
               </tr>
             )}
           </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr>
+                <td colSpan={3} style={{ ...TF_CELL, textAlign: 'right', color: '#6b7280', paddingRight: 14 }}>
+                  Tổng cộng ({totalQuarters} quý · {rows.length} kỳ lãi)
+                </td>
+                <td style={{ ...TF_CELL, textAlign: 'right', color: '#1C3557', fontVariantNumeric: 'tabular-nums' }}>{fmt(sumGoc)}</td>
+                <td style={{ ...TF_CELL, textAlign: 'right', color: '#b45309', fontVariantNumeric: 'tabular-nums' }}>{fmt(sumLai)}</td>
+                <td style={{ ...TF_CELL, textAlign: 'right', color: '#111', fontVariantNumeric: 'tabular-nums' }}>{fmt(sumTong)}</td>
+                <td colSpan={3} style={{ ...TF_CELL, textAlign: 'right', fontWeight: 600, fontSize: 11.5, color: '#047857' }}>{paidTxt}</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     )
@@ -581,7 +615,7 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
   // CHẾ ĐỘ THÔNG THƯỜNG (monthly / quarterly đồng nhất)
   // ════════════════════════════════════════════════════════════
   return (
-    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)', position: 'relative' }}>
+    <div style={fill ? FILL_WRAP : { overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)', position: 'relative' }}>
       <table className="w-full text-sm" style={{ minWidth: 1080 }}>
         <thead>
           <tr style={{ background: 'var(--nh-navy, #1C3557)', color: '#fff' }}>
@@ -665,6 +699,21 @@ export default function LichTraNoTable({ hopDong, rows }: Props) {
             </tr>
           )}
         </tbody>
+        {rows.length > 0 && (
+          <tfoot>
+            <tr>
+              <td colSpan={3} style={{ ...TF_CELL, textAlign: 'right', color: '#6b7280', paddingRight: 16 }}>
+                Tổng cộng ({rows.length} kỳ)
+              </td>
+              <td style={{ ...TF_CELL, textAlign: 'right', fontVariantNumeric: 'tabular-nums', paddingRight: 16 }}>
+                <div style={{ color: '#1C3557' }}>{fmt(sumGoc)}</div>
+                <div style={{ color: '#D4A64A', fontSize: 11.5 }}>{fmt(sumLai)}</div>
+              </td>
+              <td style={{ ...TF_CELL, textAlign: 'right', color: '#111', fontVariantNumeric: 'tabular-nums', paddingRight: 16 }}>{fmt(sumTong)}</td>
+              <td colSpan={3} style={{ ...TF_CELL, textAlign: 'right', fontWeight: 600, fontSize: 11.5, color: '#047857' }}>{paidTxt}</td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   )

@@ -20,6 +20,7 @@ import {
 } from '@/lib/han-muc-excel-export'
 import { useDonViTien } from '@/lib/don-vi-tien-context'
 import EntitySelect from '@/components/han-muc/EntitySelect'
+import { useFillHeight, stickyTh, stickyTf, fillCard, MiniStat } from '@/components/han-muc/FillLayout'
 import { Pencil, Trash2, Plus, ChevronLeft, X, Check, AlertCircle, Calendar, FileSpreadsheet } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────
@@ -66,37 +67,6 @@ const fmtVndInput = (v: string) => {
 const todayStr = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-// ─── Layout: khung tự chiếm hết chiều cao còn lại của màn hình ──
-// Tiêu đề/toolbar cố định, chỉ vùng bảng cuộn.
-function useFillHeight(deps: unknown[] = []) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [h, setH] = useState<number | undefined>(undefined)
-  useEffect(() => {
-    const calc = () => {
-      if (!ref.current) return
-      const top = ref.current.getBoundingClientRect().top
-      setH(Math.max(420, window.innerHeight - top - 14))
-    }
-    calc()
-    const t = setTimeout(calc, 60)   // đo lại sau khi layout ổn định
-    window.addEventListener('resize', calc)
-    return () => { clearTimeout(t); window.removeEventListener('resize', calc) }
-  }, deps)  // eslint-disable-line react-hooks/exhaustive-deps
-  return { ref, h }
-}
-const stickyTh: React.CSSProperties = { position: 'sticky', top: 0, zIndex: 3, background: '#eef2f7', boxShadow: '0 1px 0 #cbd5e1' }
-const stickyTf: React.CSSProperties = { position: 'sticky', bottom: 0, zIndex: 3, background: '#eef2f7', boxShadow: '0 -1px 0 #cbd5e1' }
-
-function MiniStat({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
-  return (
-    <div style={{ minWidth: 120 }}>
-      <div style={{ fontSize: 10, color: 'var(--nh-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
-      <div style={{ fontSize: 14.5, fontWeight: 700, color: color ?? 'var(--nh-txt)', lineHeight: 1.25 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10.5, color: 'var(--nh-muted)' }}>{sub}</div>}
-    </div>
-  )
 }
 
 // ─── Reusable UI atoms ────────────────────────────────────────
@@ -632,110 +602,86 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
   }, [khung.tongHanMuc, duNoConLai])
 
   const sortedKy = useMemo(() => [...kyList].sort((a, b) => a.ngayThu.localeCompare(b.ngayThu)), [kyList])
+  const { ref: fillRef, h: fillH } = useFillHeight([boTraGoc.length])
 
   return (
-    <div>
-      <div className="nh-card">
-        <div className="nh-card-head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button className="btn-ghost" onClick={onBack} style={{ fontSize: 12, padding: '5px 10px' }}>
-              <ChevronLeft size={13} style={{ marginRight: 3 }} />Quay lại
-            </button>
-            <span className="nh-card-title">{bo.soBoHoSo}</span>
-            <Badge cls={BADGE_BO[bo.trangThai]} label={LABEL_BO[bo.trangThai]} />
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+    <div ref={fillRef} style={{ display: 'flex', flexDirection: 'column', height: fillH, gap: 8, minHeight: 0 }}>
+      {/* ── Header cố định ── */}
+      <div className="nh-card" style={{ marginBottom: 0, flex: '0 0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', flexWrap: 'wrap' }}>
+          <button className="btn-ghost" onClick={onBack} style={{ fontSize: 12, padding: '4px 10px' }}>
+            <ChevronLeft size={13} style={{ marginRight: 3 }} />Quay lại
+          </button>
+          <span className="nh-card-title">{bo.soBoHoSo}</span>
+          <Badge cls={BADGE_BO[bo.trangThai]} label={LABEL_BO[bo.trangThai]} />
+          <span style={{ fontSize: 11.5, color: 'var(--nh-muted)' }}>
+            🏦 {khung.soHopDong} · {khung.entity} · {khung.nganHang}{khung.chiNhanh ? ` · ${khung.chiNhanh}` : ''}
+          </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {bo.trangThai !== 'tat-toan' && duNoConLai > 0 && (
-              <button className="btn-ghost" onClick={() => setTraGocOpen(true)} style={{ fontSize: 12 }}>
-                💳 Trả gốc giữa kỳ
-              </button>
+              <button className="btn-ghost" onClick={() => setTraGocOpen(true)} style={{ fontSize: 12, padding: '4px 10px' }}>💳 Trả gốc giữa kỳ</button>
             )}
-            <button className="btn-ghost" onClick={() => setEditOpen(true)}>Sửa bộ hồ sơ</button>
-            <button className="btn-ghost" onClick={() => exportBoHoSoNganHanExcel(bo, khung, kyList, boTraGoc)}>
-              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
-              Xuất Excel
+            <button className="btn-ghost" style={{ padding: '4px 10px' }} onClick={() => setEditOpen(true)}>Sửa bộ hồ sơ</button>
+            <button className="btn-ghost" style={{ padding: '4px 10px' }} onClick={() => exportBoHoSoNganHanExcel(bo, khung, kyList, boTraGoc)}>
+              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Xuất Excel
             </button>
           </div>
         </div>
 
-        <div className="nh-card-body">
-          <div style={{ fontSize: 11.5, color: 'var(--nh-muted)', marginBottom: 12 }}>
-            🏦 {khung.soHopDong} · {khung.entity} · {khung.nganHang}
-            {khung.chiNhanh ? ` · ${khung.chiNhanh}` : ''}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 8, marginBottom: 14 }}>
-            <KpiCard label="Giải ngân" value={fmtTien(bo.soTienGiaiNgan)} sub={bo.ngayGiaiNgan} />
-            <KpiCard label="Dư nợ còn lại" value={fmtTien(duNoConLai)}
-              sub={`${((gocDaTra / bo.soTienGiaiNgan) * 100 || 0).toFixed(1)}% đã trả`}
-              color={duNoConLai > 0 ? '#b91c1c' : '#15803d'} />
-            <KpiCard label="Lãi suất" value={`${bo.laiSuat}%/năm`} sub={KY_TRA_LABEL[bo.kyTraLai]} />
-            <KpiCard label="Đáo hạn" value={bo.ngayDaoHan}
-              color={bo.trangThai === 'qua-han' ? '#b91c1c' : bo.trangThai === 'gan-dao-han' ? '#D4A64A' : undefined} />
-            <KpiCard label="Lãi đã thu" value={fmtTien(tongLaiDaThu)} sub="Lũy kế" color="#b45309" />
-            <KpiCard label="Gốc đã trả" value={fmtTien(gocDaTra)} sub={`${boTraGoc.length} lần giữa kỳ + kỳ thu`} />
-          </div>
-
-          {(bo.mucDichVay || bo.taiSanDamBao) && (
-            <div style={{ display: 'flex', gap: 16, fontSize: 12.5, color: '#374151', marginBottom: 14, flexWrap: 'wrap' }}>
-              {bo.mucDichVay   && <span><b>Mục đích:</b> {bo.mucDichVay}</span>}
-              {bo.taiSanDamBao && <span><b>TSĐB:</b> {bo.taiSanDamBao}</span>}
-              {bo.ghiChu       && <span><b>Ghi chú:</b> {bo.ghiChu}</span>}
-            </div>
-          )}
-
-          {/* Lịch trả gốc giữa kỳ */}
-          {boTraGoc.length > 0 && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--nh-muted)', marginBottom: 6 }}>
-                Trả gốc giữa kỳ ({boTraGoc.length} lần)
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {boTraGoc.map(t => (
-                  <div key={t.id} style={{
-                    fontSize: 12, background: '#f0fdf4', border: '1px solid #bbf7d0',
-                    borderRadius: 6, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 8,
-                  }}>
-                    <span>{t.ngayTra}</span>
-                    <b style={{ color: '#15803d' }}>{fmtM(t.soTienGoc)} đ</b>
-                    {t.ghiChu && <span style={{ color: '#6b7280' }}>({t.ghiChu})</span>}
-                    <button
-                      onClick={async () => {
-                        if (!confirm('Xoá khoản trả gốc này?')) return
-                        await deleteTraGocGiuaKy(t.id, t.hanMucId, t.boHoSoId)
-                      }}
-                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', padding: 0 }}
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 28px', padding: '8px 12px', borderTop: '1px solid #e2e8f0' }}>
+          <MiniStat label="Giải ngân" value={fmtTien(bo.soTienGiaiNgan)} sub={bo.ngayGiaiNgan} />
+          <MiniStat label="Dư nợ còn lại" value={fmtTien(duNoConLai)}
+            sub={`${((gocDaTra / bo.soTienGiaiNgan) * 100 || 0).toFixed(1)}% đã trả`} color={duNoConLai > 0 ? '#b91c1c' : '#15803d'} />
+          <MiniStat label="Lãi suất" value={`${bo.laiSuat}%/năm`} sub={KY_TRA_LABEL[bo.kyTraLai]} />
+          <MiniStat label="Đáo hạn" value={bo.ngayDaoHan}
+            color={bo.trangThai === 'qua-han' ? '#b91c1c' : bo.trangThai === 'gan-dao-han' ? '#D4A64A' : undefined} />
+          <MiniStat label="Lãi đã thu" value={fmtTien(tongLaiDaThu)} sub="Lũy kế" color="#b45309" />
+          <MiniStat label="Gốc đã trả" value={fmtTien(gocDaTra)} sub={`${boTraGoc.length} lần giữa kỳ + kỳ thu`} />
         </div>
+
+        {(bo.mucDichVay || bo.taiSanDamBao || bo.ghiChu || boTraGoc.length > 0) && (
+          <div style={{ display: 'flex', gap: '4px 16px', fontSize: 12, color: '#374151', padding: '6px 12px', borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', alignItems: 'center', maxHeight: 84, overflow: 'auto' }}>
+            {bo.mucDichVay   && <span><b>Mục đích:</b> {bo.mucDichVay}</span>}
+            {bo.taiSanDamBao && <span><b>TSĐB:</b> {bo.taiSanDamBao}</span>}
+            {bo.ghiChu       && <span><b>Ghi chú:</b> {bo.ghiChu}</span>}
+            {boTraGoc.map(t => (
+              <span key={t.id} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                💳 {t.ngayTra} · <b style={{ color: '#15803d' }}>{fmtM(t.soTienGoc)} đ</b>{t.ghiChu && <span style={{ color: '#6b7280' }}>({t.ghiChu})</span>}
+                <button
+                  onClick={async () => {
+                    if (!confirm('Xoá khoản trả gốc này?')) return
+                    await deleteTraGocGiuaKy(t.id, t.hanMucId, t.boHoSoId)
+                  }}
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', padding: 0 }}
+                ><X size={11} /></button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Lịch kỳ thu */}
-      <div className="nh-card">
-        <div className="nh-card-head">
+      {/* ── Lịch kỳ thu: chỉ vùng bảng cuộn ── */}
+      <div className="nh-card" style={fillCard}>
+        <div className="nh-card-head" style={{ flex: '0 0 auto' }}>
           <span className="nh-card-title" style={{ fontSize: 14 }}>Lịch thu lãi & gốc</span>
-          <span style={{ fontSize: 12, color: 'var(--nh-muted)' }}>{kyList.length} kỳ</span>
+          <span style={{ fontSize: 12, color: 'var(--nh-muted)' }}>
+            {kyList.length} kỳ · Đã thu {kyList.filter(k => k.trangThai === 'da-thu').length}/{kyList.length}
+          </span>
         </div>
-        <div className="nh-card-body" style={{ padding: 0, overflowX: 'auto' }}>
-          <table className="nh-tbl" style={{ minWidth: 660 }}>
+        <div style={{ flex: '1 1 0', minHeight: 0, overflow: 'auto' }}>
+          <table className="nh-tbl" style={{ minWidth: 700, borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}>
             <thead>
               <tr>
-                <th>Kỳ</th>
-                <th>Ngày thu</th>
-                <th>Loại</th>
-                <th className="r">Dư nợ đầu kỳ</th>
-                <th className="r">Gốc thu</th>
-                <th className="r">Lãi thu</th>
-                <th className="r">Tổng thu</th>
-                <th className="r">Dư nợ cuối kỳ</th>
-                <th>Trạng thái</th>
-                <th></th>
+                <th style={stickyTh}>Kỳ</th>
+                <th style={stickyTh}>Ngày thu</th>
+                <th style={stickyTh}>Loại</th>
+                <th className="r" style={stickyTh}>Dư nợ đầu kỳ</th>
+                <th className="r" style={stickyTh}>Gốc thu</th>
+                <th className="r" style={stickyTh}>Lãi thu</th>
+                <th className="r" style={stickyTh}>Tổng thu</th>
+                <th className="r" style={stickyTh}>Dư nợ cuối kỳ</th>
+                <th style={stickyTh}>Trạng thái</th>
+                <th style={stickyTh}></th>
               </tr>
             </thead>
             <tbody>
@@ -806,6 +752,17 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
                 <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 24 }}>Chưa có kỳ thu</td></tr>
               )}
             </tbody>
+            {sortedKy.length > 0 && (
+              <tfoot>
+                <tr>
+                  <td colSpan={4} style={{ ...stickyTf, textAlign: 'right', color: 'var(--nh-muted)', paddingRight: 12 }}>Tổng cộng ({sortedKy.length} kỳ):</td>
+                  <td className="r" style={{ ...stickyTf, color: '#b91c1c' }}>{fmt(sortedKy.reduce((a, k) => a + k.gocThu, 0))}</td>
+                  <td className="r" style={{ ...stickyTf, color: '#b45309' }}>{fmt(sortedKy.reduce((a, k) => a + k.laiThu, 0))}</td>
+                  <td className="r" style={{ ...stickyTf, color: 'var(--nh-navy)' }}>{fmt(sortedKy.reduce((a, k) => a + k.tongThu, 0))}</td>
+                  <td colSpan={3} style={stickyTf}></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
@@ -1173,8 +1130,9 @@ interface KhungRowProps {
   onSelect: () => void
   onEdit:   () => void
   onDelete: () => void
+  onStats?: (id: string, k: KhaDungSnapshot) => void
 }
-function KhungRow({ khung, onSelect, onEdit, onDelete }: KhungRowProps) {
+function KhungRow({ khung, onSelect, onEdit, onDelete, onStats }: KhungRowProps) {
   const { fmtTien } = useDonViTien()
   const [boList, setBoList]         = useState<BoHoSoGiaiNgan[]>([])
   const [kyThuMap, setKyThuMap]     = useState<Record<string, KyThuNH[]>>({})
@@ -1189,6 +1147,7 @@ function KhungRow({ khung, onSelect, onEdit, onDelete }: KhungRowProps) {
   }, [khung.id, boList.map(b => b.id).join(',')])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const khaDung  = useMemo(() => tinhKhaDung(khung, boList, kyThuMap, traGocList), [khung, boList, kyThuMap, traGocList])
+  useEffect(() => { onStats?.(khung.id, khaDung) }, [khaDung])  // eslint-disable-line react-hooks/exhaustive-deps
   const kyQuaHan = useMemo(() => Object.values(kyThuMap).flat().filter(k => k.trangThai === 'qua-han' || k.trangThai === 'gan-han').length, [kyThuMap])
   const pctColor = khaDung.phanTramSuDung >= 90 ? '#b91c1c' : khaDung.phanTramSuDung >= 70 ? '#D4A64A' : '#15803d'
 
@@ -1250,6 +1209,8 @@ export function TabHanMucNganHan() {
   const [khungFormOpen, setKhungFormOpen] = useState(false)
   const [editingKhung, setEditingKhung]   = useState<HanMucNganHan | null>(null)
   const [entityFilter, setEntityFilter]   = useState<'all' | EntityType>('all')
+  const [statsMap, setStatsMap]           = useState<Record<string, KhaDungSnapshot>>({})
+  const { ref: fillRef, h: fillH }         = useFillHeight([!!selectedKhung, khungList.length === 0])
 
   useEffect(() => subscribeHanMucNganHan(setKhungList, entityFilter), [entityFilter])
 
@@ -1278,32 +1239,26 @@ export function TabHanMucNganHan() {
   const soConHieuLuc = khungList.filter(k => k.trangThai === 'con-hieu-luc' || k.trangThai === 'gan-het-han').length
   const soGanHetHan  = khungList.filter(k => k.trangThai === 'gan-het-han').length
 
+  const tongDuNo = khungList.reduce((x, k) => x + (statsMap[k.id]?.duNoHienTai ?? 0), 0)
+  const tongKha  = khungList.reduce((x, k) => x + (statsMap[k.id]?.khaDung ?? 0), 0)
+  const pctChung = tongHanMuc > 0 ? Math.round((tongDuNo / tongHanMuc) * 100) : 0
+
   return (
-    <div>
-      {/* KPI */}
-      <div className="nh-kpi-row">
-        <div className="nh-kpi">
-          <span className="nh-kpi-label">Số hạn mức khung</span>
-          <span className="nh-kpi-val">{khungList.length}</span>
-          <span className="nh-kpi-sub">{soConHieuLuc} còn hiệu lực</span>
+    <div ref={fillRef} style={{ display: 'flex', flexDirection: 'column', height: fillH, gap: 8, minHeight: 0 }}>
+      {/* ── Chỉ số tổng quan (1 dải gọn) ── */}
+      <div className="nh-card" style={{ marginBottom: 0, flex: '0 0 auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 36px', padding: '8px 14px', alignItems: 'center' }}>
+          <MiniStat label="Số hạn mức khung" value={khungList.length} sub={`${soConHieuLuc} còn hiệu lực`} />
+          <MiniStat label="Tổng hạn mức" value={fmtTien(tongHanMuc)} color="#1C3557" />
+          <MiniStat label="Đang sử dụng" value={fmtTien(tongDuNo)} sub={`${pctChung}% tổng hạn mức`} color="#b45309" />
+          <MiniStat label="Khả dụng" value={fmtTien(tongKha)} color="#15803d" />
+          {soGanHetHan > 0 && <MiniStat label="⚠️ Gần hết hạn" value={soGanHetHan} sub="Còn ≤ 30 ngày" color="#D4A64A" />}
         </div>
-        <div className="nh-kpi">
-          <span className="nh-kpi-label">Tổng hạn mức</span>
-          <span className="nh-kpi-val">{fmtTien(tongHanMuc)}</span>
-          <span className="nh-kpi-sub">Toàn bộ hạn mức khung</span>
-        </div>
-        {soGanHetHan > 0 && (
-          <div className="nh-kpi" style={{ borderColor: '#fde68a' }}>
-            <span className="nh-kpi-label" style={{ color: '#D4A64A' }}>⚠️ Gần hết hạn</span>
-            <span className="nh-kpi-val" style={{ color: '#D4A64A' }}>{soGanHetHan}</span>
-            <span className="nh-kpi-sub">Còn ≤ 30 ngày</span>
-          </div>
-        )}
       </div>
 
-      {/* Danh sách hạn mức khung */}
-      <div className="nh-card">
-        <div className="nh-card-head">
+      {/* ── Danh sách hạn mức khung: toolbar cố định, bảng cuộn ── */}
+      <div className="nh-card" style={fillCard}>
+        <div className="nh-card-head" style={{ flex: '0 0 auto' }}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {ENTITY_TABS.map(t => (
               <button
@@ -1317,13 +1272,8 @@ export function TabHanMucNganHan() {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              className="btn-ghost"
-              disabled={khungList.length === 0}
-              onClick={() => exportDanhSachKhungNganHanExcel(khungList)}
-            >
-              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
-              Xuất Excel
+            <button className="btn-ghost" disabled={khungList.length === 0} onClick={() => exportDanhSachKhungNganHanExcel(khungList)}>
+              <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Xuất Excel
             </button>
             <button className="btn-primary" onClick={() => { setEditingKhung(null); setKhungFormOpen(true) }}>
               <Plus size={13} style={{ marginRight: 4 }} />Thêm hạn mức khung
@@ -1336,20 +1286,20 @@ export function TabHanMucNganHan() {
             Chưa có hạn mức ngắn hạn nào. Bấm "+ Thêm hạn mức khung" để bắt đầu.
           </div>
         ) : (
-          <div className="nh-card-body" style={{ padding: 0, overflowX: 'auto' }}>
-            <table className="nh-tbl" style={{ minWidth: 1080 }}>
+          <div style={{ flex: '1 1 0', minHeight: 0, overflow: 'auto' }}>
+            <table className="nh-tbl" style={{ minWidth: 1080, borderCollapse: 'separate', borderSpacing: 0, width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Hợp đồng</th>
-                  <th>Pháp nhân</th>
-                  <th>Ngân hàng</th>
-                  <th>Hiệu lực</th>
-                  <th className="r">Tổng hạn mức</th>
-                  <th className="r">Đang sử dụng</th>
-                  <th className="r">Khả dụng</th>
-                  <th>Mức dùng</th>
-                  <th>Trạng thái</th>
-                  <th>Thao tác</th>
+                  <th style={stickyTh}>Hợp đồng</th>
+                  <th style={stickyTh}>Pháp nhân</th>
+                  <th style={stickyTh}>Ngân hàng</th>
+                  <th style={stickyTh}>Hiệu lực</th>
+                  <th className="r" style={stickyTh}>Tổng hạn mức</th>
+                  <th className="r" style={stickyTh}>Đang sử dụng</th>
+                  <th className="r" style={stickyTh}>Khả dụng</th>
+                  <th style={stickyTh}>Mức dùng</th>
+                  <th style={stickyTh}>Trạng thái</th>
+                  <th style={stickyTh}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -1359,6 +1309,7 @@ export function TabHanMucNganHan() {
                     khung={khung}
                     onSelect={() => setSelectedKhung(khung)}
                     onEdit={() => { setEditingKhung(khung); setKhungFormOpen(true) }}
+                    onStats={(id, k) => setStatsMap(prev => (prev[id] === k ? prev : { ...prev, [id]: k }))}
                     onDelete={async () => {
                       if (!confirm(`Xoá hạn mức ${khung.soHopDong}?`)) return
                       try { await deleteHanMucNganHan(khung.id) }
@@ -1367,6 +1318,16 @@ export function TabHanMucNganHan() {
                   />
                 ))}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={4} style={{ ...stickyTf, textAlign: 'right', color: 'var(--nh-muted)', paddingRight: 12, fontWeight: 700 }}>Tổng cộng ({khungList.length} hạn mức):</td>
+                  <td className="r" style={{ ...stickyTf, fontWeight: 700, color: 'var(--nh-navy)', whiteSpace: 'nowrap' }}>{fmtTien(tongHanMuc)}</td>
+                  <td className="r" style={{ ...stickyTf, fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>{fmtTien(tongDuNo)}</td>
+                  <td className="r" style={{ ...stickyTf, fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap' }}>{fmtTien(tongKha)}</td>
+                  <td style={{ ...stickyTf, fontWeight: 700 }}>{pctChung}%</td>
+                  <td colSpan={2} style={stickyTf}></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
