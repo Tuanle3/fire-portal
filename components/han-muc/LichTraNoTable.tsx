@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Check, X, CalendarDays, Banknote, Pencil } from 'lucide-react'
-import { markKyDaTraThucTe } from '@/lib/han-muc-store'
+import { markKyDaTraThucTe, goiYLaiThucThu } from '@/lib/han-muc-store'
 import { HopDongTinDung, KyTraNo } from '@/lib/han-muc-types'
 
 const fmt = (n: number) => n.toLocaleString('vi-VN')
@@ -111,23 +111,51 @@ export default function LichTraNoTable({ hopDong, rows, fill }: Props) {
   const [gocThucTra, setGocThucTra]   = useState('')
   const [laiThucTra, setLaiThucTra]   = useState('')
   const [saving, setSaving]           = useState(false)
+  // Gốc & lãi thu khác ngày trong cùng kỳ — mặc định TẮT (gộp 1 ô ngày như cũ,
+  // áp dụng phần lớn trường hợp thu cùng ngày); bật lên khi cần tách 2 ô ngày.
+  const [khacNgay, setKhacNgay]             = useState(false)
+  const [ngayThucTraGoc, setNgayThucTraGoc] = useState('')
+  const [ngayThucTraLai, setNgayThucTraLai] = useState('')
+  // Lãi ở ô "Lãi (₫)" đã được người dùng tự sửa tay sau khi có gợi ý chưa —
+  // nếu chưa sửa tay thì mới tự động cập nhật gợi ý khi đổi ngày/gốc.
+  const [laiTuSua, setLaiTuSua]             = useState(false)
   // Quý đang mở rộng (null = tất cả thu gọn nếu muốn; hiện để expand theo click)
   const [expandedQuy, setExpandedQuy] = useState<Set<number>>(new Set())
 
   const startMark = (ky: KyTraNo) => {
     setMarkingId(ky.id)
     const daTra = ky.trangThai === 'da-tra'
-    setNgayThucTra(daTra && ky.ngayThucTra ? ky.ngayThucTra : new Date().toISOString().slice(0, 10))
+    const homNay = new Date().toISOString().slice(0, 10)
+    setNgayThucTra(daTra && ky.ngayThucTra ? ky.ngayThucTra : homNay)
     setGocThucTra(String(daTra && ky.gocThucTra != null ? ky.gocThucTra : ky.gocTra))
     setLaiThucTra(String(daTra && ky.laiThucTra != null ? ky.laiThucTra : ky.laiTra))
+    // Nếu kỳ này trước đó đã lưu 2 ngày khác nhau → mở sẵn chế độ tách ngày
+    const daTachNgay = daTra && !!ky.ngayThucTraGoc && !!ky.ngayThucTraLai && ky.ngayThucTraGoc !== ky.ngayThucTraLai
+    setKhacNgay(daTachNgay)
+    setNgayThucTraGoc(daTachNgay ? ky.ngayThucTraGoc! : (daTra && ky.ngayThucTra ? ky.ngayThucTra : homNay))
+    setNgayThucTraLai(daTachNgay ? ky.ngayThucTraLai! : (daTra && ky.ngayThucTra ? ky.ngayThucTra : homNay))
+    setLaiTuSua(false)
+  }
+
+  // ── Gợi ý lại "Lãi (₫)" khi bật tách ngày và ngày thu gốc / số gốc đổi ──
+  // Chỉ auto-cập nhật nếu người dùng CHƯA tự sửa tay ô lãi sau khi có gợi ý.
+  const capNhatGoiYLai = (hopDongArg: HopDongTinDung, kyArg: KyTraNo, ngayGocMoi: string, gocMoi: string) => {
+    if (laiTuSua) return
+    const goc = Number(gocMoi) || 0
+    if (!ngayGocMoi) return
+    const goiY = goiYLaiThucThu(hopDongArg, kyArg, rows, ngayGocMoi, goc)
+    setLaiThucTra(String(goiY))
   }
 
   const confirmMark = async (ky: KyTraNo) => {
     setSaving(true)
     try {
+      const coLech = khacNgay && ngayThucTraGoc && ngayThucTraLai && ngayThucTraGoc !== ngayThucTraLai
       await markKyDaTraThucTe(
-        hopDong, ky, rows, ngayThucTra,
+        hopDong, ky, rows,
+        coLech ? ngayThucTraGoc : ngayThucTra,
         Number(gocThucTra) || 0, Number(laiThucTra) || 0,
+        coLech ? { ngayThucTraGoc, ngayThucTraLai } : undefined,
       )
       setMarkingId(null)
     } finally {
@@ -167,30 +195,92 @@ export default function LichTraNoTable({ hopDong, rows, fill }: Props) {
         borderRadius: 8, padding: '10px 10px 8px',
         minWidth: 200, textAlign: 'left',
       }}>
-        <div style={{ marginBottom: 6 }}>
-          <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <CalendarDays size={10} /> Ngày thực trả
+        {!khacNgay ? (
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <CalendarDays size={10} /> Ngày thực trả
+            </div>
+            <input
+              type="date" value={ngayThucTra}
+              onChange={e => {
+                setNgayThucTra(e.target.value)
+                setNgayThucTraGoc(e.target.value)
+                setNgayThucTraLai(e.target.value)
+              }}
+              style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #d1d5db', borderRadius: 5, background: '#fff', color: '#111' }}
+            />
           </div>
-          <input
-            type="date" value={ngayThucTra}
-            onChange={e => setNgayThucTra(e.target.value)}
-            style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #d1d5db', borderRadius: 5, background: '#fff', color: '#111' }}
-          />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 4 }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#1C3557', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                <CalendarDays size={10} /> Ngày thu gốc
+              </div>
+              <input
+                type="date" value={ngayThucTraGoc}
+                onChange={e => {
+                  setNgayThucTraGoc(e.target.value)
+                  capNhatGoiYLai(hopDong, ky, e.target.value, gocThucTra)
+                }}
+                style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #1C355733', borderRadius: 5, background: '#fff', color: '#111' }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: '#b45309', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                <CalendarDays size={10} /> Ngày thu lãi
+              </div>
+              <input
+                type="date" value={ngayThucTraLai}
+                onChange={e => setNgayThucTraLai(e.target.value)}
+                style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #D4A64A55', borderRadius: 5, background: '#fff', color: '#111' }}
+              />
+            </div>
+          </div>
+        )}
+        <div style={{ marginBottom: 6 }}>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !khacNgay
+              setKhacNgay(next)
+              if (next) {
+                // Bật tách ngày: khởi tạo 2 ô = ngày hiện tại đang có, và gợi ý lại lãi
+                setNgayThucTraGoc(ngayThucTra)
+                setNgayThucTraLai(ngayThucTra)
+                setLaiTuSua(false)
+                capNhatGoiYLai(hopDong, ky, ngayThucTra, gocThucTra)
+              } else {
+                // Tắt tách ngày: gộp về 1 ngày (lấy ngày thu gốc làm ngày chung)
+                setNgayThucTra(ngayThucTraGoc || ngayThucTra)
+              }
+            }}
+            style={{ fontSize: 10.5, color: '#2563eb', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            {khacNgay ? '✕ Gộp lại 1 ngày' : 'Gốc & lãi thu khác ngày'}
+          </button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
           <div>
             <div style={{ fontSize: 10, marginBottom: 2, color: '#1C3557', fontWeight: 600 }}>Gốc (₫)</div>
-            <SoTienInput value={gocThucTra} onChange={setGocThucTra}
+            <SoTienInput value={gocThucTra} onChange={v => {
+              setGocThucTra(v)
+              if (khacNgay) capNhatGoiYLai(hopDong, ky, ngayThucTraGoc, v)
+            }}
               style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #1C355733', borderRadius: 5, background: '#fff', color: '#1C3557' }}
             />
           </div>
           <div>
             <div style={{ fontSize: 10, marginBottom: 2, color: '#b45309', fontWeight: 600 }}>Lãi (₫)</div>
-            <SoTienInput value={laiThucTra} onChange={setLaiThucTra}
+            <SoTienInput value={laiThucTra} onChange={v => { setLaiThucTra(v); setLaiTuSua(true) }}
               style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #D4A64A55', borderRadius: 5, background: '#fff', color: '#b45309' }}
             />
           </div>
         </div>
+        {khacNgay && (
+          <div style={{ fontSize: 10, color: '#2563eb', marginBottom: 6, lineHeight: 1.4 }}>
+            ℹ Lãi đã gợi ý tính tách 2 đoạn theo ngày thu gốc — có thể sửa tay nếu cần.
+          </div>
+        )}
         <div style={{ fontSize: 11, background: '#1C355710', borderRadius: 5, padding: '4px 8px', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: '#6b7280' }}>Tổng:</span>
           <span style={{ fontWeight: 700, color: '#1C3557' }}>{fmt((Number(gocThucTra) || 0) + (Number(laiThucTra) || 0))} ₫</span>
@@ -218,13 +308,17 @@ export default function LichTraNoTable({ hopDong, rows, fill }: Props) {
   const renderAction = (ky: KyTraNo) => {
     const isDaTra   = ky.trangThai === 'da-tra'
     const isMarking = markingId === ky.id
-    if (isDaTra && !isMarking) return (
-      <button onClick={() => startMark(ky)}
-        style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#fff', color: '#475569', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-        title="Sửa ngày/số tiền đã trả thực tế">
-        <Pencil size={12} /> {ky.ngayThucTra}
-      </button>
-    )
+    if (isDaTra && !isMarking) {
+      const coLech = !!ky.ngayThucTraGoc && !!ky.ngayThucTraLai && ky.ngayThucTraGoc !== ky.ngayThucTraLai
+      return (
+        <button onClick={() => startMark(ky)}
+          style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#fff', color: '#475569', cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          title={coLech ? `Gốc: ${ky.ngayThucTraGoc} · Lãi: ${ky.ngayThucTraLai}` : 'Sửa ngày/số tiền đã trả thực tế'}>
+          <Pencil size={12} />
+          {coLech ? <span>G:{ky.ngayThucTraGoc} · L:{ky.ngayThucTraLai}</span> : ky.ngayThucTra}
+        </button>
+      )
+    }
     if (isMarking) return renderMarkForm(ky)
     return (
       <button onClick={() => startMark(ky)}

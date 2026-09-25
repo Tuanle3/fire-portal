@@ -94,7 +94,10 @@ export interface KyTraNo {
   tongTra:         number
   dunNoCuoiKy:     number
   trangThai:       TrangThaiKy
-  ngayThucTra?:    string
+  ngayThucTra?:    string   // ngày thực trả chung (giữ để tương thích code cũ) — khi gốc/lãi
+                            // thu khác ngày, đây là ngày MUỘN HƠN trong 2 ngày (dùng để hiển thị/so hạn)
+  ngayThucTraGoc?: string   // ISO date — ngày thu GỐC thực tế, chỉ set khi khác ngày thu lãi
+  ngayThucTraLai?: string   // ISO date — ngày thu LÃI thực tế, chỉ set khi khác ngày thu gốc
   soTienThucTra?:  number
   gocThucTra?:     number   // gốc thực trả — có thể lệch với gocTra kế hoạch
   laiThucTra?:     number   // lãi thực trả — có thể lệch với laiTra kế hoạch

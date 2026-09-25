@@ -324,7 +324,62 @@ function laiSuatChoKy(hd: HopDongTinDung, ngayTraKy: Date): number {
   return soThangDaTrai > hd.soThangUuDai ? hd.laiSuatSauUuDai : hd.laiSuat
 }
 
+// ── Ngày thu gốc/lãi khác nhau trong cùng 1 kỳ ──────────────
+export interface NgayThuLechInfo {
+  ngayThucTraGoc: string   // ISO date — ngày dư nợ thực sự giảm
+  ngayThucTraLai: string   // ISO date — ngày ghi nhận thu lãi (không ảnh hưởng công thức)
+}
+
+// ── Tính lãi 1 kỳ khi dư nợ giảm GIỮA kỳ (thu gốc trước hạn) ──
+// Tách 2 đoạn theo đúng số ngày dư nợ còn hiệu lực:
+//   đoạn 1: dunNoDauKy      × lãi suất × số ngày [đầu kỳ → ngày thu gốc]
+//   đoạn 2: (dunNoDauKy-gốc)× lãi suất × số ngày [ngày thu gốc → cuối kỳ]
+// Nếu ngày thu gốc nằm ngoài khoảng [đầu kỳ, cuối kỳ] thì tự kẹp về biên
+// (kết quả suy biến về đúng công thức 1 đoạn như cũ).
+export function tinhLaiTachDoanTheoNgay(
+  hd: HopDongTinDung,
+  dunNoDauKy: number,
+  gocThucTra: number,
+  periodStart: Date,
+  ngayThuGoc: Date,
+  periodEnd: Date,
+): number {
+  const mocGoc = new Date(Math.min(Math.max(ngayThuGoc.getTime(), periodStart.getTime()), periodEnd.getTime()))
+  const soNgay1 = Math.max(0, daysDiff(periodStart, mocGoc))
+  const soNgay2 = Math.max(0, daysDiff(mocGoc, periodEnd))
+  const lsNam1  = laiSuatChoKy(hd, mocGoc) / 100
+  const lsNam2  = laiSuatChoKy(hd, periodEnd) / 100
+  const doan1   = dunNoDauKy * lsNam1 * (soNgay1 / 365)
+  const doan2   = Math.max(0, dunNoDauKy - gocThucTra) * lsNam2 * (soNgay2 / 365)
+  return Math.round(doan1 + doan2)
+}
+
+/** Tìm ngày bắt đầu kỳ (= ngày trả kế hoạch của kỳ liền trước, hoặc ngày ký HĐ
+ *  nếu đây là kỳ đầu tiên) — dùng làm mốc đầu cho tính lãi tách đoạn. */
+function ngayBatDauKy(hopDong: HopDongTinDung, ky: KyTraNo, allKy: KyTraNo[]): Date {
+  const kyTruoc = allKy.find(k => k.soKy === ky.soKy - 1)
+  return kyTruoc ? parseDate(kyTruoc.ngayTra) : parseDate(hopDong.ngayKy)
+}
+
+/** Gợi ý số lãi thực thu của 1 kỳ khi gốc được thu vào 1 ngày cụ thể giữa kỳ
+ *  (dùng cho UI: auto-fill ô "Lãi thực thu" ngay khi người dùng nhập ngày thu
+ *  gốc/số gốc — người dùng vẫn có thể sửa tay lại sau đó). */
+export function goiYLaiThucThu(
+  hopDong: HopDongTinDung,
+  ky: KyTraNo,
+  allKy: KyTraNo[],
+  ngayThuGoc: string,
+  gocThucTra: number,
+): number {
+  const periodStart = ngayBatDauKy(hopDong, ky, allKy)
+  const periodEnd    = parseDate(ky.ngayTra)
+  return tinhLaiTachDoanTheoNgay(hopDong, ky.dunNoDauKy, gocThucTra, periodStart, parseDate(ngayThuGoc), periodEnd)
+}
+
 // ── Đánh dấu kỳ đã trả VỚI gốc/lãi thực tế + tự tính lại các kỳ sau ──
+// ngayLech (tuỳ chọn): truyền vào khi ngày thu GỐC khác ngày thu LÃI trong
+// cùng kỳ này — khi đó laiThucTra nên là số đã tính tách đoạn (goiYLaiThucThu),
+// nhưng hàm này không tự tính lại nếu người dùng đã sửa tay.
 export async function markKyDaTraThucTe(
   hopDong: HopDongTinDung,
   kyHienTai: KyTraNo,
@@ -332,24 +387,42 @@ export async function markKyDaTraThucTe(
   ngayThucTra: string,
   gocThucTra: number,
   laiThucTra: number,
+  ngayLech?: NgayThuLechInfo,
 ): Promise<void> {
   await ensureTasksAuth()
   const batch = writeBatch(db())
 
+  // Ngày "chung" hiển thị/lưu ở ngayThucTra: khi 2 ngày khác nhau, lấy ngày
+  // MUỘN HƠN (thời điểm kỳ coi như đã thu xong hoàn toàn) để không phá các
+  // chỗ code khác đang so hạn/hiển thị dựa trên field cũ ngayThucTra.
+  const ngayThucTraLuu = ngayLech
+    ? (ngayLech.ngayThucTraGoc > ngayLech.ngayThucTraLai ? ngayLech.ngayThucTraGoc : ngayLech.ngayThucTraLai)
+    : ngayThucTra
+
   batch.set(doc(kyCol(hopDong.id), kyHienTai.id), {
     trangThai: 'da-tra',
-    ngayThucTra,
+    ngayThucTra: ngayThucTraLuu,
+    ...(ngayLech
+      ? { ngayThucTraGoc: ngayLech.ngayThucTraGoc, ngayThucTraLai: ngayLech.ngayThucTraLai }
+      // Sửa lại về "1 ngày chung" sau khi trước đó đã từng tách ngày → xoá 2 field lệch
+      : { ngayThucTraGoc: deleteField(), ngayThucTraLai: deleteField() }),
     gocThucTra,
     laiThucTra,
     soTienThucTra: gocThucTra + laiThucTra,
     updatedAt: Date.now(),
   }, { merge: true })
 
-  // Tính lại các kỳ sau (dư nợ thay đổi nếu gốc thực khác kế hoạch)
+  // Tính lại các kỳ sau (dư nợ thay đổi nếu gốc thực khác kế hoạch).
+  // Lưu ý: KHÔNG loại các kỳ đã "đã trả" ra khỏi vòng tính lại — chỉ vậy mới
+  // đảm bảo dư nợ đầu kỳ của các kỳ sau (kể cả kỳ đã lỡ đánh dấu trả trước đó,
+  // ví dụ do nhập/test dữ liệu không theo đúng thứ tự thời gian) luôn khớp với
+  // dư nợ thực tế sau khi gốc kỳ này thay đổi. Việc này chỉ cập nhật các cột
+  // KẾ HOẠCH (dunNoDauKy/gocTra/laiTra/tongTra/dunNoCuoiKy), không đụng tới số
+  // tiền đã thực thu (gocThucTra/laiThucTra/soTienThucTra) của các kỳ đó.
   const gocLech = gocThucTra - kyHienTai.gocTra
   if (gocLech !== 0) {
     const cacKySau = allKy
-      .filter(k => k.soKy > kyHienTai.soKy && k.trangThai !== 'da-tra')
+      .filter(k => k.soKy > kyHienTai.soKy)
       .sort((a, b) => a.soKy - b.soKy)
 
     let dunNo = kyHienTai.dunNoCuoiKy - gocLech
