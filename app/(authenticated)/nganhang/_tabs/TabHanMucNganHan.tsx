@@ -426,22 +426,38 @@ function ThuKyDialog({ ky, onClose }: ThuKyDialogProps) {
   const [laiStr, setLaiStr] = useState('')
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')
+  // Gốc & lãi thu khác ngày trong cùng kỳ — mặc định TẮT (gộp 1 ô ngày như cũ)
+  const [khacNgay, setKhacNgay]     = useState(false)
+  const [ngayGoc, setNgayGoc]       = useState('')
+  const [ngayLai, setNgayLai]       = useState('')
 
   useEffect(() => {
     if (!ky) return
-    setNgay(todayStr())
+    const homNay = todayStr()
+    setNgay(homNay)
     setGocStr(ky.gocThu ? ky.gocThu.toLocaleString('vi-VN') : '0')
     setLaiStr(ky.laiThu ? ky.laiThu.toLocaleString('vi-VN') : '0')
+    const daTachNgay = !!ky.ngayThucThuGoc && !!ky.ngayThucThuLai && ky.ngayThucThuGoc !== ky.ngayThucThuLai
+    setKhacNgay(daTachNgay)
+    setNgayGoc(daTachNgay ? ky.ngayThucThuGoc! : homNay)
+    setNgayLai(daTachNgay ? ky.ngayThucThuLai! : homNay)
     setErr('')
   }, [ky?.id])
 
   if (!ky) return null
 
   const handleSave = async () => {
-    if (!ngay) return setErr('Nhập ngày thu thực tế')
+    const coLech = khacNgay && ngayGoc && ngayLai && ngayGoc !== ngayLai
+    if (!coLech && !ngay)            return setErr('Nhập ngày thu thực tế')
+    if (coLech && (!ngayGoc || !ngayLai)) return setErr('Nhập đủ ngày thu gốc và ngày thu lãi')
     setSaving(true)
     try {
-      await markKyThuDaThu(ky.hanMucId, ky.boHoSoId, ky.id, ngay, parseVnd(gocStr), parseVnd(laiStr))
+      await markKyThuDaThu(
+        ky.hanMucId, ky.boHoSoId, ky.id,
+        coLech ? ngayGoc : ngay,
+        parseVnd(gocStr), parseVnd(laiStr),
+        coLech ? { ngayThucThuGoc: ngayGoc, ngayThucThuLai: ngayLai } : undefined,
+      )
       onClose()
     } catch (e: any) { setErr(e.message) }
     finally { setSaving(false) }
@@ -466,10 +482,35 @@ function ThuKyDialog({ ky, onClose }: ThuKyDialogProps) {
         {err && <Alert msg={err} />}
 
         <div style={{ display: 'grid', gap: 10 }}>
-          <div>
-            <label style={{ fontSize: 11.5, color: 'var(--nh-muted)', fontWeight: 500 }}>Ngày thu thực tế *</label>
-            <input type="date" value={ngay} onChange={e => setNgay(e.target.value)} style={{ ...inputBaseCls, marginTop: 3 }} />
-          </div>
+          {!khacNgay ? (
+            <div>
+              <label style={{ fontSize: 11.5, color: 'var(--nh-muted)', fontWeight: 500 }}>Ngày thu thực tế *</label>
+              <input type="date" value={ngay} onChange={e => setNgay(e.target.value)} style={{ ...inputBaseCls, marginTop: 3 }} />
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <label style={{ fontSize: 11.5, color: '#1C3557', fontWeight: 600 }}>Ngày thu gốc *</label>
+                <input type="date" value={ngayGoc} onChange={e => setNgayGoc(e.target.value)} style={{ ...inputBaseCls, marginTop: 3, border: '1px solid #1C355733' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11.5, color: '#b45309', fontWeight: 600 }}>Ngày thu lãi *</label>
+                <input type="date" value={ngayLai} onChange={e => setNgayLai(e.target.value)} style={{ ...inputBaseCls, marginTop: 3, border: '1px solid #D4A64A55' }} />
+              </div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !khacNgay
+              setKhacNgay(next)
+              if (next) { setNgayGoc(ngay); setNgayLai(ngay) }
+              else      { setNgay(ngayGoc || ngay) }
+            }}
+            style={{ fontSize: 11, color: '#2563eb', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline', textAlign: 'left' }}
+          >
+            {khacNgay ? '✕ Gộp lại 1 ngày' : 'Gốc & lãi thu khác ngày'}
+          </button>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
               <label style={{ fontSize: 11.5, color: 'var(--nh-muted)', fontWeight: 500 }}>Gốc thực thu (đ)</label>
@@ -695,7 +736,11 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
                     <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>#{k.soKy}</td>
                     <td>
                       {k.ngayThu}
-                      {isDaThu && k.ngayThucThu && k.ngayThucThu !== k.ngayThu && (
+                      {isDaThu && k.ngayThucThuGoc && k.ngayThucThuLai && k.ngayThucThuGoc !== k.ngayThucThuLai ? (
+                        <div style={{ fontSize: 10, color: '#6b7280' }}>
+                          <span style={{ color: '#1C3557' }}>G:{k.ngayThucThuGoc}</span> · <span style={{ color: '#b45309' }}>L:{k.ngayThucThuLai}</span>
+                        </div>
+                      ) : isDaThu && k.ngayThucThu && k.ngayThucThu !== k.ngayThu && (
                         <div style={{ fontSize: 10, color: '#6b7280' }}>thực: {k.ngayThucThu}</div>
                       )}
                     </td>

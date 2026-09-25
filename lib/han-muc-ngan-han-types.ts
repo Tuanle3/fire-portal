@@ -122,6 +122,9 @@ export interface KyThuNH {
   gocThucThu?:    number
   laiThucThu?:    number
   tongThucThu?:   number
+  // Chỉ có khi gốc & lãi thu KHÁC ngày trong cùng kỳ (ngược lại dùng chung ngayThucThu)
+  ngayThucThuGoc?: string
+  ngayThucThuLai?: string
 }
 
 // ─────────────────────────────────────────────────────────

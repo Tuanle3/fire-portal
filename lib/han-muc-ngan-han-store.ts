@@ -472,6 +472,9 @@ export async function markKyThuDaThu(
   ngayThucThu: string,
   gocThucThu:  number,
   laiThucThu:  number,
+  // Truyền vào khi gốc & lãi được thu khác ngày trong cùng kỳ — ngayThucThu
+  // ở trên vẫn được ghi làm ngày tham chiếu chung (= ngày thu gốc).
+  splitDates?: { ngayThucThuGoc: string; ngayThucThuLai: string },
 ): Promise<void> {
   await ensureTasksAuth()
   await setDoc(
@@ -482,6 +485,8 @@ export async function markKyThuDaThu(
       gocThucThu,
       laiThucThu,
       tongThucThu: gocThucThu + laiThucThu,
+      ngayThucThuGoc: splitDates ? splitDates.ngayThucThuGoc : deleteField(),
+      ngayThucThuLai: splitDates ? splitDates.ngayThucThuLai : deleteField(),
       updatedAt:   Date.now(),
     },
     { merge: true },
@@ -504,6 +509,8 @@ export async function unmarkKyThu(
       gocThucThu:  deleteField(),
       laiThucThu:  deleteField(),
       tongThucThu: deleteField(),
+      ngayThucThuGoc: deleteField(),
+      ngayThucThuLai: deleteField(),
     },
     { merge: true },
   )
