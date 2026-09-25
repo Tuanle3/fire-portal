@@ -1148,7 +1148,21 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
     setBulkSaving(true)
     try {
       for (const k of kyDaChon) {  // tuần tự để _syncTrangThaiBoHoSo không bị chạy đua
-        await markKyThuDaThu(k.hanMucId, k.boHoSoId, k.id, ngayThuChung, k.gocThu, k.laiThu)
+        // QUAN TRỌNG: nếu kỳ này đã có gốc thu sớm trước đó (gocThucThu > 0,
+        // lúc đó lãi chưa thu nên kỳ vẫn nằm trong danh sách "chưa thu" và có
+        // thể bị tích chọn ở đây), PHẢI giữ lại gocThucThu đã ghi nhận —
+        // không được ghi đè về k.gocThu (kế hoạch, thường = 0), nếu không sẽ
+        // xoá mất số gốc đã thu sớm.
+        const gocThucThu   = k.gocThucThu ?? k.gocThu
+        const ngayGocCu    = k.ngayThucThuGoc ?? k.ngayThucThu ?? ngayThuChung
+        const coTachNgay   = (k.gocThucThu ?? 0) > 0 && ngayGocCu !== ngayThuChung
+        await markKyThuDaThu(
+          k.hanMucId, k.boHoSoId, k.id,
+          coTachNgay ? ngayGocCu : ngayThuChung,
+          gocThucThu,
+          k.laiThu,
+          coTachNgay ? { ngayThucThuGoc: ngayGocCu, ngayThucThuLai: ngayThuChung } : undefined,
+        )
       }
       setSelKy(new Set())
     } catch (e: any) { alert(e.message) }
@@ -1393,6 +1407,9 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
                         </td>
                         <td className="r" style={{ color: k.gocThu > 0 ? '#b91c1c' : '#94a3b8', fontWeight: k.gocThu > 0 ? 700 : undefined }}>
                           {k.gocThu > 0 ? fmt(k.gocThu) : '—'}
+                          {(k.gocThucThu ?? 0) > 0 && (
+                            <div style={{ fontSize: 10, color: '#15803d', fontWeight: 700 }}>✓ sớm: {fmt(k.gocThucThu!)}</div>
+                          )}
                         </td>
                         <td className="r" style={{ color: '#b45309' }}>{fmt(k.laiThu)}</td>
                         <td className="r" style={{ fontWeight: 700 }}>{fmt(k.tongThu)}</td>
