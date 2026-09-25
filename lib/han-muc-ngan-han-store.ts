@@ -486,7 +486,7 @@ export async function markKyThuDaThu(
     },
     { merge: true },
   )
-  await _syncTrangThaiBoHoSo(hanMucId, boHoSoId)
+  await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)   // kéo lại dunNoDauKy các kỳ sau
 }
 
 export async function unmarkKyThu(
@@ -507,7 +507,7 @@ export async function unmarkKyThu(
     },
     { merge: true },
   )
-  await _syncTrangThaiBoHoSo(hanMucId, boHoSoId)
+  await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)   // undo tick → phục hồi dunNoDauKy gốc
 }
 
 async function _syncTrangThaiBoHoSo(hanMucId: string, boHoSoId: string): Promise<void> {
