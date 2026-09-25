@@ -966,7 +966,9 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
                     <td className="r">{fmt(k.dunNoDauKy)}</td>
                     <td className="r" style={{ fontWeight: k.gocThu > 0 ? 700 : undefined, color: k.gocThu > 0 ? '#b91c1c' : '#94a3b8' }}>
                       {k.gocThu > 0 ? fmt(k.gocThu) : '—'}
-                      {isDaThu && k.gocThucThu !== undefined && k.gocThucThu !== k.gocThu && (
+                      {/* Bỏ điều kiện isDaThu: gốc thu sớm phải hiện ngay dù lãi chưa thu,
+                          nếu không sẽ trông như chưa thu gì trong khi dư nợ đã giảm. */}
+                      {k.gocThucThu !== undefined && k.gocThucThu > 0 && k.gocThucThu !== k.gocThu && (
                         <div style={{ fontSize: 10, color: '#6b7280' }}>thực: {fmt(k.gocThucThu)}</div>
                       )}
                     </td>

@@ -212,14 +212,10 @@ export function tinhKhaDung(
     if (bo.trangThai === 'tat-toan') return
     tongGiaiNgan += bo.soTienGiaiNgan
 
-    const kyList    = kyThuMap[bo.id] ?? []
-    const gocQuaKy  = kyList
-      .filter(k => k.trangThai === 'da-thu')
-      .reduce((s, k) => s + (k.gocThucThu ?? k.gocThu), 0)
-    const gocGiuaKy = traGocList
-      .filter(t => t.boHoSoId === bo.id)
-      .reduce((s, t) => s + t.soTienGoc, 0)
-    tongGocDaTra += gocQuaKy + gocGiuaKy
+    const kyList = kyThuMap[bo.id] ?? []
+    // Dùng chung tinhGocDaTraBoHoSo() để không lặp lại bug "quên" gốc thu sớm
+    // (kỳ có gocThucThu > 0 nhưng lãi chưa thu, trangThai chưa phải 'da-thu').
+    tongGocDaTra += tinhGocDaTraBoHoSo(bo.id, kyList, traGocList)
     soBoDangVay++
   })
 
@@ -237,9 +233,14 @@ export function tinhGocDaTraBoHoSo(
   kyList:      KyThuNH[],
   traGocList:  TraGocGiuaKy[],
 ): number {
+  // QUAN TRỌNG: phải tính cả 2 trường hợp —
+  //  (1) kỳ đã thu đủ (trangThai === 'da-thu')
+  //  (2) kỳ mới "thu gốc sớm" (gocThucThu > 0) nhưng LÃI CHƯA THU nên
+  //      trangThai vẫn là 'chua-thu'/'gan-han'/'qua-han', KHÔNG phải 'da-thu'.
+  // Trước đây chỉ lọc theo trangThai === 'da-thu' nên gốc thu sớm ở kỳ (2)
+  // bị "mất tích" khỏi mọi tính toán dư nợ cho tới khi thu lãi kỳ đó xong.
   const gocQuaKy  = kyList
-    .filter(k => k.trangThai === 'da-thu')
-    .reduce((s, k) => s + (k.gocThucThu ?? k.gocThu), 0)
+    .reduce((s, k) => s + (k.gocThucThu ?? (k.trangThai === 'da-thu' ? k.gocThu : 0)), 0)
   const gocGiuaKy = traGocList
     .filter(t => t.boHoSoId === boHoSoId)
     .reduce((s, t) => s + t.soTienGoc, 0)
@@ -620,36 +621,46 @@ async function _rebuildKyThuSauTraGoc(hanMucId: string, boHoSoId: string): Promi
 
   const kySnap  = await getDocs(query(kyThuCol(hanMucId, boHoSoId), orderBy('soKy', 'asc')))
   const oldList = snap<KyThuNH>(kySnap as QuerySnapshot<DocumentData>)
-  const paid    = oldList.filter(k => k.trangThai === 'da-thu')
-  const unpaid  = oldList.filter(k => k.trangThai !== 'da-thu').sort((a, b) => a.soKy - b.soKy)
+
+  // FIX GỐC CỦA BUG "thu gốc sớm nhưng dư nợ không giảm":
+  // Một kỳ được coi là "đã ghi nhận gốc" (phải trừ vào dư nợ ngay lập tức)
+  // trong 2 trường hợp:
+  //   (1) đã thu đủ cả gốc lẫn lãi → trangThai === 'da-thu'
+  //   (2) mới bấm "+ Gốc sớm" → gocThucThu > 0 nhưng LÃI CHƯA THU, nên
+  //       trangThai vẫn là 'chua-thu'/'gan-han'/'qua-han' (KHÔNG phải 'da-thu').
+  // Code cũ chỉ coi (1) là "paid" nên gốc thu sớm ở (2) bị bỏ sót khỏi mọi
+  // phép tính dư nợ cho tới khi người dùng thu lãi kỳ đó xong.
+  const daGhiNhanGoc = oldList.filter(
+    k => k.trangThai === 'da-thu' || (k.gocThucThu != null && k.gocThucThu > 0),
+  )
+  const unpaid = oldList
+    .filter(k => !(k.trangThai === 'da-thu' || (k.gocThucThu != null && k.gocThucThu > 0)))
+    .sort((a, b) => a.soKy - b.soKy)
 
   const traGocSnap = await getDocs(query(traGocCol(), where('boHoSoId', '==', boHoSoId)))
   const traGocList = snap<TraGocGiuaKy>(traGocSnap as QuerySnapshot<DocumentData>)
   const gocGiuaKy  = traGocList.reduce((s, t) => s + t.soTienGoc, 0)
-  // FIX: dùng gocThucThu (thực thu) thay vì gocThu (kế hoạch) để tính đúng khi
-  // người dùng thu gốc sớm ở kỳ lãi (gocThu=0 theo kế hoạch nhưng gocThucThu>0)
-  const gocQuaKy   = paid.reduce((s, k) => s + (k.gocThucThu ?? k.gocThu), 0)
+  // dùng gocThucThu (thực thu) thay vì gocThu (kế hoạch) — đúng cho cả 2 trường hợp trên
+  const gocQuaKy   = daGhiNhanGoc.reduce((s, k) => s + (k.gocThucThu ?? k.gocThu), 0)
   const duNoConLai = Math.max(0, bo.soTienGiaiNgan - gocQuaKy - gocGiuaKy)
 
   const BATCH = 400
 
-  // FIX: cập nhật dunNoCuoiKy của các kỳ đã thu có gocThucThu > 0 (thu gốc sớm ở kỳ lãi).
-  // Bình thường kỳ lãi có dunNoCuoiKy = dunNoDauKy (goc=0), nhưng nếu thu gốc sớm thì
-  // dunNoCuoiKy phải = dunNoDauKy - gocThucThu để hiển thị đúng và làm mốc cho kỳ sau.
-  const paidNeedFix = paid.filter(k => k.gocThucThu != null && k.gocThucThu > 0 && k.gocThu === 0)
-  if (paidNeedFix.length > 0) {
-    // Tính lại dunNoCuoiKy từng kỳ da-thu có thu gốc sớm theo thứ tự thời gian
-    const paidSorted = [...paid].sort((a, b) => a.soKy - b.soKy)
-    let runningDuNo  = bo.soTienGiaiNgan
-    const paidUpdates: { id: string; dunNoCuoiKy: number }[] = []
-    for (const k of paidSorted) {
-      const gocThuThuc = k.gocThucThu ?? k.gocThu
-      const cuoiKy     = Math.max(0, runningDuNo - gocThuThuc)
-      if (cuoiKy !== k.dunNoCuoiKy) {
-        paidUpdates.push({ id: k.id, dunNoCuoiKy: cuoiKy })
-      }
-      runningDuNo = cuoiKy
+  // Tính lại dunNoCuoiKy của TẤT CẢ các kỳ đã ghi nhận gốc (da-thu hoặc gốc
+  // sớm) theo đúng thứ tự thời gian (soKy), để dư nợ giảm dần đúng ngay từ
+  // kỳ thu gốc sớm — không đợi tới khi kỳ đó được đánh dấu "đã thu" (thu lãi).
+  const sorted      = [...daGhiNhanGoc].sort((a, b) => a.soKy - b.soKy)
+  let runningDuNo   = bo.soTienGiaiNgan
+  const paidUpdates: { id: string; dunNoCuoiKy: number }[] = []
+  for (const k of sorted) {
+    const gocThuThuc = k.gocThucThu ?? k.gocThu
+    const cuoiKy     = Math.max(0, runningDuNo - gocThuThuc)
+    if (cuoiKy !== k.dunNoCuoiKy) {
+      paidUpdates.push({ id: k.id, dunNoCuoiKy: cuoiKy })
     }
+    runningDuNo = cuoiKy
+  }
+  if (paidUpdates.length > 0) {
     for (let i = 0; i < paidUpdates.length; i += BATCH) {
       const batch = writeBatch(db())
       paidUpdates.slice(i, i + BATCH).forEach(({ id, dunNoCuoiKy }) => {
