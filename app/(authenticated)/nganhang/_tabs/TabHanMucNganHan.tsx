@@ -21,7 +21,9 @@ import {
 import { useDonViTien } from '@/lib/don-vi-tien-context'
 import EntitySelect from '@/components/han-muc/EntitySelect'
 import { useFillHeight, stickyTh, stickyTf, fillCard, MiniStat } from '@/components/han-muc/FillLayout'
-import { Pencil, Trash2, Plus, ChevronLeft, X, Check, AlertCircle, Calendar, FileSpreadsheet } from 'lucide-react'
+import { Pencil, Trash2, Plus, ChevronLeft, X, Check, AlertCircle, Calendar, FileSpreadsheet, Upload } from 'lucide-react'
+import ImportBoHoSoExcel from '@/components/han-muc/ImportBoHoSoExcel'
+import { useIsAdmin } from '@/lib/use-role'
 
 // ─── Constants ────────────────────────────────────────────────
 const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
@@ -799,6 +801,8 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
   const [ngayThuChung, setNgayThuChung]   = useState(todayStr())
   const [showQuaHanCu, setShowQuaHanCu]   = useState(true)
   const [bulkSaving, setBulkSaving]       = useState(false)
+  const [importOpen, setImportOpen]       = useState(false)
+  const isAdmin = useIsAdmin()
 
   useEffect(() => subscribeBoHoSo(khung.id, setBoList), [khung.id])
   useEffect(() => subscribeTraGocGiuaKy(khung.id, setTraGocList), [khung.id])
@@ -900,6 +904,9 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
               onClick={() => exportKhungNganHanExcel(khung, boList, kyThuMap, traGocList, tinhGocDaTraBoHoSo)}>
               <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Xuất Excel
             </button>
+            <button className="btn-ghost" style={{ padding: '4px 10px' }} onClick={() => setImportOpen(true)}>
+              <Upload size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Nhập Excel
+            </button>
             <button className="btn-primary" style={{ padding: '4px 12px' }} onClick={() => { setEditingBo(null); setBoFormOpen(true) }}>
               <Plus size={13} style={{ marginRight: 4 }} />Giải ngân mới
             </button>
@@ -997,13 +1004,15 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
                           style={{ border: '1px solid #cbd5e1', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280', padding: '3px 6px' }}
                           title="Sửa bộ hồ sơ"
                         ><Pencil size={12} /></button>
-                        <button
-                          onClick={async () => {
-                            if (!confirm(`Xoá bộ hồ sơ ${bo.soBoHoSo}?`)) return
-                            try { await deleteBoHoSo(khung.id, bo.id) } catch (e: any) { alert(e.message) }
-                          }}
-                          style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', padding: 4 }}
-                        ><Trash2 size={13} /></button>
+                        {isAdmin && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Xoá bộ hồ sơ ${bo.soBoHoSo}?`)) return
+                              try { await deleteBoHoSo(khung.id, bo.id) } catch (e: any) { alert(e.message) }
+                            }}
+                            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', padding: 4 }}
+                          ><Trash2 size={13} /></button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1120,6 +1129,13 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
         onClose={() => { setBoFormOpen(false); setEditingBo(null) }}
       />
       <ThuKyDialog ky={thuKy} onClose={() => setThuKy(null)} />
+      <ImportBoHoSoExcel
+        open={importOpen}
+        hanMuc={khung}
+        boList={boList}
+        khaDung={khaDung}
+        onClose={() => setImportOpen(false)}
+      />
     </div>
   )
 }
@@ -1134,6 +1150,7 @@ interface KhungRowProps {
 }
 function KhungRow({ khung, onSelect, onEdit, onDelete, onStats }: KhungRowProps) {
   const { fmtTien } = useDonViTien()
+  const isAdmin = useIsAdmin()
   const [boList, setBoList]         = useState<BoHoSoGiaiNgan[]>([])
   const [kyThuMap, setKyThuMap]     = useState<Record<string, KyThuNH[]>>({})
   const [traGocList, setTraGocList] = useState<TraGocGiuaKy[]>([])
@@ -1190,9 +1207,11 @@ function KhungRow({ khung, onSelect, onEdit, onDelete, onStats }: KhungRowProps)
       <td onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn-ghost" onClick={onEdit} style={{ padding: '4px 8px' }}><Pencil size={12} /></button>
-          <button onClick={onDelete} style={{ border: '1px solid #fecaca', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#dc2626', padding: '4px 8px' }}>
-            <Trash2 size={12} />
-          </button>
+          {isAdmin && (
+            <button onClick={onDelete} style={{ border: '1px solid #fecaca', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#dc2626', padding: '4px 8px' }}>
+              <Trash2 size={12} />
+            </button>
+          )}
         </div>
       </td>
     </tr>
