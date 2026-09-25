@@ -5,10 +5,11 @@ import {
   subscribeHanMucNganHan, subscribeBoHoSo, subscribeAllKyThuNH, subscribeKyThuNH, subscribeTraGocGiuaKy,
   saveHanMucNganHan, deleteHanMucNganHan,
   saveBoHoSo, deleteBoHoSo,
-  markKyThuDaThu, unmarkKyThu,
+  markKyThuDaThu, markKyThuGocSom, unmarkKyThu,
   saveTraGocGiuaKy, deleteTraGocGiuaKy,
   tinhKhaDung, tinhGocDaTraBoHoSo, tinhTrangThaiBoHoSo, tinhTrangThaiKhung,
   filterKyThuTheoThang,
+  _rebuildKyThuSauTraGocPublic,
 } from '@/lib/han-muc-ngan-han-store'
 import type {
   HanMucNganHan, BoHoSoGiaiNgan, KyThuNH, TraGocGiuaKy,
@@ -414,7 +415,213 @@ function BoHoSoForm({ open, hanMuc, khaDung, editing, onClose }: BoFormProps) {
 }
 
 // ═════════════════════════════════════════════════════════════
-// DIALOG — Thu lãi/gốc kỳ này
+// DIALOG — Thu lãi kỳ này (kỳ loại "lai" — chỉ nhập ngày + lãi thực thu)
+// Nút riêng "Thu gốc sớm" xử lý bên ThuGocSomDialog
+// ═════════════════════════════════════════════════════════════
+interface ThuLaiDialogProps {
+  ky:      KyThuNH | null   // null = đóng dialog
+  onClose: () => void
+}
+function ThuLaiDialog({ ky, onClose }: ThuLaiDialogProps) {
+  const [ngay, setNgay]     = useState('')
+  const [laiStr, setLaiStr] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  useEffect(() => {
+    if (!ky) return
+    const homNay = todayStr()
+    // Ưu tiên ngày thu lãi đã lưu trước (trường hợp chỉnh sửa lại)
+    setNgay(ky.ngayThucThuLai ?? ky.ngayThucThu ?? homNay)
+    setLaiStr(ky.laiThucThu != null ? ky.laiThucThu.toLocaleString('vi-VN') : ky.laiThu.toLocaleString('vi-VN'))
+    setErr('')
+  }, [ky?.id])
+
+  if (!ky) return null
+
+  // Khi kỳ lãi đã có gocThucThu trước (thu gốc sớm xong rồi mới thu lãi),
+  // cần giữ nguyên gocThucThu — chỉ cập nhật ngày lãi + lãi thực thu.
+  const gocThucThuCu = ky.gocThucThu ?? 0
+
+  const handleSave = async () => {
+    if (!ngay) return setErr('Nhập ngày thu lãi thực tế')
+    setSaving(true)
+    try {
+      // Nếu trước đó đã lưu ngày thu gốc riêng (gocThucThuCu > 0), giữ lại
+      // và dùng splitDates để tách 2 ngày.
+      const ngayGocCu = ky.ngayThucThuGoc ?? ky.ngayThucThu ?? ngay
+      const coTachNgay = gocThucThuCu > 0 && ngayGocCu !== ngay
+      await markKyThuDaThu(
+        ky.hanMucId, ky.boHoSoId, ky.id,
+        coTachNgay ? ngayGocCu : ngay,
+        gocThucThuCu,
+        parseVnd(laiStr),
+        coTachNgay ? { ngayThucThuGoc: ngayGocCu, ngayThucThuLai: ngay } : undefined,
+      )
+      onClose()
+    } catch (e: any) { setErr(String((e as any).message ?? e)) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: '100%', maxWidth: 380, boxShadow: '0 20px 60px #0003' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#b45309' }}>Thu lãi — Kỳ #{ky.soKy}</h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6b7280' }}><X size={16} /></button>
+        </div>
+
+        {/* Thông tin kế hoạch */}
+        <div style={{ background: '#fffbf0', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: 12.5 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+            <div><span style={{ color: '#6b7280' }}>Lãi KH:</span> <b style={{ color: '#b45309' }}>{fmt(ky.laiThu)} đ</b></div>
+            <div><span style={{ color: '#6b7280' }}>Ngày KH:</span> <b>{ky.ngayThu}</b></div>
+          </div>
+          {gocThucThuCu > 0 && (
+            <div style={{ marginTop: 6, color: '#15803d', fontWeight: 600, fontSize: 11.5 }}>
+              ✅ Gốc sớm đã thu: {fmt(gocThucThuCu)} đ ({ky.ngayThucThuGoc ?? ky.ngayThucThu})
+            </div>
+          )}
+        </div>
+
+        {err && <Alert msg={err} />}
+
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11.5, color: 'var(--nh-muted)', fontWeight: 500 }}>Ngày thu lãi thực tế *</label>
+            <input type="date" value={ngay} onChange={e => setNgay(e.target.value)} style={{ ...inputBaseCls, marginTop: 3 }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11.5, color: '#b45309', fontWeight: 600 }}>Lãi thực thu (đ) *</label>
+            <input value={fmtVndInput(laiStr)} onChange={e => setLaiStr(e.target.value)} style={{ ...inputBaseCls, marginTop: 3, border: '1px solid #D4A64A66' }} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+          <button className="btn-ghost" onClick={onClose}>Huỷ</button>
+          <button
+            onClick={handleSave} disabled={saving}
+            style={{ border: 'none', borderRadius: 7, padding: '7px 16px', fontSize: 12.5, fontWeight: 700, background: saving ? '#93aec8' : '#b45309', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Check size={13} />{saving ? 'Đang lưu…' : 'Xác nhận thu lãi'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════
+// DIALOG — Thu gốc sớm (kỳ loại "lai" — thu gốc trước ngày đáo hạn)
+// Lưu gocThucThu vào kỳ mà KHÔNG đánh dấu da-thu (lãi chưa thu).
+// Dùng nút riêng để tránh xung đột với "Thu lãi".
+// ═════════════════════════════════════════════════════════════
+interface ThuGocSomDialogProps {
+  ky:      KyThuNH | null
+  onClose: () => void
+}
+function ThuGocSomDialog({ ky, onClose }: ThuGocSomDialogProps) {
+  const [ngay, setNgay]     = useState('')
+  const [gocStr, setGocStr] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  useEffect(() => {
+    if (!ky) return
+    // Pre-fill ngày & số gốc đã lưu trước (nếu có)
+    setNgay(ky.ngayThucThuGoc ?? ky.ngayThucThu ?? todayStr())
+    setGocStr(ky.gocThucThu != null && ky.gocThucThu > 0 ? ky.gocThucThu.toLocaleString('vi-VN') : '')
+    setErr('')
+  }, [ky?.id])
+
+  if (!ky) return null
+
+  const handleSave = async () => {
+    const goc = parseVnd(gocStr)
+    if (!ngay) return setErr('Nhập ngày thu gốc')
+    if (!goc)  return setErr('Nhập số tiền gốc thu sớm')
+    setSaving(true)
+    try {
+      // Lưu gocThucThu vào kỳ. Nếu kỳ đã da-thu (lãi đã thu rồi), cập nhật luôn.
+      // Nếu chưa thu lãi, chỉ ghi gocThucThu + ngayThucThuGoc, KHÔNG đánh da-thu.
+      const laiThucThuCu   = ky.laiThucThu   ?? 0
+      const ngayLaiCu      = ky.ngayThucThuLai ?? ky.ngayThucThu ?? ''
+      const daThuLai       = ky.trangThai === 'da-thu' && laiThucThuCu > 0
+
+      if (daThuLai && ngayLaiCu) {
+        // Lãi đã thu trước → cập nhật lại toàn bộ, tách ngày gốc/lãi
+        await markKyThuDaThu(
+          ky.hanMucId, ky.boHoSoId, ky.id,
+          ngay,          // ngayThucThu chính = ngày thu gốc
+          goc,
+          laiThucThuCu,
+          ngay !== ngayLaiCu ? { ngayThucThuGoc: ngay, ngayThucThuLai: ngayLaiCu } : undefined,
+        )
+      } else {
+        // Lãi chưa thu → lưu gocThucThu + ngayThucThuGoc qua markKyThuDaThu với laiThucThu=0,
+        // sau đó kéo lại dunNoDauKy các kỳ sau.
+        // Dùng markKyThuDaThu với laiThucThu=0 tạm để ghi gocThucThu vào Firestore,
+        // rồi ngay lập tức unmark lại để trangThai không bị chuyển thành da-thu
+        // (lãi chưa thu, không nên đánh dấu hoàn thành).
+        // → Giải pháp sạch hơn: gọi markKyThuGocSom (export mới từ store)
+        await markKyThuGocSom(ky.hanMucId, ky.boHoSoId, ky.id, ngay, goc)
+        await _rebuildKyThuSauTraGocPublic(ky.hanMucId, ky.boHoSoId)
+      }
+      onClose()
+    } catch (e: any) { setErr(String((e as any).message ?? e)) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: '100%', maxWidth: 380, boxShadow: '0 20px 60px #0003' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1C3557' }}>Thu gốc sớm — Kỳ #{ky.soKy}</h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6b7280' }}><X size={16} /></button>
+        </div>
+
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: 12.5 }}>
+          <div><span style={{ color: '#6b7280' }}>Dư nợ đầu kỳ:</span> <b style={{ color: '#1C3557' }}>{fmt(ky.dunNoDauKy)} đ</b></div>
+          <div style={{ marginTop: 4, fontSize: 11.5, color: '#2563eb' }}>
+            ℹ Thu gốc sớm sẽ giảm dư nợ ngay, lãi thu riêng theo ngày thực thu lãi.
+          </div>
+        </div>
+
+        {err && <Alert msg={err} />}
+
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11.5, color: '#1C3557', fontWeight: 600 }}>Ngày thu gốc *</label>
+            <input type="date" value={ngay} onChange={e => setNgay(e.target.value)} style={{ ...inputBaseCls, marginTop: 3, border: '1px solid #1C355733' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11.5, color: '#1C3557', fontWeight: 600 }}>Số tiền gốc thu sớm (đ) *</label>
+            <input value={fmtVndInput(gocStr)} onChange={e => setGocStr(e.target.value)} placeholder={`Tối đa ${fmtM(ky.dunNoDauKy)}`} style={{ ...inputBaseCls, marginTop: 3, border: '1px solid #1C355733' }} />
+          </div>
+          <div style={{ fontSize: 11.5, color: '#374151', background: '#f0fdf4', borderRadius: 6, padding: '6px 10px' }}>
+            Dư nợ sau khi thu: <b style={{ color: '#15803d' }}>{fmt(Math.max(0, ky.dunNoDauKy - parseVnd(gocStr)))} đ</b>
+          </div>
+        </div>
+
+        <p style={{ fontSize: 11, color: '#6b7280', marginTop: 10, lineHeight: 1.5 }}>
+          Sau khi lưu, các kỳ chưa thu sẽ tự tính lại lãi theo dư nợ mới.
+          Lãi kỳ này thu riêng bằng nút <b>"Thu lãi"</b>.
+        </p>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+          <button className="btn-ghost" onClick={onClose}>Huỷ</button>
+          <button
+            onClick={handleSave} disabled={saving}
+            style={{ border: 'none', borderRadius: 7, padding: '7px 16px', fontSize: 12.5, fontWeight: 700, background: saving ? '#93aec8' : '#1C3557', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Check size={13} />{saving ? 'Đang lưu…' : 'Lưu thu gốc sớm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════
+// DIALOG — Thu gốc + lãi cùng kỳ (kỳ loại "goc-va-lai" / "cuoi-ky")
 // ═════════════════════════════════════════════════════════════
 interface ThuKyDialogProps {
   ky:      KyThuNH | null
@@ -426,7 +633,6 @@ function ThuKyDialog({ ky, onClose }: ThuKyDialogProps) {
   const [laiStr, setLaiStr] = useState('')
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')
-  // Gốc & lãi thu khác ngày trong cùng kỳ — mặc định TẮT (gộp 1 ô ngày như cũ)
   const [khacNgay, setKhacNgay]     = useState(false)
   const [ngayGoc, setNgayGoc]       = useState('')
   const [ngayLai, setNgayLai]       = useState('')
@@ -434,13 +640,13 @@ function ThuKyDialog({ ky, onClose }: ThuKyDialogProps) {
   useEffect(() => {
     if (!ky) return
     const homNay = todayStr()
-    setNgay(homNay)
-    setGocStr(ky.gocThu ? ky.gocThu.toLocaleString('vi-VN') : '0')
-    setLaiStr(ky.laiThu ? ky.laiThu.toLocaleString('vi-VN') : '0')
+    setNgay(ky.ngayThucThu ?? homNay)
+    setGocStr(ky.gocThucThu != null ? ky.gocThucThu.toLocaleString('vi-VN') : ky.gocThu.toLocaleString('vi-VN'))
+    setLaiStr(ky.laiThucThu != null ? ky.laiThucThu.toLocaleString('vi-VN') : ky.laiThu.toLocaleString('vi-VN'))
     const daTachNgay = !!ky.ngayThucThuGoc && !!ky.ngayThucThuLai && ky.ngayThucThuGoc !== ky.ngayThucThuLai
     setKhacNgay(daTachNgay)
-    setNgayGoc(daTachNgay ? ky.ngayThucThuGoc! : homNay)
-    setNgayLai(daTachNgay ? ky.ngayThucThuLai! : homNay)
+    setNgayGoc(daTachNgay ? ky.ngayThucThuGoc! : ky.ngayThucThu ?? homNay)
+    setNgayLai(daTachNgay ? ky.ngayThucThuLai! : ky.ngayThucThu ?? homNay)
     setErr('')
   }, [ky?.id])
 
@@ -448,8 +654,8 @@ function ThuKyDialog({ ky, onClose }: ThuKyDialogProps) {
 
   const handleSave = async () => {
     const coLech = khacNgay && ngayGoc && ngayLai && ngayGoc !== ngayLai
-    if (!coLech && !ngay)            return setErr('Nhập ngày thu thực tế')
-    if (coLech && (!ngayGoc || !ngayLai)) return setErr('Nhập đủ ngày thu gốc và ngày thu lãi')
+    if (!coLech && !ngay)                  return setErr('Nhập ngày thu thực tế')
+    if (coLech && (!ngayGoc || !ngayLai))  return setErr('Nhập đủ ngày thu gốc và ngày thu lãi')
     setSaving(true)
     try {
       await markKyThuDaThu(
@@ -459,7 +665,7 @@ function ThuKyDialog({ ky, onClose }: ThuKyDialogProps) {
         coLech ? { ngayThucThuGoc: ngayGoc, ngayThucThuLai: ngayLai } : undefined,
       )
       onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e: any) { setErr(String((e as any).message ?? e)) }
     finally { setSaving(false) }
   }
 
@@ -623,6 +829,10 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
   const { fmtTien } = useDonViTien()
   const [kyList, setKyList]         = useState<KyThuNH[]>([])
   const [traGocList, setTraGocList] = useState<TraGocGiuaKy[]>([])
+  // Dialog thu lãi (kỳ loại lai) + dialog thu gốc sớm (tách riêng, không mất dữ liệu)
+  const [thuLaiKy, setThuLaiKy]       = useState<KyThuNH | null>(null)
+  const [thuGocSomKy, setThuGocSomKy] = useState<KyThuNH | null>(null)
+  // Dialog thu gốc+lãi cùng kỳ (kỳ loại goc-va-lai / cuoi-ky)
   const [thuKy, setThuKy]           = useState<KyThuNH | null>(null)
   const [traGocOpen, setTraGocOpen] = useState(false)
   const [editOpen, setEditOpen]     = useState(false)
@@ -775,21 +985,67 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
                         : <span className="nh-badge nh-b-grey">Chưa thu</span>}
                     </td>
                     <td>
-                      {isDaThu ? (
-                        <button
-                          onClick={() => unmarkKyThu(k.hanMucId, k.boHoSoId, k.id, k.ngayThu)}
-                          style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280' }}
-                          title="Huỷ xác nhận"
-                        >
-                          <X size={11} />
-                        </button>
+                      {k.loai === 'lai' ? (
+                        // Kỳ CHỈ THU LÃI: hiện 2 nút riêng để tránh mất dữ liệu khi sửa
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+                          {/* Nút Thu lãi — chỉ ghi ngày + lãi thực thu */}
+                          <button
+                            onClick={() => setThuLaiKy(k)}
+                            style={{
+                              fontSize: 11, padding: '3px 9px', border: 'none', borderRadius: 4,
+                              background: isDaThu ? (k.laiThucThu != null ? '#b45309' : '#92600a') : '#b45309',
+                              color: '#fff', cursor: 'pointer', fontWeight: 600,
+                            }}
+                            title={isDaThu ? 'Sửa lãi đã thu' : 'Thu lãi kỳ này'}
+                          >
+                            {isDaThu && k.laiThucThu != null ? `✓ Lãi` : 'Thu lãi'}
+                          </button>
+                          {/* Nút Thu gốc sớm — chỉ ghi ngày + gocThucThu, không đánh da-thu */}
+                          <button
+                            onClick={() => setThuGocSomKy(k)}
+                            style={{
+                              fontSize: 11, padding: '3px 9px',
+                              border: `1px solid ${k.gocThucThu && k.gocThucThu > 0 ? '#15803d' : '#1C3557'}`,
+                              borderRadius: 4,
+                              background: k.gocThucThu && k.gocThucThu > 0 ? '#f0fdf4' : '#fff',
+                              color: k.gocThucThu && k.gocThucThu > 0 ? '#15803d' : '#1C3557',
+                              cursor: 'pointer', fontWeight: 600,
+                            }}
+                            title={k.gocThucThu && k.gocThucThu > 0
+                              ? `Gốc sớm đã thu: ${fmt(k.gocThucThu)} đ — Bấm để sửa`
+                              : 'Thu gốc sớm (trước kỳ đáo hạn)'}
+                          >
+                            {k.gocThucThu && k.gocThucThu > 0 ? `✓ Gốc` : '+ Gốc sớm'}
+                          </button>
+                          {/* Nút huỷ xác nhận (chỉ khi đã thu lãi) */}
+                          {isDaThu && (
+                            <button
+                              onClick={() => unmarkKyThu(k.hanMucId, k.boHoSoId, k.id, k.ngayThu)}
+                              style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280' }}
+                              title="Huỷ xác nhận thu lãi"
+                            >
+                              <X size={11} />
+                            </button>
+                          )}
+                        </div>
                       ) : (
-                        <button
-                          onClick={() => setThuKy(k)}
-                          style={{ fontSize: 11, padding: '3px 8px', border: 'none', borderRadius: 4, background: '#1C3557', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
-                        >
-                          Thu
-                        </button>
+                        // Kỳ GỐC + LÃI (cuối kỳ / đáo hạn): giữ 1 nút như cũ
+                        isDaThu ? (
+                          <button
+                            onClick={() => setThuKy(k)}
+                            style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280' }}
+                            title="Sửa ngày/số tiền đã thu"
+                          >
+                            <Pencil size={11} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setThuKy(k)}
+                            style={{ fontSize: 11, padding: '3px 8px', border: 'none', borderRadius: 4, background: '#1C3557', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            Thu
+                          </button>
+                        )
                       )}
                     </td>
                   </tr>
@@ -814,6 +1070,11 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
         </div>
       </div>
 
+      {/* Dialog thu lãi (kỳ loại lai) */}
+      <ThuLaiDialog    ky={thuLaiKy}    onClose={() => setThuLaiKy(null)} />
+      {/* Dialog thu gốc sớm (kỳ loại lai, tách ngày) */}
+      <ThuGocSomDialog ky={thuGocSomKy} onClose={() => setThuGocSomKy(null)} />
+      {/* Dialog thu gốc+lãi cùng kỳ (kỳ goc-va-lai / cuoi-ky) */}
       <ThuKyDialog ky={thuKy} onClose={() => setThuKy(null)} />
       <TraGocDialog open={traGocOpen} bo={bo} duNoConLai={duNoConLai} onClose={() => setTraGocOpen(false)} />
       <BoHoSoForm open={editOpen} hanMuc={khung} khaDung={khaDung} editing={bo} onClose={() => setEditOpen(false)} />

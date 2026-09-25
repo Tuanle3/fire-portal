@@ -488,10 +488,38 @@ export async function markKyThuDaThu(
       ngayThucThuGoc: splitDates ? splitDates.ngayThucThuGoc : deleteField(),
       ngayThucThuLai: splitDates ? splitDates.ngayThucThuLai : deleteField(),
       updatedAt:   Date.now(),
+      // gocThucThu lưu riêng để _rebuildKyThuSauTraGoc tính lại dunNoDauKy
+      // các kỳ chưa thu (quan trọng khi thu gốc sớm ở kỳ lãi)
     },
     { merge: true },
   )
   await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)   // kéo lại dunNoDauKy các kỳ sau
+}
+
+/**
+ * Ghi nhận thu gốc sớm vào kỳ lãi:
+ * — Lưu gocThucThu + ngayThucThuGoc vào Firestore (merge)
+ * — KHÔNG đổi trangThai → da-thu (lãi chưa thu)
+ * — Sau đó gọi _rebuildKyThuSauTraGoc để cập nhật dunNoDauKy các kỳ sau
+ */
+export async function markKyThuGocSom(
+  hanMucId:    string,
+  boHoSoId:    string,
+  kyId:        string,
+  ngayThuGoc:  string,
+  gocThucThu:  number,
+): Promise<void> {
+  await ensureTasksAuth()
+  await setDoc(
+    doc(kyThuCol(hanMucId, boHoSoId), kyId),
+    {
+      gocThucThu,
+      ngayThucThuGoc: ngayThuGoc,
+      updatedAt:      Date.now(),
+    },
+    { merge: true },
+  )
+  await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)
 }
 
 export async function unmarkKyThu(
@@ -598,10 +626,38 @@ async function _rebuildKyThuSauTraGoc(hanMucId: string, boHoSoId: string): Promi
   const traGocSnap = await getDocs(query(traGocCol(), where('boHoSoId', '==', boHoSoId)))
   const traGocList = snap<TraGocGiuaKy>(traGocSnap as QuerySnapshot<DocumentData>)
   const gocGiuaKy  = traGocList.reduce((s, t) => s + t.soTienGoc, 0)
+  // FIX: dùng gocThucThu (thực thu) thay vì gocThu (kế hoạch) để tính đúng khi
+  // người dùng thu gốc sớm ở kỳ lãi (gocThu=0 theo kế hoạch nhưng gocThucThu>0)
   const gocQuaKy   = paid.reduce((s, k) => s + (k.gocThucThu ?? k.gocThu), 0)
   const duNoConLai = Math.max(0, bo.soTienGiaiNgan - gocQuaKy - gocGiuaKy)
 
   const BATCH = 400
+
+  // FIX: cập nhật dunNoCuoiKy của các kỳ đã thu có gocThucThu > 0 (thu gốc sớm ở kỳ lãi).
+  // Bình thường kỳ lãi có dunNoCuoiKy = dunNoDauKy (goc=0), nhưng nếu thu gốc sớm thì
+  // dunNoCuoiKy phải = dunNoDauKy - gocThucThu để hiển thị đúng và làm mốc cho kỳ sau.
+  const paidNeedFix = paid.filter(k => k.gocThucThu != null && k.gocThucThu > 0 && k.gocThu === 0)
+  if (paidNeedFix.length > 0) {
+    // Tính lại dunNoCuoiKy từng kỳ da-thu có thu gốc sớm theo thứ tự thời gian
+    const paidSorted = [...paid].sort((a, b) => a.soKy - b.soKy)
+    let runningDuNo  = bo.soTienGiaiNgan
+    const paidUpdates: { id: string; dunNoCuoiKy: number }[] = []
+    for (const k of paidSorted) {
+      const gocThuThuc = k.gocThucThu ?? k.gocThu
+      const cuoiKy     = Math.max(0, runningDuNo - gocThuThuc)
+      if (cuoiKy !== k.dunNoCuoiKy) {
+        paidUpdates.push({ id: k.id, dunNoCuoiKy: cuoiKy })
+      }
+      runningDuNo = cuoiKy
+    }
+    for (let i = 0; i < paidUpdates.length; i += BATCH) {
+      const batch = writeBatch(db())
+      paidUpdates.slice(i, i + BATCH).forEach(({ id, dunNoCuoiKy }) => {
+        batch.set(doc(kyThuCol(hanMucId, boHoSoId), id), { dunNoCuoiKy, updatedAt: Date.now() }, { merge: true })
+      })
+      await batch.commit()
+    }
+  }
 
   if (unpaid.length === 0) {
     await _syncTrangThaiBoHoSo(hanMucId, boHoSoId)
@@ -649,6 +705,9 @@ async function _rebuildKyThuSauTraGoc(hanMucId: string, boHoSoId: string): Promi
 
   await _syncTrangThaiBoHoSo(hanMucId, boHoSoId)
 }
+
+// Export public alias cho _rebuildKyThuSauTraGoc (dùng trong ThuGocSomDialog)
+export { _rebuildKyThuSauTraGoc as _rebuildKyThuSauTraGocPublic }
 
 // ─────────────────────────────────────────────────────────────
 // MIGRATE 1 LẦN: đổi pháp nhân "SAG" → "SAP"
