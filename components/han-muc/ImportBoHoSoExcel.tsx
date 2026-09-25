@@ -71,7 +71,9 @@ interface ParsedRow extends RowInput {
 
 // ─── Helpers ────────────────────────────────────────────────
 function normHeader(s: string): string {
-  return s.toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return s.toString()
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')  // NFD không tách "đ" thành "d" + dấu, phải thay tay trước
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
