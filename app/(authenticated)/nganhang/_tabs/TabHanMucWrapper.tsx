@@ -16,15 +16,17 @@
 import { useState } from 'react'
 import { TabHanMuc }         from './TabHanMuc'
 import { TabHanMucNganHan }  from './TabHanMucNganHan'
-import { DonViTienProvider } from '@/lib/don-vi-tien-context'
+import LichDongTienTongHop   from '@/components/han-muc/LichDongTienTongHop'
+import { DonViTienProvider, useDonViTien } from '@/lib/don-vi-tien-context'
 import DonViTienSelect from '@/components/han-muc/DonViTienSelect'
 import { FillStyles } from '@/components/han-muc/FillLayout'
 
-type SubTab = 'dai-han' | 'ngan-han'
+type SubTab = 'dai-han' | 'ngan-han' | 'dong-tien'
 
 const TAB_ITEMS: { key: SubTab; label: string; icon: string }[] = [
-  { key: 'ngan-han', label: 'Hạn mức ngắn hạn',  icon: '⚡' },
-  { key: 'dai-han',  label: 'Tín dụng dài hạn',  icon: '📋' },
+  { key: 'ngan-han',  label: 'Hạn mức ngắn hạn',   icon: '⚡' },
+  { key: 'dai-han',   label: 'Tín dụng dài hạn',   icon: '📋' },
+  { key: 'dong-tien', label: 'Kế hoạch dòng tiền', icon: '📊' },
 ]
 
 export function TabHanMucWrapper() {
@@ -32,6 +34,20 @@ export function TabHanMucWrapper() {
 
   return (
     <DonViTienProvider>
+      <TabHanMucWrapperInner activeTab={activeTab} setActiveTab={setActiveTab} />
+    </DonViTienProvider>
+  )
+}
+
+function TabHanMucWrapperInner({
+  activeTab, setActiveTab,
+}: {
+  activeTab: SubTab
+  setActiveTab: (t: SubTab) => void
+}) {
+  const { fmtTien } = useDonViTien()
+
+  return (
       <div>
         <FillStyles />
         {/* Sub-tab switcher */}
@@ -75,9 +91,9 @@ export function TabHanMucWrapper() {
         </div>
 
         {/* Tab content */}
-        {activeTab === 'dai-han'  && <TabHanMuc />}
-        {activeTab === 'ngan-han' && <TabHanMucNganHan />}
+        {activeTab === 'dai-han'   && <TabHanMuc />}
+        {activeTab === 'ngan-han'  && <TabHanMucNganHan />}
+        {activeTab === 'dong-tien' && <LichDongTienTongHop fmtTien={fmtTien} />}
       </div>
-    </DonViTienProvider>
   )
 }

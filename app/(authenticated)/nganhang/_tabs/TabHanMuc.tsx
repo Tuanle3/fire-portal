@@ -5,6 +5,7 @@ import { subscribeHopDong, subscribeLichTraNo, setGocTraCoDinh, tinhHanMucKhaDun
 import { HopDongTinDung, KyTraNo, EntityType } from '@/lib/han-muc-types'
 import HopDongForm from '@/components/han-muc/HopDongForm'
 import LichTraNoTable from '@/components/han-muc/LichTraNoTable'
+import LichTraNoTongHop from '@/components/han-muc/LichTraNoTongHop'
 import CoCauDialog from '@/components/han-muc/CoCauDialog'
 import { exportHopDongDaiHanExcel, exportDanhSachHopDongDaiHanExcel } from '@/lib/han-muc-excel-export'
 import { useDonViTien } from '@/lib/don-vi-tien-context'
@@ -166,6 +167,7 @@ export function TabHanMuc() {
   const [presetKhungId, setPresetKhungId] = useState<string | undefined>(undefined)
   const [deletingId, setDeletingId]     = useState<string | null>(null)
   const [khungOpen, setKhungOpen]       = useState(false)
+  const [view, setView]                 = useState<'ds' | 'tong-hop'>('ds')
 
   const handleDelete = async (h: HopDongTinDung) => {
     const label = h.soBoHoSo || h.soHopDong
@@ -448,6 +450,35 @@ export function TabHanMuc() {
         </div>
       )}
 
+      <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
+        <button
+          className="btn-ghost"
+          onClick={() => setView('ds')}
+          style={view === 'ds' ? { background: 'var(--nh-navy)', color: '#fff', borderColor: 'var(--nh-navy)' } : undefined}
+        >
+          Danh sách hợp đồng
+        </button>
+        <button
+          className="btn-ghost"
+          onClick={() => setView('tong-hop')}
+          style={view === 'tong-hop' ? { background: 'var(--nh-navy)', color: '#fff', borderColor: 'var(--nh-navy)' } : undefined}
+        >
+          Lịch trả nợ tổng hợp
+        </button>
+      </div>
+
+      {view === 'tong-hop' && (
+        <div className="nh-card" style={{ ...fillCard, padding: 10 }}>
+          <LichTraNoTongHop
+            hopDongs={nonKhungList}
+            kyMap={kyMap}
+            fmtTien={fmtTien}
+            onOpenHopDong={h => setSelected(h)}
+          />
+        </div>
+      )}
+
+      {view === 'ds' && (
       <div className="nh-card" style={fillCard}>
         <div className="nh-card-head" style={{ flex: '0 0 auto' }}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -582,6 +613,7 @@ export function TabHanMuc() {
           </table>
         </div>
       </div>
+      )}
 
       <HopDongForm
         key={editing?.id ?? 'new'} open={formOpen}
