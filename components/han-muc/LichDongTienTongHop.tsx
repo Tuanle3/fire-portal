@@ -26,6 +26,7 @@ import { subscribeHanMucNganHan, subscribeBoHoSo, subscribeAllKyThuNH } from '@/
 import { HopDongTinDung, KyTraNo } from '@/lib/han-muc-types'
 import { HanMucNganHan, BoHoSoGiaiNgan, KyThuNH } from '@/lib/han-muc-ngan-han-types'
 import { exportKeHoachDongTienExcel, DongTienRow } from '@/lib/ke-hoach-dong-tien-excel-export'
+import { useFillHeight } from '@/components/han-muc/FillLayout'
 
 // ── Badge trạng thái — gộp theo NHÓM ý nghĩa (không phân biệt câu chữ thu/trả) ──
 type StatusCat = 'pending' | 'near' | 'overdue' | 'done' | 'restructured'
@@ -250,6 +251,8 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
     return a
   }, { goc: 0, lai: 0, tong: 0, tongNH: 0, tongDH: 0, conKy: 0 }), [sortedRows])
 
+  const { ref: fillRef, h: fillH } = useFillHeight([])
+
   const handleExport = () => {
     const rows: DongTienRow[] = sortedRows.map(r => ({
       ngay: r.ngay, loaiVay: r.loaiVay, entity: r.entity, nganHang: r.nganHang, chiNhanh: r.chiNhanh,
@@ -290,7 +293,7 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%', minHeight: 0 }}>
+    <div ref={fillRef} style={{ display: 'flex', flexDirection: 'column', gap: 8, height: fillH, minHeight: 0 }}>
       {/* ── Chỉ số tổng quan ── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 28px', padding: '6px 2px', alignItems: 'baseline' }}>
         <MiniTotal label="Tổng cộng" value={fmtTien(tong.tong)} sub={`${sortedRows.length} kỳ · còn ${tong.conKy} chưa xong`} />
