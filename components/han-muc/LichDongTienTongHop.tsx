@@ -385,12 +385,39 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
     [filteredRows],
   )
 
+  // ── Gộp dòng theo các cột ĐANG HIỆN: các dòng trùng hết giá trị ở các cột
+  //    thông tin (Ngày, Loại vay, Pháp nhân, NH, Số HĐ, Số bộ hồ sơ, Loại kỳ,
+  //    Trạng thái) thì cộng dồn Gốc / Lãi / Tổng. Ẩn cột nào → gộp theo phần còn lại.
+  const displayRows = useMemo(() => {
+    const groupDim = (r: UnifiedRow) =>
+      nhom === 'loai-vay' ? r.loaiVay : nhom === 'ngan-hang' ? r.nganHang : nhom === 'ngay' ? '' : r.entity
+    const map = new Map<string, UnifiedRow>()
+    sortedRows.forEach(r => {
+      const k = [
+        groupDim(r),
+        visible.has('ngay')      ? r.ngay : '',
+        visible.has('loaiVay')   ? r.loaiVay : '',
+        visible.has('phapNhan')  ? r.entity : '',
+        visible.has('nganHang')  ? `${r.nganHang}|${r.chiNhanh ?? ''}` : '',
+        visible.has('soHopDong') ? r.soHopDong : '',
+        visible.has('soBoHoSo')  ? (r.soBoHoSo ?? '') : '',
+        visible.has('loaiKy')    ? r.loaiKy : '',
+        visible.has('trangThai') ? r.trangThai : '',
+      ].join('\u0001')
+      const cur = map.get(k)
+      if (!cur) { map.set(k, { ...r, key: k }); return }
+      cur.goc += r.goc; cur.lai += r.lai; cur.tong += r.tong
+      cur.daXong = cur.daXong && r.daXong
+    })
+    return Array.from(map.values())
+  }, [sortedRows, visible, nhom])
+
   // ── Nhóm hiển thị (nếu chọn nhóm theo Loại vay / NH / Pháp nhân) ──
   const groups = useMemo(() => {
     if (nhom === 'ngay') return null
     const keyOf = (r: UnifiedRow) => nhom === 'loai-vay' ? r.loaiVay : nhom === 'ngan-hang' ? r.nganHang : r.entity
     const map = new Map<string, UnifiedRow[]>()
-    sortedRows.forEach(r => {
+    displayRows.forEach(r => {
       const k = keyOf(r)
       if (!map.has(k)) map.set(k, [])
       map.get(k)!.push(r)
@@ -400,7 +427,7 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
       ? (['Ngắn hạn', 'Dài hạn'] as const).filter(k => map.has(k))
       : keys.sort((a, b) => a.localeCompare(b, 'vi'))
     return keys.map(k => ({ ten: k, rows: map.get(k)! }))
-  }, [sortedRows, nhom])
+  }, [displayRows, nhom])
 
   // ── Tổng số liệu ──────────────────────────────────────────────
   const tong = useMemo(() => sortedRows.reduce((a, r) => {
@@ -553,7 +580,7 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
             </thead>
             {groups === null ? (
               <tbody>
-                {sortedRows.map(r => renderRowVisible(r, visible, fmtTien))}
+                {displayRows.map(r => renderRowVisible(r, visible, fmtTien))}
                 {sortedRows.length === 0 && (
                   <tr><td colSpan={visible.size || 1} style={{ textAlign: 'center', color: 'var(--nh-muted2)', padding: 24 }}>Không có kỳ thu/trả nào trong khoảng đã chọn.</td></tr>
                 )}
@@ -566,7 +593,7 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
                 return (
                   <tbody key={g.ten}>
                     <tr style={{ background: '#eef2f7' }}>
-                      <td colSpan={Math.max(spanBefore, 1)} style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>{g.ten} ({g.rows.length} kỳ)</td>
+                      <td colSpan={Math.max(spanBefore, 1)} style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>{g.ten} ({g.rows.length} dòng)</td>
                       {visible.has('goc')  && <td className="r" style={{ fontWeight: 700, color: '#1C3557' }}>{fmtTien(gTong.goc)}</td>}
                       {visible.has('lai')  && <td className="r" style={{ fontWeight: 700, color: '#b45309' }}>{fmtTien(gTong.lai)}</td>}
                       {visible.has('tong') && <td className="r" style={{ fontWeight: 700 }}>{fmtTien(gTong.tong)}</td>}
