@@ -23,7 +23,8 @@ export interface DongTienRow {
   entity:      string          // pháp nhân
   nganHang:    string
   chiNhanh?:   string
-  soHopDong:   string          // số hợp đồng / bộ hồ sơ (đã gồm ghi chú khung nếu có)
+  soHopDong:   string          // số hợp đồng
+  soBoHoSo?:   string          // số bộ hồ sơ giải ngân (nếu có)
   loaiKy:      string          // 'Gốc + Lãi' | 'Lãi' | 'Gốc'
   goc:         number
   lai:         number
@@ -78,17 +79,17 @@ export function exportKeHoachDongTienExcel(
   // ── Sheet 1: Chi tiết ──────────────────────────────────────
   const header = [
     'Ngày', 'Loại vay', 'Pháp nhân', 'Ngân hàng', 'Chi nhánh',
-    'Số hợp đồng / Bộ hồ sơ', 'Loại kỳ', 'Gốc', 'Lãi', 'Tổng', 'Trạng thái',
+    'Số hợp đồng', 'Số bộ hồ sơ', 'Loại kỳ', 'Gốc', 'Lãi', 'Tổng', 'Trạng thái',
   ]
   const sorted = [...rows].sort((a, b) => a.ngay.localeCompare(b.ngay))
   const aoaRows: (string | number)[][] = sorted.map(r => [
     r.ngay, r.loaiVay, r.entity, r.nganHang, r.chiNhanh || '',
-    r.soHopDong, r.loaiKy, r.goc, r.lai, r.tong, r.trangThai,
+    r.soHopDong, r.soBoHoSo || '', r.loaiKy, r.goc, r.lai, r.tong, r.trangThai,
   ])
   const tongGoc  = rows.reduce((s, r) => s + r.goc, 0)
   const tongLai  = rows.reduce((s, r) => s + r.lai, 0)
   const tongCong = rows.reduce((s, r) => s + r.tong, 0)
-  aoaRows.push(['', '', '', '', '', '', 'TỔNG CỘNG', tongGoc, tongLai, tongCong, ''])
+  aoaRows.push(['', '', '', '', '', '', '', 'TỔNG CỘNG', tongGoc, tongLai, tongCong, ''])
   XLSX.utils.book_append_sheet(wb, sheetFromAoa([header, ...aoaRows]), safeSheetName('Chi tiết', used))
 
   // ── Sheet 2: Tổng hợp theo tháng ─────────────────────────────

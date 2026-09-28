@@ -26,7 +26,7 @@ type SubTab = 'dai-han' | 'ngan-han' | 'dong-tien'
 const TAB_ITEMS: { key: SubTab; label: string; icon: string }[] = [
   { key: 'ngan-han',  label: 'Hạn mức ngắn hạn',   icon: '⚡' },
   { key: 'dai-han',   label: 'Tín dụng dài hạn',   icon: '📋' },
-  { key: 'dong-tien', label: 'Kế hoạch dòng tiền', icon: '📊' },
+  { key: 'dong-tien', label: 'Tổng hợp lịch trả nợ', icon: '📊' },
 ]
 
 export function TabHanMucWrapper() {

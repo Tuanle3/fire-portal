@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * LichDongTienTongHop — Tab "Kế hoạch dòng tiền" (module Hạn mức tín dụng)
+ * LichDongTienTongHop — Tab "Tổng hợp lịch trả nợ" (module Hạn mức tín dụng)
  * ─────────────────────────────────────────────────────────────
  * Gộp TẤT CẢ kỳ thu/trả gốc + lãi của CẢ 2 nhóm:
  *   • Ngắn hạn  (HanMucNganHan → BoHoSoGiaiNgan → KyThuNH)
@@ -58,8 +58,8 @@ interface UnifiedRow {
   entity:    string
   nganHang:  string
   chiNhanh?: string
-  soHopDong: string
-  ghiChuKhung?: string
+  soHopDong: string      // số hợp đồng (hạn mức khung / HĐ vay)
+  soBoHoSo?: string      // số bộ hồ sơ giải ngân (nếu có)
   loaiKy:    string
   goc:       number
   lai:       number
@@ -70,14 +70,15 @@ interface UnifiedRow {
 }
 
 // ── Định nghĩa cột ẩn/hiện ───────────────────────────────────
-type ColKey = 'ngay' | 'loaiVay' | 'phapNhan' | 'nganHang' | 'soHopDong' | 'loaiKy' | 'goc' | 'lai' | 'tong' | 'trangThai'
+type ColKey = 'ngay' | 'loaiVay' | 'phapNhan' | 'nganHang' | 'soHopDong' | 'soBoHoSo' | 'loaiKy' | 'goc' | 'lai' | 'tong' | 'trangThai'
 interface ColDef { key: ColKey; label: string }
 const ALL_COLS: ColDef[] = [
   { key: 'ngay',      label: 'Ngày' },
   { key: 'loaiVay',   label: 'Loại vay' },
   { key: 'phapNhan',  label: 'Pháp nhân' },
   { key: 'nganHang',  label: 'Ngân hàng' },
-  { key: 'soHopDong', label: 'Số HĐ / Bộ hồ sơ' },
+  { key: 'soHopDong', label: 'Số hợp đồng' },
+  { key: 'soBoHoSo',  label: 'Số bộ hồ sơ' },
   { key: 'loaiKy',    label: 'Loại kỳ' },
   { key: 'goc',       label: 'Gốc' },
   { key: 'lai',       label: 'Lãi' },
@@ -295,7 +296,7 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
 
   // ── Chế độ xem + cột ẩn/hiện (session only) ─────────────────
   const [viewMode, setViewMode] = useState<ViewMode>('chitiet')
-  const [visible, setVisible]   = useState<Set<ColKey>>(() => new Set(ALL_COLS.map(c => c.key)))
+  const [visible, setVisible]   = useState<Set<ColKey>>(() => new Set(ALL_COLS.filter(c => c.key !== 'soBoHoSo').map(c => c.key)))
   const toggleCol = (key: ColKey, on: boolean) => setVisible(prev => {
     const next = new Set(prev); on ? next.add(key) : next.delete(key); return next
   })
@@ -329,8 +330,8 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
         entity: h.entity,
         nganHang: h.nganHang,
         chiNhanh: h.chiNhanh,
-        soHopDong: h.soBoHoSo || h.soHopDong,
-        ghiChuKhung: khungCha ? `Khung: ${khungCha.soHopDong}` : undefined,
+        soHopDong: khungCha ? khungCha.soHopDong : h.soHopDong,
+        soBoHoSo: h.soBoHoSo || undefined,
         loaiKy: ky.gocTra > 0 ? 'Gốc + Lãi' : 'Lãi',
         goc: ky.gocTra, lai: ky.laiTra, tong: ky.tongTra,
         trangThai: LABEL_DAI_HAN[ky.trangThai],
@@ -347,8 +348,8 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
         entity: khung.entity,
         nganHang: khung.nganHang,
         chiNhanh: khung.chiNhanh,
-        soHopDong: bo.soBoHoSo,
-        ghiChuKhung: `Khung: ${khung.soHopDong}`,
+        soHopDong: khung.soHopDong,
+        soBoHoSo: bo.soBoHoSo,
         loaiKy: ky.loai === 'goc-va-lai' ? 'Gốc + Lãi' : ky.loai === 'goc' ? 'Gốc' : 'Lãi',
         goc: ky.gocThu, lai: ky.laiThu, tong: ky.tongThu,
         trangThai: LABEL_NGAN_HAN[ky.trangThai],
@@ -414,7 +415,8 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
   const handleExport = () => {
     const rows: DongTienRow[] = sortedRows.map(r => ({
       ngay: r.ngay, loaiVay: r.loaiVay, entity: r.entity, nganHang: r.nganHang, chiNhanh: r.chiNhanh,
-      soHopDong: r.ghiChuKhung ? `${r.soHopDong} (${r.ghiChuKhung})` : r.soHopDong,
+      soHopDong: r.soHopDong,
+      soBoHoSo: r.soBoHoSo,
       loaiKy: r.loaiKy, goc: r.goc, lai: r.lai, tong: r.tong, trangThai: r.trangThai,
     }))
     exportKeHoachDongTienExcel(rows, tuThang, denThang)
@@ -434,12 +436,8 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
       )}
       {vis.has('phapNhan')  && <td>{r.entity}</td>}
       {vis.has('nganHang')  && <td style={{ whiteSpace: 'nowrap' }}>{r.nganHang}{r.chiNhanh ? ` · ${r.chiNhanh}` : ''}</td>}
-      {vis.has('soHopDong') && (
-        <td>
-          <div style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>{r.soHopDong}</div>
-          {r.ghiChuKhung && <div style={{ fontSize: 10, color: '#6b7280' }}>{r.ghiChuKhung}</div>}
-        </td>
-      )}
+      {vis.has('soHopDong') && <td style={{ fontWeight: 700, color: 'var(--nh-navy)', whiteSpace: 'nowrap' }}>{r.soHopDong}</td>}
+      {vis.has('soBoHoSo')  && <td style={{ whiteSpace: 'nowrap' }}>{r.soBoHoSo || '—'}</td>}
       {vis.has('loaiKy')    && <td>{r.loaiKy}</td>}
       {vis.has('goc')       && <td className="r" style={{ color: '#1C3557', fontWeight: 600 }}>{r.goc > 0 ? fmt(r.goc) : '—'}</td>}
       {vis.has('lai')       && <td className="r" style={{ color: '#b45309' }}>{fmt(r.lai)}</td>}
@@ -544,7 +542,8 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
                 {visible.has('loaiVay')   && <th>Loại vay</th>}
                 {visible.has('phapNhan')  && <th>Pháp nhân</th>}
                 {visible.has('nganHang')  && <th>Ngân hàng</th>}
-                {visible.has('soHopDong') && <th>Số HĐ / Bộ hồ sơ</th>}
+                {visible.has('soHopDong') && <th>Số hợp đồng</th>}
+                {visible.has('soBoHoSo')  && <th>Số bộ hồ sơ</th>}
                 {visible.has('loaiKy')    && <th>Loại kỳ</th>}
                 {visible.has('goc')       && <th className="r">Gốc</th>}
                 {visible.has('lai')       && <th className="r">Lãi</th>}
@@ -563,7 +562,7 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
               groups.map(g => {
                 const gTong = g.rows.reduce((a, r) => { a.goc += r.goc; a.lai += r.lai; a.tong += r.tong; return a }, { goc: 0, lai: 0, tong: 0 })
                 // colSpan nhóm header = số cột trước Gốc
-                const spanBefore = (['ngay','loaiVay','phapNhan','nganHang','soHopDong','loaiKy'] as ColKey[]).filter(k => visible.has(k)).length
+                const spanBefore = (['ngay','loaiVay','phapNhan','nganHang','soHopDong','soBoHoSo','loaiKy'] as ColKey[]).filter(k => visible.has(k)).length
                 return (
                   <tbody key={g.ten}>
                     <tr style={{ background: '#eef2f7' }}>
@@ -582,7 +581,7 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
               <tfoot>
                 <tr>
                   <td
-                    colSpan={Math.max((['ngay','loaiVay','phapNhan','nganHang','soHopDong','loaiKy'] as ColKey[]).filter(k => visible.has(k)).length, 1)}
+                    colSpan={Math.max((['ngay','loaiVay','phapNhan','nganHang','soHopDong','soBoHoSo','loaiKy'] as ColKey[]).filter(k => visible.has(k)).length, 1)}
                     style={{ textAlign: 'right', paddingRight: 12, color: 'var(--nh-muted)' }}
                   >
                     Tổng ({sortedRows.length} kỳ · còn {tong.conKy} chưa xong):
