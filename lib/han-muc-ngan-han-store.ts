@@ -446,16 +446,53 @@ export async function saveBoHoSo(
     await setDoc(ref, dataToWrite)
   }
 
-  // Tạo lịch thu mới (chỉ khi tạo mới, không rebuild khi edit để giữ kỳ da-thu)
-  if (!id) {
-    const schedule = buildScheduleNH(docData, 0)
-    const BATCH    = 400
-    for (let i = 0; i < schedule.length; i += BATCH) {
+  const BATCH = 400
+  const commitSet = async (rows: KyThuNH[]) => {
+    for (let i = 0; i < rows.length; i += BATCH) {
       const batch = writeBatch(db())
-      schedule.slice(i, i + BATCH).forEach(ky => {
-        batch.set(doc(kyThuCol(data.hanMucId, ref.id), ky.id), ky)
-      })
+      rows.slice(i, i + BATCH).forEach(ky => batch.set(doc(kyThuCol(data.hanMucId, ref.id), ky.id), ky))
       await batch.commit()
+    }
+  }
+
+  if (!id) {
+    // Tạo mới → sinh toàn bộ lịch thu
+    await commitSet(buildScheduleNH(docData, 0))
+  } else {
+    // SỬA → sinh lại lịch cho các kỳ CHƯA thu theo thông tin mới (ngày giải ngân,
+    // đáo hạn, số tiền, lãi suất, kỳ trả lãi…). Giữ nguyên kỳ đã thu / đã thu gốc sớm.
+    const daGhiNhan = kyList.filter(
+      k => k.trangThai === 'da-thu' || (k.gocThucThu != null && k.gocThucThu > 0),
+    )
+    const paidIds = new Set(daGhiNhan.map(k => k.id))
+    const unpaid  = kyList.filter(k => !paidIds.has(k.id))
+
+    // 1) Xoá các kỳ chưa thu cũ (kể cả kỳ thừa nếu số kỳ mới ít hơn)
+    for (let i = 0; i < unpaid.length; i += BATCH) {
+      const batch = writeBatch(db())
+      unpaid.slice(i, i + BATCH).forEach(k => batch.delete(doc(kyThuCol(data.hanMucId, ref.id), k.id)))
+      await batch.commit()
+    }
+
+    // 2) Sinh lịch mới
+    let fresh = buildScheduleNH(docData, gocDaTra)
+    if (daGhiNhan.length > 0) {
+      const lastPaidNgay = daGhiNhan.reduce((m, k) => (k.ngayThu > m ? k.ngayThu : m), '')
+      const maxPaidSoKy  = Math.max(...daGhiNhan.map(k => k.soKy))
+      fresh = fresh
+        .filter(k => k.ngayThu > lastPaidNgay)
+        .map((k, i) => {
+          const soKy = maxPaidSoKy + i + 1
+          return { ...k, soKy, id: `ky-${soKy}-${ref.id}` }
+        })
+    }
+    await commitSet(fresh)
+
+    // 3) Có gốc đã thu / trả giữa kỳ → chuẩn hoá lại dư nợ các kỳ sau
+    if (daGhiNhan.length > 0 || traGocList.length > 0) {
+      await _rebuildKyThuSauTraGoc(data.hanMucId, ref.id)
+    } else {
+      await _syncTrangThaiBoHoSo(data.hanMucId, ref.id)
     }
   }
 
