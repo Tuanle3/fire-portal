@@ -130,16 +130,25 @@ export function buildScheduleNH(
   let coKyLeThuc = false
 
   if (coKyLe) {
-    const ankerDay  = parseDate(bo.ngayTraLaiDauTien!).getDate()
-    const candidate = new Date(ngayGiaiNgan.getFullYear(), ngayGiaiNgan.getMonth(), ankerDay)
-    if (candidate.getTime() === ngayGiaiNgan.getTime()) {
-      ankerDate = ngayGiaiNgan
-    } else if (candidate.getTime() < ngayGiaiNgan.getTime()) {
-      ankerDate  = addMonths(candidate, 1)
+    const ngayDauTien = parseDate(bo.ngayTraLaiDauTien!)
+    if (ngayDauTien.getTime() > ngayGiaiNgan.getTime()) {
+      // Dùng ĐÚNG ngày thu lãi đầu tiên người dùng nhập: kỳ lẻ tính lãi từ
+      // ngày giải ngân → ngày này, các kỳ sau neo theo ngày-trong-tháng đó.
+      ankerDate  = ngayDauTien
       coKyLeThuc = true
-    } else {
-      ankerDate  = candidate
-      coKyLeThuc = true
+    } else if (ngayDauTien.getTime() < ngayGiaiNgan.getTime()) {
+      // Ngày nhập nhỏ hơn ngày giải ngân (chỉ muốn neo theo ngày trong tháng)
+      const ankerDay  = ngayDauTien.getDate()
+      const candidate = new Date(ngayGiaiNgan.getFullYear(), ngayGiaiNgan.getMonth(), ankerDay)
+      if (candidate.getTime() === ngayGiaiNgan.getTime()) {
+        ankerDate = ngayGiaiNgan
+      } else if (candidate.getTime() < ngayGiaiNgan.getTime()) {
+        ankerDate  = addMonths(candidate, 1)
+        coKyLeThuc = true
+      } else {
+        ankerDate  = candidate
+        coKyLeThuc = true
+      }
     }
   }
 
@@ -171,7 +180,9 @@ export function buildScheduleNH(
   for (let i = 1; i <= numKySau; i++) {
     soKy++
     const isLast    = i === numKySau
-    const ngayThu   = addMonths(ankerDate, i * period)
+    const ngayThuRaw = addMonths(ankerDate, i * period)
+    // kỳ cuối không được vượt ngày đáo hạn
+    const ngayThu   = isLast && ngayThuRaw.getTime() > ngayDaoHan.getTime() ? ngayDaoHan : ngayThuRaw
     const gocThu    = isLast ? dunNo : 0
     const laiThu    = Math.round(dunNo * lsNam / kyPerYear)
     const dunNoCuoi = Math.max(0, dunNo - gocThu)
