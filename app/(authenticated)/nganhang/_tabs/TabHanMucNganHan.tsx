@@ -5,7 +5,7 @@ import {
   subscribeHanMucNganHan, subscribeBoHoSo, subscribeAllKyThuNH, subscribeKyThuNH, subscribeTraGocGiuaKy,
   saveHanMucNganHan, deleteHanMucNganHan,
   saveBoHoSo, deleteBoHoSo,
-  markKyThuDaThu, markKyThuGocSom, unmarkKyThu,
+  markKyThuDaThu, markKyThuGocSom, unmarkKyThu, unmarkGocSom,
   saveTraGocGiuaKy, deleteTraGocGiuaKy,
   tinhKhaDung, tinhGocDaTraBoHoSo, tinhTrangThaiBoHoSo, tinhTrangThaiKhung,
   filterKyThuTheoThang,
@@ -1019,27 +1019,58 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
                           >
                             {k.gocThucThu && k.gocThucThu > 0 ? `✓ Gốc` : '+ Gốc sớm'}
                           </button>
-                          {/* Nút huỷ xác nhận (chỉ khi đã thu lãi) */}
+                          {/* Huỷ xác nhận thu LÃI (giữ nguyên gốc sớm nếu có) */}
                           {isDaThu && (
                             <button
-                              onClick={() => unmarkKyThu(k.hanMucId, k.boHoSoId, k.id, k.ngayThu)}
+                              onClick={async () => {
+                                if (!confirm(`Bỏ xác nhận thu lãi kỳ #${k.soKy}?`)) return
+                                try { await unmarkKyThu(k.hanMucId, k.boHoSoId, k.id, k.ngayThu, true) }
+                                catch (e: any) { alert('Lỗi: ' + (e?.message ?? e)) }
+                              }}
                               style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280' }}
-                              title="Huỷ xác nhận thu lãi"
+                              title="Bỏ thu lãi (giữ gốc sớm)"
                             >
                               <X size={11} />
+                            </button>
+                          )}
+                          {/* Bỏ khoản GỐC SỚM đã ghi */}
+                          {(k.gocThucThu ?? 0) > 0 && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Bỏ khoản gốc thu sớm ${fmt(k.gocThucThu!)} đ của kỳ #${k.soKy}?`)) return
+                                try { await unmarkGocSom(k.hanMucId, k.boHoSoId, k.id) }
+                                catch (e: any) { alert('Lỗi: ' + (e?.message ?? e)) }
+                              }}
+                              style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #fca5a5', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#dc2626' }}
+                              title="Bỏ gốc thu sớm"
+                            >
+                              <Trash2 size={11} />
                             </button>
                           )}
                         </div>
                       ) : (
                         // Kỳ GỐC + LÃI (cuối kỳ / đáo hạn): giữ 1 nút như cũ
                         isDaThu ? (
-                          <button
-                            onClick={() => setThuKy(k)}
-                            style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280' }}
-                            title="Sửa ngày/số tiền đã thu"
-                          >
-                            <Pencil size={11} />
-                          </button>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button
+                              onClick={() => setThuKy(k)}
+                              style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280' }}
+                              title="Sửa ngày/số tiền đã thu"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Bỏ xác nhận đã thu kỳ #${k.soKy}? Kỳ sẽ quay về trạng thái chưa thu.`)) return
+                                try { await unmarkKyThu(k.hanMucId, k.boHoSoId, k.id, k.ngayThu) }
+                                catch (e: any) { alert('Lỗi: ' + (e?.message ?? e)) }
+                              }}
+                              style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #fca5a5', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#dc2626' }}
+                              title="Bỏ thu (hoàn tác)"
+                            >
+                              <X size={11} />
+                            </button>
+                          </div>
                         ) : (
                           <button
                             onClick={() => setThuKy(k)}
@@ -1420,11 +1451,27 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
                             : <span className="nh-badge nh-b-grey">Chưa thu</span>}
                         </td>
                         <td>
-                          {!isDaThu && (
+                          {!isDaThu ? (
                             <button onClick={() => setThuKy(k)}
                               style={{ fontSize: 11, padding: '3px 10px', border: 'none', borderRadius: 4, background: '#1C3557', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
                               Thu
                             </button>
+                          ) : (
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button onClick={() => setThuKy(k)} title="Sửa ngày/số tiền đã thu"
+                                style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#6b7280' }}>
+                                <Pencil size={11} />
+                              </button>
+                              <button title="Bỏ thu (hoàn tác)"
+                                onClick={async () => {
+                                  if (!confirm(`Bỏ xác nhận đã thu kỳ #${k.soKy}?`)) return
+                                  try { await unmarkKyThu(k.hanMucId, k.boHoSoId, k.id, k.ngayThu, k.loai === 'lai') }
+                                  catch (e: any) { alert('Lỗi: ' + (e?.message ?? e)) }
+                                }}
+                                style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #fca5a5', borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#dc2626' }}>
+                                <X size={11} />
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>

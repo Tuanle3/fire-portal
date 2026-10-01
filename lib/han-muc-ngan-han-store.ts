@@ -571,27 +571,83 @@ export async function markKyThuGocSom(
   await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)
 }
 
+/**
+ * Bỏ xác nhận "đã thu" của 1 kỳ (hoàn tác).
+ * @param giuGocSom  true = chỉ bỏ phần LÃI, giữ lại gốc thu sớm (dùng cho kỳ loại "lai"
+ *                   đã bấm "+ Gốc sớm"). false (mặc định) = xoá toàn bộ số thực thu của kỳ.
+ */
 export async function unmarkKyThu(
   hanMucId:  string,
   boHoSoId:  string,
   kyId:      string,
   ngayThu:   string,
+  giuGocSom: boolean = false,
 ): Promise<void> {
   await ensureTasksAuth()
-  await setDoc(
-    doc(kyThuCol(hanMucId, boHoSoId), kyId),
-    {
-      trangThai:   trangThaiKy(ngayThu),
-      ngayThucThu: deleteField(),
-      gocThucThu:  deleteField(),
-      laiThucThu:  deleteField(),
-      tongThucThu: deleteField(),
-      ngayThucThuGoc: deleteField(),
-      ngayThucThuLai: deleteField(),
-    },
-    { merge: true },
-  )
-  await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)   // undo tick → phục hồi dunNoDauKy gốc
+  const ref = doc(kyThuCol(hanMucId, boHoSoId), kyId)
+
+  let payload: Record<string, unknown> = {
+    trangThai:      trangThaiKy(ngayThu),
+    ngayThucThu:    deleteField(),
+    gocThucThu:     deleteField(),
+    laiThucThu:     deleteField(),
+    tongThucThu:    deleteField(),
+    ngayThucThuGoc: deleteField(),
+    ngayThucThuLai: deleteField(),
+    updatedAt:      Date.now(),
+  }
+
+  if (giuGocSom) {
+    const cur = (await getDoc(ref)).data() as KyThuNH | undefined
+    const goc = cur?.gocThucThu ?? 0
+    if (cur && goc > 0) {
+      const ngayGoc = cur.ngayThucThuGoc ?? cur.ngayThucThu
+      payload = {
+        trangThai:      trangThaiKy(ngayThu),
+        gocThucThu:     goc,
+        tongThucThu:    goc,
+        ngayThucThu:    ngayGoc ?? deleteField(),
+        ngayThucThuGoc: ngayGoc ?? deleteField(),
+        laiThucThu:     deleteField(),
+        ngayThucThuLai: deleteField(),
+        updatedAt:      Date.now(),
+      }
+    }
+  }
+
+  await setDoc(ref, payload, { merge: true })
+  await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)   // undo → phục hồi dunNoDauKy các kỳ sau
+}
+
+/**
+ * Bỏ khoản "gốc thu sớm" của 1 kỳ lãi (nút "✓ Gốc" → hoàn tác).
+ * Nếu kỳ đang "da-thu" (lãi đã thu) thì giữ nguyên phần lãi, chỉ gỡ phần gốc.
+ */
+export async function unmarkGocSom(
+  hanMucId: string,
+  boHoSoId: string,
+  kyId:     string,
+): Promise<void> {
+  await ensureTasksAuth()
+  const ref = doc(kyThuCol(hanMucId, boHoSoId), kyId)
+  const cur = (await getDoc(ref)).data() as KyThuNH | undefined
+  if (!cur) return
+
+  const payload: Record<string, unknown> = {
+    gocThucThu:     deleteField(),
+    ngayThucThuGoc: deleteField(),
+    updatedAt:      Date.now(),
+  }
+  if (cur.trangThai === 'da-thu') {
+    const lai = cur.laiThucThu ?? 0
+    payload.tongThucThu = lai
+    // còn ngày thu lãi riêng → ngày tham chiếu chung = ngày lãi
+    const ngayLai = cur.ngayThucThuLai ?? cur.ngayThucThu
+    if (ngayLai) payload.ngayThucThu = ngayLai
+    payload.ngayThucThuLai = deleteField()
+  }
+  await setDoc(ref, payload, { merge: true })
+  await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)
 }
 
 async function _syncTrangThaiBoHoSo(hanMucId: string, boHoSoId: string): Promise<void> {
