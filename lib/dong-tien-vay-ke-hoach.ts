@@ -165,6 +165,9 @@ export function subscribeKeHoachVay(thang: string, cb: (lines: KeHoachVayLine[])
       loaiGiaoDich: `Thu - ${d.hanMuc.entity} - Vay đáo hạn`,
       nhomBaoCao: NHOM_BC_THU,
       nguonTuDong: 'vay-hm', autoThang: thang,
+      // Tách theo công ty + ngân hàng → khớp dòng "Thu từ đáo hạn {NH} {CÔNG TY}" của bảng Nhập Data
+      // VD hạn mức ACB của SAP → T_VNH_ACB_SAP,  ACB của SAHS → T_VNH_ACB_SAHS,  BIDV của SAP → T_VNH_BIDV_SAP
+      kmcpChiTiet: `T_VNH_${bankCode(d.hanMuc.nganHang)}_${ENT_CODE[d.hanMuc.entity] ?? d.hanMuc.entity}`,
     }))
 
     lines.sort((a, b) => a.ngayDuKien.localeCompare(b.ngayDuKien) || a.id.localeCompare(b.id))
