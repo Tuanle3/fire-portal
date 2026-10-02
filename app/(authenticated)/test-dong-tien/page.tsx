@@ -96,12 +96,41 @@ const [denNgay, setDenNgay] = useState(() => {
   const [thuThang, setThuThang] = useState(0)
   const [chiThang, setChiThang] = useState(0)
 
-  // ── Topbar ───────────────────────────────────────────────────
+  // ── Topbar: tiêu đề + các thẻ Tab nằm CÙNG 1 HÀNG (tiết kiệm diện tích) ──
   useEffect(() => {
     setLeft(
-      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', lineHeight: 1.15 }}>
-        <div style={{ fontSize: 11, color: '#6B7280' }}>Module › Test Dòng tiền</div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#1C3557' }}>💵 Test Dòng tiền</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 28, minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', lineHeight: 1.15, flexShrink: 0 }}>
+          <div style={{ fontSize: 11, color: '#6B7280' }}>Module › Test Dòng tiền</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#1C3557', whiteSpace: 'nowrap' }}>💵 Test Dòng tiền</div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 2, alignSelf: 'stretch', alignItems: 'flex-end', overflowX: 'auto' }}>
+          {TABS.map(t => {
+            const active = tab === t.key
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                style={{
+                  padding: '8px 14px',
+                  fontSize: 13,
+                  fontWeight: active ? 700 : 400,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  border: 'none',
+                  borderBottom: active ? '2px solid #1C3557' : '2px solid transparent',
+                  background: 'transparent',
+                  color: active ? '#1C3557' : '#6B7280',
+                  whiteSpace: 'nowrap',
+                  transition: 'all .12s',
+                }}
+              >
+                {t.emoji} {t.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
     )
     setRight(
@@ -117,7 +146,7 @@ const [denNgay, setDenNgay] = useState(() => {
       </div>
     )
     return () => { setLeft(null); setRight(null) }
-  }, [setLeft, setRight, month])
+  }, [setLeft, setRight, month, tab])
 
   // ── Subscribe Firestore ngân sách ────────────────────────────
   useEffect(() => {
@@ -342,38 +371,6 @@ const [denNgay, setDenNgay] = useState(() => {
       <div className="nh-main">
         <div className="nh-wrap">
           <div className="nh-content">
-
-            {/* ── TAB BAR ─────────────────────────────────────── */}
-            <div style={{
-              display: 'flex', gap: 4, marginBottom: 16,
-              borderBottom: '2px solid var(--nh-border)',
-              paddingBottom: 0,
-            }}>
-              {TABS.map(t => {
-                const active = tab === t.key
-                return (
-                  <button
-                    key={t.key}
-                    onClick={() => setTab(t.key)}
-                    style={{
-                      padding: '8px 18px',
-                      fontSize: 13,
-                      fontWeight: active ? 700 : 400,
-                      fontFamily: 'inherit',
-                      cursor: 'pointer',
-                      border: 'none',
-                      borderBottom: active ? '2px solid var(--nh-navy)' : '2px solid transparent',
-                      background: 'transparent',
-                      color: active ? 'var(--nh-navy)' : 'var(--nh-muted2)',
-                      marginBottom: -2,
-                      transition: 'all .12s',
-                    }}
-                  >
-                    {t.emoji} {t.label}
-                  </button>
-                )
-              })}
-            </div>
 
             {/* ── TAB CONTENT ─────────────────────────────────── */}
 
