@@ -24,7 +24,7 @@ import { TabGiaiPhap }  from './TabGiaiPhap'
 
 // ── Data layer ───────────────────────────────────────────────
 import { subscribeNganSach, saveNganSach } from '@/lib/ngan-sach-store'
-import { subscribeKmcpPlanned }            from '@/lib/ngan-sach-vay-mapping'
+import { subscribeKeHoachThang }           from '@/lib/dong-tien-ke-hoach-store'
 import { matchKMCP }                        from '@/lib/ngan-sach-mapping'
 
 import { DEFAULT_ITEMS, DEFAULT_GIAI_PHAP } from '@/lib/ngan-sach-types'
@@ -242,6 +242,30 @@ const [denNgay, setDenNgay] = useState(() => {
   useEffect(() => {
     return subscribeKmcpPlanned(month, setKmcpPlanned)
   }, [month])
+  // ── Kế hoạch vay tự động (từ dongTienItems) → cộng vào các dòng KMCP chi tiết ──
+  const [autoPlanned, setAutoPlanned] = useState<Record<string, number>>({})
+  useEffect(() => {
+    return subscribeKeHoachThang(month, rows => {
+      const acc: Record<string, number> = {}
+      rows.forEach(r => {
+        if (r.nguonTuDong === 'vay-hm' && r.kmcpChiTiet)
+          acc[r.kmcpChiTiet] = (acc[r.kmcpChiTiet] ?? 0) + r.soTien
+      })
+      setAutoPlanned(acc)
+    })
+  }, [month])
+
+  const kmcpPlannedFinal = useMemo(
+    () => ({ ...kmcpPlanned, ...autoPlanned }),
+    [kmcpPlanned, autoPlanned],
+  )
+
+  // Báo các mã vay chưa có dòng tương ứng trong bảng (xem Console)
+  useEffect(() => {
+    const co = new Set(localData.items.map(i => i.kmcp))
+    const lech = Object.keys(autoPlanned).filter(k => !co.has(k))
+    if (lech.length) console.warn('[vay-auto] mã chưa có dòng trong bảng:', lech)
+  }, [autoPlanned, localData.items])
 
   // ── Save ─────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
@@ -345,7 +369,7 @@ const [denNgay, setDenNgay] = useState(() => {
                 saving={saving}
                 saveMsg={saveMsg}
                 kmcpActual={kmcpActualFinal}
-                kmcpPlanned={kmcpPlanned}
+                kmcpPlanned={kmcpPlannedFinal}
                 tonQuySoDu={tonQuy}
                 tonQuyRealtime={tonQuy}
                 tonQuyDetail={[]}
@@ -361,7 +385,7 @@ const [denNgay, setDenNgay] = useState(() => {
                 tonQuyRealtime={tonQuy}
                 tonQuySoDuLoading={tonQuyLoading}
                 kmcpActual={kmcpActualFinal}
-                kmcpPlanned={kmcpPlanned}
+                kmcpPlanned={kmcpPlannedFinal}
                 thuThang={thuThang}
                 chiThang={chiThang}
                 tonQuyDetail={[]}

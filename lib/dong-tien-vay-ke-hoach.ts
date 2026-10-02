@@ -42,12 +42,22 @@ const KMCP_LABEL: Record<string, string> = {
 /** Các mã KMCP do hệ thống tự điền — form nhập tay phải ẩn đi */
 export const KMCP_VAY_TU_DONG = Object.keys(KMCP_LABEL)
 
+/** Mã pháp nhân trong mã KMCP chi tiết của bảng Nhập Data */
+const ENT_CODE: Record<string, string> = { 'SAP': 'SAP', 'SAHS': 'SAHS', 'ĐTSA': 'SADT' }
+/** Chuẩn hoá tên ngân hàng → mã viết tắt dùng trong KMCP (ACB, BIDV, HDB...) */
+const bankCode = (s: string) => {
+  const u = (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd')
+    .toUpperCase().replace(/[^A-Z0-9]/g, '')
+  return u === 'HDBANK' ? 'HDB' : u
+}
+
 const trongThang = (iso: string | undefined, thang: string) => !!iso && iso.startsWith(thang)
 const chiNhanhTxt = (nganHang: string, chiNhanh?: string) => chiNhanh ? `${nganHang}_${chiNhanh}` : nganHang
 
 function lineChi(p: {
   thang: string; refId: string; entity: string; isCN: boolean; ngay: string
   goc: number; lai: number; nguon: string; doiTac: string; nhan: string
+  hanh: 'NH' | 'DH'; nganHang: string
 }): KeHoachVayLine[] {
   const out: KeHoachVayLine[] = []
   const kind = p.goc > 0 && p.lai > 0 ? 'Trả Gốc + Lãi' : p.lai > 0 ? 'Trả Lãi' : 'Trả Gốc'
@@ -62,6 +72,7 @@ function lineChi(p: {
       loaiGiaoDich: `Chi - ${p.entity} - ${kind}`,
       nhomBaoCao: p.isCN ? NHOM_BC_CN : NHOM_BC_DN,
       nguonTuDong: 'vay-hm', autoThang: p.thang,
+      kmcpChiTiet: `${ENT_CODE[p.entity] ?? p.entity}_${p.hanh}_${bankCode(p.nganHang)}_${loai === 'goc' ? 'Goc' : 'Lai'}`,
     }
   }
   if (p.goc > 0) out.push(mk('goc', Math.round(p.goc)))
@@ -98,6 +109,7 @@ export function subscribeKeHoachVay(thang: string, cb: (lines: KeHoachVayLine[])
         goc: ky.gocTra, lai: ky.laiTra,
         nguon: `[HM] ${hd.soHopDong}`, doiTac: chiNhanhTxt(hd.nganHang, hd.chiNhanh),
         nhan: `${nhan} - ${hd.nganHang} (kỳ ${ky.soKy})`,
+        hanh: 'DH', nganHang: hd.nganHang,
       }))
     })
 
@@ -117,6 +129,7 @@ export function subscribeKeHoachVay(thang: string, cb: (lines: KeHoachVayLine[])
           lines.push(...lineChi({
             thang, refId: ky.id, entity: hanMuc.entity, isCN: false, ngay: ky.ngayThu,
             goc, lai, nguon, doiTac, nhan,
+            hanh: 'NH', nganHang: hanMuc.nganHang,
           }))
           const co = Math.round((DAO_HAN_TREN === 'goc' ? goc : goc + lai) * TY_LE_DAO_HAN)
           if (co > 0) lines.push({

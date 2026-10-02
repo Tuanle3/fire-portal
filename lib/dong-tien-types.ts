@@ -115,6 +115,7 @@ export interface KhoanDongTien {
   nhomBaoCao?:     string                // VD '6. Trả ngân hàng: Gốc, lãi (doanh nghiệp)'
   // Khoản do hệ thống tự tạo từ List ngân hàng (khoá, không sửa/xoá tay) — xem dong-tien-vay-ke-hoach.ts
   nguonTuDong?:    'vay-hm'
+  kmcpChiTiet?: string
   autoThang?:      string                // 'YYYY-MM' của lần cập nhật tự động
 
   doTinCay?:      DoTinCay

@@ -222,18 +222,21 @@ function KeHoachDongTienSection({ month, entityFilter }: { month: string; entity
     return subscribeKeHoachThang(month, setItems, entityFilter && entityFilter !== 'all' ? entityFilter : undefined)
   }, [month, entityFilter])
 
+  const thuCong = useMemo(() => items.filter(i => !i.nguonTuDong), [items])
+  const tuDong  = useMemo(() => items.filter(i => !!i.nguonTuDong), [items])
+
   const grouped = useMemo(() => {
     const map = new Map<string, { thu: KhoanDongTien[]; chi: KhoanDongTien[] }>()
-    for (const it of items) {
+    for (const it of thuCong) {
       const kmcp = it.nhom
       if (!map.has(kmcp)) map.set(kmcp, { thu: [], chi: [] })
       map.get(kmcp)![it.loai === 'thu' ? 'thu' : 'chi'].push(it)
     }
-    return map
-  }, [items])
+       return map
+  }, [thuCong])
 
-  const tongThu = items.filter(i => i.loai === 'thu').reduce((s, i) => s + i.soTien, 0)
-  const tongChi = items.filter(i => i.loai === 'chi').reduce((s, i) => s + i.soTien, 0)
+  const tongThu = thuCong.filter(i => i.loai === 'thu').reduce((s, i) => s + i.soTien, 0)
+  const tongChi = thuCong.filter(i => i.loai === 'chi').reduce((s, i) => s + i.soTien, 0)
 
   const openNew = () => { setEditing(null); setShowForm(true) }
   const openEdit = (it: KhoanDongTien) => { setEditing(it); setShowForm(true) }
@@ -255,7 +258,7 @@ function KeHoachDongTienSection({ month, entityFilter }: { month: string; entity
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 13 }}>{open ? '▾' : '▸'}</span>
           <span style={{ fontWeight: 700, fontSize: 13, color: '#1C3557' }}>📥 Kế hoạch nhập qua Dòng tiền (mới)</span>
-          <span style={{ fontSize: 11, color: '#6B7280' }}>({items.length} khoản)</span>
+          <span style={{ fontSize: 11, color: '#6B7280' }}>({thuCong.length} khoản)</span>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <span style={{ fontSize: 11.5, color: '#166534' }}>Thu: {fmt(tongThu)} ₫</span>
@@ -271,8 +274,13 @@ function KeHoachDongTienSection({ month, entityFilter }: { month: string; entity
       </div>
 
       {open && (
-        <div style={{ padding: items.length ? '10px 14px' : '20px 14px' }}>
-          {items.length === 0 && (
+                <div style={{ padding: thuCong.length || tuDong.length ? '10px 14px' : '20px 14px' }}>
+          {tuDong.length > 0 && (
+            <div style={{ fontSize: 12, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '6px 10px', marginBottom: 8 }}>
+              🔒 {tuDong.length} dòng vay tự động từ List ngân hàng đã được cộng vào cột "Kế hoạch" của bảng bên dưới.
+            </div>
+          )}
+          {thuCong.length === 0 && (
             <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 12.5 }}>
               Chưa có khoản kế hoạch nào nhập qua Dòng tiền cho tháng này.
             </div>
