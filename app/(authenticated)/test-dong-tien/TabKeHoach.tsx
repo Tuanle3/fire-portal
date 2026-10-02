@@ -353,13 +353,14 @@ interface Props {
   saveMsg?: string
   kmcpActual: Record<string, number>
   kmcpPlanned: Record<string, number>   // Kế hoạch AUTO cho 5 dòng vay NH
+  khBoSung?: Record<string, number>     // Kế hoạch AUTO cộng thẳng vào NHÓM (khoá = KMCP nhóm, VD 'DT-VNH')
   tonQuySoDu: number
   tonQuyRealtime: number
   tonQuyDetail?: TonQuyAcc[]
   entityFilter?: EntityType | 'all'      // dùng cho section Kế hoạch mới (dongTienItems)
 }
 
-export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = '', kmcpActual, kmcpPlanned, tonQuySoDu, tonQuyRealtime, tonQuyDetail = [], entityFilter }: Props) {
+export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = '', kmcpActual, kmcpPlanned, khBoSung = {}, tonQuySoDu, tonQuyRealtime, tonQuyDetail = [], entityFilter }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showTonQuyDetail, setShowTonQuyDetail] = useState(false)
@@ -460,8 +461,12 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       const autoVal = it.kmcp ? kmcpActual[it.kmcp] : undefined
       acc.th += autoVal !== undefined ? autoVal : it.thuc_hien
     }
+    // Khoản AUTO cộng thẳng vào nhóm (không có dòng con khớp mã)
+    for (const g of data.items) {
+      if (g.is_group && khBoSung[g.kmcp]) sums.get(g.id)!.kh += khBoSung[g.kmcp]
+    }
     return sums
-  }, [data.items, ownerOf, kmcpActual, effectiveKH])
+  }, [data.items, ownerOf, kmcpActual, effectiveKH, khBoSung])
   const groupSum = (groupId: string) => groupSums.get(groupId) ?? { kh: 0, th: 0 }
 
   // Tổng chi tiết theo section (mỗi dòng chi tiết đếm đúng 1 lần: standalone + con nhóm)
@@ -473,8 +478,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       const autoVal = it.kmcp ? kmcpActual[it.kmcp] : undefined
       th += autoVal !== undefined ? autoVal : it.thuc_hien
     }
+    for (const g of data.items) {
+      if (g.is_group && g.nhom === nhom && khBoSung[g.kmcp]) kh += khBoSung[g.kmcp]
+    }
     return { kh, th }
-  }, [data.items, kmcpActual, effectiveKH])
+  }, [data.items, kmcpActual, effectiveKH, khBoSung])
 
   // B/C totals for computing D = A+B-C
   const sectionTotals = useMemo(() => {
@@ -756,8 +764,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                     {(() => {
                       const { kh } = groupSum(it.id)
                       const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
+                      const coBoSung = !!khBoSung[it.kmcp]
                       return (
-                        <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}
+                          title={coBoSung ? `Gồm ${khBoSung[it.kmcp].toLocaleString('vi-VN')} ₫ tự động từ List ngân hàng` : undefined}>
+                          {coBoSung && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#DCFCE7', color: '#166534', marginRight: 6 }}>AUTO</span>}
                           {fmt(kh)}
                         </td>
                       )

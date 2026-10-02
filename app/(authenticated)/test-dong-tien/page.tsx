@@ -274,6 +274,8 @@ const [denNgay, setDenNgay] = useState(() => {
   }, [month])
   // ── Kế hoạch vay tự động (từ dongTienItems) → cộng vào các dòng KMCP chi tiết ──
   const [autoPlanned, setAutoPlanned] = useState<Record<string, number>>({})
+  // Toàn bộ khoản THU vay đáo hạn tự động (kể cả dòng chưa có mã khớp dòng trong bảng)
+  const [autoThu, setAutoThu] = useState<{ kmcp?: string; soTien: number }[]>([])
   useEffect(() => {
     return subscribeKeHoachThang(month, rows => {
       const acc: Record<string, number> = {}
@@ -282,6 +284,11 @@ const [denNgay, setDenNgay] = useState(() => {
           acc[r.kmcpChiTiet] = (acc[r.kmcpChiTiet] ?? 0) + r.soTien
       })
       setAutoPlanned(acc)
+      setAutoThu(
+        rows
+          .filter(r => r.nguonTuDong === 'vay-hm' && r.loai === 'thu')
+          .map(r => ({ kmcp: r.kmcpChiTiet, soTien: r.soTien })),
+      )
     })
   }, [month])
 
@@ -289,6 +296,17 @@ const [denNgay, setDenNgay] = useState(() => {
     () => ({ ...kmcpPlanned, ...autoPlanned }),
     [kmcpPlanned, autoPlanned],
   )
+
+  // Thu vay đáo hạn (95%) KHÔNG khớp được dòng nào trong bảng → cộng thẳng vào nhóm
+  // "Thu từ vay ngân hàng (đáo hạn)" (KMCP DT-VNH) để số không bị rơi mất.
+  // Dòng đã khớp mã với 1 dòng con thì đã tính qua kmcpPlanned — không cộng lần 2.
+  const khBoSung = useMemo(() => {
+    const co = new Set(localData.items.filter(i => !i.is_section && !i.is_group).map(i => i.kmcp))
+    const lech = autoThu
+      .filter(r => !(r.kmcp && co.has(r.kmcp)))
+      .reduce((t, r) => t + r.soTien, 0)
+    return lech > 0 ? { 'DT-VNH': lech } : ({} as Record<string, number>)
+  }, [autoThu, localData.items])
 
   // Báo các mã vay chưa có dòng tương ứng trong bảng (xem Console)
   useEffect(() => {
@@ -298,21 +316,22 @@ const [denNgay, setDenNgay] = useState(() => {
   }, [autoPlanned, localData.items])
 
   // ── CHẨN ĐOÁN vay auto (xem Console, có thể xoá sau khi sửa xong) ──
+  // In ra dạng văn bản (JSON) để copy dán trực tiếp, không cần bấm mở mũi tên.
   useEffect(() => {
     return subscribeKeHoachThang(month, rows => {
       const vay = rows.filter(r => r.nguonTuDong === 'vay-hm')
-      const thieuMa = vay.filter(r => !r.kmcpChiTiet)
-      if (thieuMa.length) console.warn('[vay-auto] dòng KHÔNG có kmcpChiTiet:', thieuMa.map(r => r.moTa))
-      console.log('[vay-auto] các mã được sinh ra:', Array.from(new Set(vay.map(r => r.kmcpChiTiet))))
+      const thieuMa = vay
+        .filter(r => !r.kmcpChiTiet)
+        .map(r => ({ loai: r.loai, entity: r.entity, nhom: r.nhom, soTien: r.soTien, moTa: r.moTa }))
+      console.log('[vay-auto] DÒNG KHÔNG CÓ MÃ (' + thieuMa.length + '):\n' + JSON.stringify(thieuMa, null, 1))
+      console.log('[vay-auto] TỔNG ' + vay.length + ' dòng vay auto; mã sinh ra:\n' + JSON.stringify(Array.from(new Set(vay.map(r => r.kmcpChiTiet)))))
     })
   }, [month])
 
   useEffect(() => {
-    const codes = Object.keys(autoPlanned)
-    const trong = localData.items
-      .filter(i => /_(Goc|Lai)$|^SAHS_TTD/.test(i.kmcp ?? '') && !codes.includes(i.kmcp))
-      .map(i => i.kmcp)
-    if (trong.length) console.warn('[vay-auto] mã trong bảng nhưng KHÔNG có kế hoạch:', trong)
+    const co = new Set(localData.items.filter(i => !i.is_section && !i.is_group).map(i => i.kmcp))
+    const lech = Object.keys(autoPlanned).filter(k => !co.has(k))
+    if (lech.length) console.log('[vay-auto] MÃ SINH RA NHƯNG BẢNG KHÔNG CÓ DÒNG (' + lech.length + '):\n' + JSON.stringify(lech))
   }, [autoPlanned, localData.items])
 
   // ── Save ─────────────────────────────────────────────────────
@@ -386,6 +405,7 @@ const [denNgay, setDenNgay] = useState(() => {
                 saveMsg={saveMsg}
                 kmcpActual={kmcpActualFinal}
                 kmcpPlanned={kmcpPlannedFinal}
+                khBoSung={khBoSung}
                 tonQuySoDu={tonQuy}
                 tonQuyRealtime={tonQuy}
                 tonQuyDetail={[]}
