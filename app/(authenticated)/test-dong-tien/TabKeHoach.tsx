@@ -159,6 +159,7 @@ function parseExcel(file: File, templateItems: NganSachItem[]): Promise<{ items:
             ...(tmpl?.is_group ? { is_group: true } : {}),
             ...(tmpl?.parent_id ? { parent_id: tmpl.parent_id } : {}),
             ...(tmpl?.ngay_du_kien ? { ngay_du_kien: tmpl.ngay_du_kien } : {}),
+            ...(tmpl?.nguon ? { nguon: tmpl.nguon } : {}),
           })
         }
 
@@ -659,6 +660,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Diễn giải</th>
               <th style={TH(150)}>KMCP</th>
               <th style={TH(150)}>Kế hoạch (₫)</th>
+              <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10, minWidth: 140 }}>Nguồn thu/chi</th>
               <th style={{ ...TH(), textAlign: 'left', paddingLeft: 10 }}>Ghi chú</th>
               <th style={TH(110)}>Ngày DK</th>
               <th style={TH(72)}>Thao tác</th>
@@ -707,7 +709,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                     <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: isD ? (secKh < 0 ? '#B91C1C' : '#1C3557') : '#1C3557', fontSize: 12.5 }}>
                       {isD ? (secKh < 0 ? `(${Math.abs(secKh).toLocaleString('vi-VN')})` : fmt(secKh)) : fmt(secKh)}
                     </td>
-                    <td />{/* Ghi chú / Ngày DK — section rows don't have a date */}
+                    <td colSpan={3} />{/* Nguồn / Ghi chú / Ngày DK — section rows không có */}
                     <td style={{ padding: '5px 6px', textAlign: 'center' }}>
                       {(it.nhom === 'B' || it.nhom === 'C') && (
                         <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
@@ -731,7 +733,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                       <td style={{ padding: '4px 8px', textAlign: 'right', color: d.dauKy < 0 ? '#991B1B' : '#374151', fontSize: 12 }}>
                         {d.dauKy !== 0 ? d.dauKy.toLocaleString('vi-VN') + ' ₫' : '—'}
                       </td>
-                      <td /><td /><td />
+                      <td /><td /><td /><td />
                     </tr>
                   ))}
                   </>
@@ -779,6 +781,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                         </td>
                       )
                     })()}
+                    <td style={{ padding: '5px 6px' }}>
+                      <input value={it.nguon ?? ''} onChange={e => upd(it.id, 'nguon', e.target.value)}
+                        placeholder="Nguồn…"
+                        style={{ width: '100%', border: '1px solid #BFDBFE', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent' }} />
+                    </td>
                     <td style={{ padding: '5px 6px' }}>
                       <input value={it.ghi_chu} onChange={e => upd(it.id, 'ghi_chu', e.target.value)}
                         style={{ width: '100%', border: '1px solid #BFDBFE', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent' }} />
@@ -842,6 +849,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                         <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#DCFCE7', color: '#166534', flexShrink: 0 }}>AUTO</span>
                       </div>
                     ) : numInput(it.id, 'ke_hoach', it.ke_hoach)}
+                  </td>
+                  <td style={{ padding: '5px 6px' }}>
+                    <input value={it.nguon ?? ''} onChange={e => upd(it.id, 'nguon', e.target.value)}
+                      placeholder="Nguồn…"
+                      style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 5, padding: '4px 6px', fontSize: 12, fontFamily: 'inherit' }} />
                   </td>
                   <td style={{ padding: '5px 6px' }}>
                     <input value={it.ghi_chu} onChange={e => upd(it.id, 'ghi_chu', e.target.value)}
