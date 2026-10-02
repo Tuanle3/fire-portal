@@ -168,3 +168,9 @@ display:flex;flex-direction:column;gap:12px}
 .khdt .xb.xl svg{color:var(--pos)}
 .khdt .xb.wd svg{color:var(--brand)}
 .khdt .xb[disabled]{opacity:.6;cursor:progress}
+/* Chống bị CSS khác trên trang đè làm hàng chi tiết co lại, chữ bị kéo dọc */
+.khdt .mx tbody tr.dt{display:table-row!important;width:auto!important}
+.khdt .mx tbody tr.dt>th,.khdt .mx tbody tr.dt>td{display:table-cell!important}
+.khdt .mx tbody tr.dt>th.f{width:var(--fw);min-width:var(--fw);max-width:var(--fw)}
+.khdt .db{flex:1 1 0;min-width:0}
+.khdt .dn{overflow-wrap:break-word}
