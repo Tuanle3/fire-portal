@@ -24,6 +24,7 @@ import { TabGiaiPhap }  from './TabGiaiPhap'
 
 // ── Data layer ───────────────────────────────────────────────
 import { subscribeNganSach, saveNganSach } from '@/lib/ngan-sach-store'
+import { subscribeKmcpPlanned }            from '@/lib/ngan-sach-vay-mapping'
 import { subscribeKeHoachThang }           from '@/lib/dong-tien-ke-hoach-store'
 import { matchKMCP }                        from '@/lib/ngan-sach-mapping'
 
