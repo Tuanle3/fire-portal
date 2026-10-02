@@ -51,13 +51,32 @@ const bankCode = (s: string) => {
   return u === 'HDBANK' ? 'HDB' : u
 }
 
+/**
+ * Vay CÁ NHÂN: bảng Nhập Data đặt mã theo TỪNG KHOẢN VAY, dạng {Chủ}_{NH}_{số tỷ}_{Goc|Lai}
+ * (VD hợp đồng "TPB_SON_2.500" → "Son_TPB_2.5_Goc", "BIDV_VU_2.500" → "Vu_BIDV_2.5_Lai",
+ *  "ACB_SON_700" → "Son_ACB_0.7_Goc", "AGR_AN_3.000" → "AN_AGR_3_Lai").
+ * Trả về null nếu số hợp đồng không đúng mẫu → dùng mã theo ngân hàng như cũ.
+ */
+const CHU_VAY: Record<string, string> = { SON: 'Son', VU: 'Vu', TRANG: 'Trang', DAI: 'Dai', AN: 'AN', NV: 'NV' }
+function maKmcpCaNhan(soHopDong: string | undefined, loai: 'Goc' | 'Lai'): string | null {
+  const m = (soHopDong ?? '').trim().match(/^([A-Za-z]+)_([A-Za-z]+)_(\d+(?:\.\d+)?)/)
+  if (!m) return null
+  const bank = m[1].toUpperCase()
+  const chuKey = m[2].toUpperCase()
+  const chu = CHU_VAY[chuKey] ?? (chuKey.charAt(0) + chuKey.slice(1).toLowerCase())
+  // "2.500" = 2.500 tỷ (dấu chấm là thập phân của tỷ); "700" (không chấm) = 700 triệu = 0.7 tỷ
+  const ty = m[3].includes('.') ? parseFloat(m[3]) : parseFloat(m[3]) / 1000
+  if (!isFinite(ty)) return null
+  return `${chu}_${bank}_${String(ty)}_${loai}`
+}
+
 const trongThang = (iso: string | undefined, thang: string) => !!iso && iso.startsWith(thang)
 const chiNhanhTxt = (nganHang: string, chiNhanh?: string) => chiNhanh ? `${nganHang}_${chiNhanh}` : nganHang
 
 function lineChi(p: {
   thang: string; refId: string; entity: string; isCN: boolean; ngay: string
   goc: number; lai: number; nguon: string; doiTac: string; nhan: string
-  hanh: 'NH' | 'DH'; nganHang: string
+  hanh: 'NH' | 'DH'; nganHang: string; soHopDong?: string
 }): KeHoachVayLine[] {
   const out: KeHoachVayLine[] = []
   const kind = p.goc > 0 && p.lai > 0 ? 'Trả Gốc + Lãi' : p.lai > 0 ? 'Trả Lãi' : 'Trả Gốc'
@@ -72,7 +91,8 @@ function lineChi(p: {
       loaiGiaoDich: `Chi - ${p.entity} - ${kind}`,
       nhomBaoCao: p.isCN ? NHOM_BC_CN : NHOM_BC_DN,
       nguonTuDong: 'vay-hm', autoThang: p.thang,
-      kmcpChiTiet: `${ENT_CODE[p.entity] ?? p.entity}_${p.hanh}_${bankCode(p.nganHang)}_${loai === 'goc' ? 'Goc' : 'Lai'}`,
+      kmcpChiTiet: (p.isCN ? maKmcpCaNhan(p.soHopDong, loai === 'goc' ? 'Goc' : 'Lai') : null)
+        ?? `${ENT_CODE[p.entity] ?? p.entity}_${p.hanh}_${bankCode(p.nganHang)}_${loai === 'goc' ? 'Goc' : 'Lai'}`,
     }
   }
   if (p.goc > 0) out.push(mk('goc', Math.round(p.goc)))
@@ -109,7 +129,7 @@ export function subscribeKeHoachVay(thang: string, cb: (lines: KeHoachVayLine[])
         goc: ky.gocTra, lai: ky.laiTra,
         nguon: `[HM] ${hd.soHopDong}`, doiTac: chiNhanhTxt(hd.nganHang, hd.chiNhanh),
         nhan: `${nhan} - ${hd.nganHang} (kỳ ${ky.soKy})`,
-        hanh: 'DH', nganHang: hd.nganHang,
+        hanh: 'DH', nganHang: hd.nganHang, soHopDong: hd.soHopDong,
       }))
     })
 
@@ -147,7 +167,7 @@ export function subscribeKeHoachVay(thang: string, cb: (lines: KeHoachVayLine[])
     daoHan.forEach(d => lines.push({
       id: `autovay_${thang}_thu_${d.hanMuc.id}_${d.ngay}`,
       entity: d.hanMuc.entity, loai: 'thu', nhom: 'THU-VAY', ngayDuKien: d.ngay, soTien: d.soTien,
-      moTa: `Thu vay đáo hạn (${d.hanMuc.soHopDong})`,
+      moTa: `Thu vay đáo hạn - Hạn mức ${d.hanMuc.soHopDong}`,
       loaiKhoan: 'ke-hoach', nhomCha: 'THU-VAY', nhomChaLabel: KMCP_LABEL['THU-VAY'],
       doTinCay: 'du-kien',
       nguonThanhToan: d.nguon, doiTac: d.doiTac,
