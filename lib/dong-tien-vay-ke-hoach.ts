@@ -114,6 +114,7 @@ export function subscribeKeHoachVay(thang: string, cb: (lines: KeHoachVayLine[])
     })
 
     // ── Ngắn hạn: kỳ thu chưa thu trong tháng (luôn nhánh DN) + đáo hạn 95% ──
+    const daoHan = new Map<string, { hanMuc: HanMucNganHan; ngay: string; soTien: number; nguon: string; doiTac: string }>()
     state.khungList.forEach(hanMuc => {
       const boList = state.boHoSoMap[hanMuc.id] ?? []
       const byBo = state.kyThuMap[hanMuc.id] ?? {}
@@ -132,20 +133,28 @@ export function subscribeKeHoachVay(thang: string, cb: (lines: KeHoachVayLine[])
             hanh: 'NH', nganHang: hanMuc.nganHang,
           }))
           const co = Math.round((DAO_HAN_TREN === 'goc' ? goc : goc + lai) * TY_LE_DAO_HAN)
-          if (co > 0) lines.push({
-            id: `autovay_${thang}_thu_${ky.id}`,
-            entity: hanMuc.entity, loai: 'thu', nhom: 'THU-VAY', ngayDuKien: ky.ngayThu, soTien: co,
-            moTa: `Vay đáo hạn ${Math.round(TY_LE_DAO_HAN * 100)}% ${nhan}`,
-            loaiKhoan: 'ke-hoach', nhomCha: 'THU-VAY', nhomChaLabel: KMCP_LABEL['THU-VAY'],
-            doTinCay: 'du-kien',
-            nguonThanhToan: nguon, doiTac,
-            loaiGiaoDich: `Thu - ${hanMuc.entity} - Vay đáo hạn`,
-            nhomBaoCao: NHOM_BC_THU,
-            nguonTuDong: 'vay-hm', autoThang: thang,
-          })
+          if (co > 0) {
+            // Gộp THU đáo hạn: 1 dòng / hạn mức / ngày (không tách từng bộ hồ sơ)
+            const kg = `${hanMuc.id}|${ky.ngayThu}`
+            const cur = daoHan.get(kg)
+            if (cur) cur.soTien += co
+            else daoHan.set(kg, { hanMuc, ngay: ky.ngayThu, soTien: co, nguon, doiTac })
+          }
         })
       })
     })
+
+    daoHan.forEach(d => lines.push({
+      id: `autovay_${thang}_thu_${d.hanMuc.id}_${d.ngay}`,
+      entity: d.hanMuc.entity, loai: 'thu', nhom: 'THU-VAY', ngayDuKien: d.ngay, soTien: d.soTien,
+      moTa: `Thu vay đáo hạn (${d.hanMuc.soHopDong})`,
+      loaiKhoan: 'ke-hoach', nhomCha: 'THU-VAY', nhomChaLabel: KMCP_LABEL['THU-VAY'],
+      doTinCay: 'du-kien',
+      nguonThanhToan: d.nguon, doiTac: d.doiTac,
+      loaiGiaoDich: `Thu - ${d.hanMuc.entity} - Vay đáo hạn`,
+      nhomBaoCao: NHOM_BC_THU,
+      nguonTuDong: 'vay-hm', autoThang: thang,
+    }))
 
     lines.sort((a, b) => a.ngayDuKien.localeCompare(b.ngayDuKien) || a.id.localeCompare(b.id))
     cb(lines)

@@ -268,6 +268,24 @@ const [denNgay, setDenNgay] = useState(() => {
     if (lech.length) console.warn('[vay-auto] mã chưa có dòng trong bảng:', lech)
   }, [autoPlanned, localData.items])
 
+  // ── CHẨN ĐOÁN vay auto (xem Console, có thể xoá sau khi sửa xong) ──
+  useEffect(() => {
+    return subscribeKeHoachThang(month, rows => {
+      const vay = rows.filter(r => r.nguonTuDong === 'vay-hm')
+      const thieuMa = vay.filter(r => !r.kmcpChiTiet)
+      if (thieuMa.length) console.warn('[vay-auto] dòng KHÔNG có kmcpChiTiet:', thieuMa.map(r => r.moTa))
+      console.log('[vay-auto] các mã được sinh ra:', Array.from(new Set(vay.map(r => r.kmcpChiTiet))))
+    })
+  }, [month])
+
+  useEffect(() => {
+    const codes = Object.keys(autoPlanned)
+    const trong = localData.items
+      .filter(i => /_(Goc|Lai)$|^SAHS_TTD/.test(i.kmcp ?? '') && !codes.includes(i.kmcp))
+      .map(i => i.kmcp)
+    if (trong.length) console.warn('[vay-auto] mã trong bảng nhưng KHÔNG có kế hoạch:', trong)
+  }, [autoPlanned, localData.items])
+
   // ── Save ─────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     setSaving(true)
