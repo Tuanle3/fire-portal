@@ -450,6 +450,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     it.kmcp && kmcpPlanned[it.kmcp] !== undefined ? kmcpPlanned[it.kmcp] : it.ke_hoach,
   [kmcpPlanned])
 
+  // Khoản AUTO cộng thẳng vào nhóm: khoá theo KMCP nhóm, hoặc '@' + tên nhóm (khi KMCP nhóm còn là "DT-...")
+  const boSungCuaNhom = useCallback((g: NganSachItem): number =>
+    (g.kmcp ? khBoSung[g.kmcp] : 0) || khBoSung['@' + (g.dien_giai ?? '').trim()] || 0,
+  [khBoSung])
+
   const groupSums = useMemo(() => {
     const sums = new Map<string, { kh: number; th: number }>()
     for (const g of data.items) if (g.is_group) sums.set(g.id, { kh: 0, th: 0 })
@@ -463,10 +468,10 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     }
     // Khoản AUTO cộng thẳng vào nhóm (không có dòng con khớp mã)
     for (const g of data.items) {
-      if (g.is_group && khBoSung[g.kmcp]) sums.get(g.id)!.kh += khBoSung[g.kmcp]
+      if (g.is_group) sums.get(g.id)!.kh += boSungCuaNhom(g)
     }
     return sums
-  }, [data.items, ownerOf, kmcpActual, effectiveKH, khBoSung])
+  }, [data.items, ownerOf, kmcpActual, effectiveKH, boSungCuaNhom])
   const groupSum = (groupId: string) => groupSums.get(groupId) ?? { kh: 0, th: 0 }
 
   // Tổng chi tiết theo section (mỗi dòng chi tiết đếm đúng 1 lần: standalone + con nhóm)
@@ -479,10 +484,10 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       th += autoVal !== undefined ? autoVal : it.thuc_hien
     }
     for (const g of data.items) {
-      if (g.is_group && g.nhom === nhom && khBoSung[g.kmcp]) kh += khBoSung[g.kmcp]
+      if (g.is_group && g.nhom === nhom) kh += boSungCuaNhom(g)
     }
     return { kh, th }
-  }, [data.items, kmcpActual, effectiveKH, khBoSung])
+  }, [data.items, kmcpActual, effectiveKH, boSungCuaNhom])
 
   // B/C totals for computing D = A+B-C
   const sectionTotals = useMemo(() => {
@@ -764,10 +769,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                     {(() => {
                       const { kh } = groupSum(it.id)
                       const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
-                      const coBoSung = !!khBoSung[it.kmcp]
+                      const bs = boSungCuaNhom(it)
+                      const coBoSung = bs > 0
                       return (
                         <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}
-                          title={coBoSung ? `Gồm ${khBoSung[it.kmcp].toLocaleString('vi-VN')} ₫ tự động từ List ngân hàng` : undefined}>
+                          title={coBoSung ? `Gồm ${bs.toLocaleString('vi-VN')} ₫ tự động từ List ngân hàng` : undefined}>
                           {coBoSung && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#DCFCE7', color: '#166534', marginRight: 6 }}>AUTO</span>}
                           {fmt(kh)}
                         </td>

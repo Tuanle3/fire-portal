@@ -274,8 +274,8 @@ const [denNgay, setDenNgay] = useState(() => {
   }, [month])
   // ── Kế hoạch vay tự động (từ dongTienItems) → cộng vào các dòng KMCP chi tiết ──
   const [autoPlanned, setAutoPlanned] = useState<Record<string, number>>({})
-  // Toàn bộ khoản THU vay đáo hạn tự động (kể cả dòng chưa có mã khớp dòng trong bảng)
-  const [autoThu, setAutoThu] = useState<{ kmcp?: string; soTien: number }[]>([])
+  // Toàn bộ dòng vay tự động (kể cả dòng thiếu mã / mã không khớp dòng nào trong bảng)
+  const [autoRows, setAutoRows] = useState<{ kmcp?: string; soTien: number; loai: string }[]>([])
   useEffect(() => {
     return subscribeKeHoachThang(month, rows => {
       const acc: Record<string, number> = {}
@@ -284,29 +284,46 @@ const [denNgay, setDenNgay] = useState(() => {
           acc[r.kmcpChiTiet] = (acc[r.kmcpChiTiet] ?? 0) + r.soTien
       })
       setAutoPlanned(acc)
-      setAutoThu(
+      setAutoRows(
         rows
-          .filter(r => r.nguonTuDong === 'vay-hm' && r.loai === 'thu')
-          .map(r => ({ kmcp: r.kmcpChiTiet, soTien: r.soTien })),
+          .filter(r => r.nguonTuDong === 'vay-hm')
+          .map(r => ({ kmcp: r.kmcpChiTiet, soTien: r.soTien, loai: r.loai })),
       )
     })
   }, [month])
 
-  const kmcpPlannedFinal = useMemo(
-    () => ({ ...kmcpPlanned, ...autoPlanned }),
-    [kmcpPlanned, autoPlanned],
-  )
+  // Khớp mã KHÔNG phân biệt hoa/thường (VD sinh ra "SAHS_DH_ACB_Lai" nhưng dòng trong bảng
+  // gõ "SAHS_DH_ACB_lai") → tạo thêm khoá theo ĐÚNG mã của dòng trong bảng.
+  const kmcpPlannedFinal = useMemo(() => {
+    const merged: Record<string, number> = { ...kmcpPlanned, ...autoPlanned }
+    const lower = new Map<string, number>()
+    Object.entries(autoPlanned).forEach(([k, v]) => lower.set(k.trim().toLowerCase(), v))
+    localData.items.forEach(it => {
+      if (it.is_section || it.is_group || !it.kmcp || merged[it.kmcp] !== undefined) return
+      const v = lower.get(it.kmcp.trim().toLowerCase())
+      if (v !== undefined) merged[it.kmcp] = v
+    })
+    return merged
+  }, [kmcpPlanned, autoPlanned, localData.items])
 
-  // Thu vay đáo hạn (95%) KHÔNG khớp được dòng nào trong bảng → cộng thẳng vào nhóm
-  // "Thu từ vay ngân hàng (đáo hạn)" (KMCP DT-VNH) để số không bị rơi mất.
-  // Dòng đã khớp mã với 1 dòng con thì đã tính qua kmcpPlanned — không cộng lần 2.
+  // Dòng vay auto KHÔNG khớp được dòng con nào trong bảng → cộng thẳng vào NHÓM để số không rơi mất:
+  //   • THU vay đáo hạn             → nhóm "Thu từ vay ngân hàng (đáo hạn)"  (KMCP DT-VNH)
+  //   • CHI vay cá nhân "Cá nhân_…" → nhóm "Gốc vay cá nhân" / "Lãi vay cá nhân" (khoá '@' + tên nhóm)
+  // Dòng đã khớp mã (kể cả khác hoa/thường) thì đã tính qua kmcpPlannedFinal — không cộng lần 2.
   const khBoSung = useMemo(() => {
-    const co = new Set(localData.items.filter(i => !i.is_section && !i.is_group).map(i => i.kmcp))
-    const lech = autoThu
-      .filter(r => !(r.kmcp && co.has(r.kmcp)))
-      .reduce((t, r) => t + r.soTien, 0)
-    return lech > 0 ? { 'DT-VNH': lech } : ({} as Record<string, number>)
-  }, [autoThu, localData.items])
+    const co = new Set(
+      localData.items.filter(i => !i.is_section && !i.is_group && i.kmcp).map(i => i.kmcp.trim().toLowerCase()),
+    )
+    const out: Record<string, number> = {}
+    const add = (k: string, v: number) => { out[k] = (out[k] ?? 0) + v }
+    autoRows.forEach(r => {
+      if (r.kmcp && co.has(r.kmcp.trim().toLowerCase())) return
+      if (r.loai === 'thu') { add('DT-VNH', r.soTien); return }
+      const ma = (r.kmcp ?? '').normalize('NFC')
+      if (/^cá nhân_/i.test(ma)) add(/_goc$/i.test(ma) ? '@Gốc vay cá nhân' : '@Lãi vay cá nhân', r.soTien)
+    })
+    return out
+  }, [autoRows, localData.items])
 
   // Báo các mã vay chưa có dòng tương ứng trong bảng (xem Console)
   useEffect(() => {
