@@ -113,6 +113,9 @@ export interface KhoanDongTien {
   doiTac?:         string                // đối tác / NCC / khách hàng
   loaiGiaoDich?:   string                // VD 'Chi - SAP - Trả Lãi'
   nhomBaoCao?:     string                // VD '6. Trả ngân hàng: Gốc, lãi (doanh nghiệp)'
+  // Khoản do hệ thống tự tạo từ List ngân hàng (khoá, không sửa/xoá tay) — xem dong-tien-vay-ke-hoach.ts
+  nguonTuDong?:    'vay-hm'
+  autoThang?:      string                // 'YYYY-MM' của lần cập nhật tự động
 
   doTinCay?:      DoTinCay
   moTa:           string

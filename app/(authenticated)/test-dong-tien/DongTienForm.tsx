@@ -19,6 +19,7 @@ import type { EntityType } from '@/lib/han-muc-types'
 //    NhomDongTien enum (cho-goi, sap, goc-vay-dn...) vì 2 bộ mã khác nhau
 //    hoàn toàn, và kmcpActual/kmcpPlanned đối chiếu sổ quỹ theo mã KMCP cũ. ──
 import { DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
+import { KMCP_VAY_TU_DONG } from '@/lib/dong-tien-vay-ke-hoach'
 
 const ENTITIES: EntityType[] = ['SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 const NHOM_MOI = '__nhom_moi__'
@@ -95,10 +96,11 @@ const VND = new Intl.NumberFormat('vi-VN')
 // ── Danh sách mã KMCP cố định cũ, tách theo Thu (nhóm B)/Chi (nhóm C) —
 //    đúng quy ước NganSachItem.nhom đang dùng ở TabGiaiPhap/TabTongHop.
 //    Dùng làm option "Nhóm/KMCP" khi form ở chế độ Kế hoạch. ──────────
-const KMCP_ITEMS_THU = DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && d.nhom === 'B')
-const KMCP_ITEMS_CHI = DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && d.nhom === 'C')
+// Ẩn 5 mã vay NH (THU-VAY, VAY-GOC/LAI-DN/CN): hệ thống tự điền từ List ngân hàng, không nhập tay.
+const KMCP_ITEMS_THU = DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && d.nhom === 'B' && !KMCP_VAY_TU_DONG.includes(d.kmcp as string))
+const KMCP_ITEMS_CHI = DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && d.nhom === 'C' && !KMCP_VAY_TU_DONG.includes(d.kmcp as string))
 const KMCP_LABEL: Record<string, string> = Object.fromEntries(
-  [...KMCP_ITEMS_THU, ...KMCP_ITEMS_CHI].map(d => [d.kmcp as string, d.dien_giai]),
+  DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && (d.nhom === 'B' || d.nhom === 'C')).map(d => [d.kmcp as string, d.dien_giai]),
 )
 function kmcpOptionsTheoLoai(loai: LoaiDongTien) {
   return (loai === 'thu' ? KMCP_ITEMS_THU : KMCP_ITEMS_CHI)
@@ -275,6 +277,7 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(null)
+    if (editing?.nguonTuDong) { setError('Khoản này do hệ thống tự tạo từ List ngân hàng — không sửa tay. Dùng nút "Cập nhật kế hoạch vay" ở Tab Nhập Data.'); return }
     if (!form.moTa.trim()) { setError('Vui lòng nhập mô tả khoản.'); return }
     if (!form.soTien || form.soTien <= 0) { setError('Số tiền phải lớn hơn 0.'); return }
 

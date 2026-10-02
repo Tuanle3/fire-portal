@@ -10,6 +10,7 @@ import type { KhoanDongTien } from '@/lib/dong-tien-types'
 import { subscribeKeHoachThang } from '@/lib/dong-tien-ke-hoach-store'
 import { deleteKhoanDongTien } from '@/lib/dong-tien-store'
 import DongTienForm from './DongTienForm'
+import KeHoachVayAuto from './KeHoachVayAuto'
 import type { EntityType } from '@/lib/han-muc-types'
 
 // Sinh file mẫu Excel ở client theo đúng cấu trúc tháng đang chọn.
@@ -299,10 +300,14 @@ function KeHoachDongTienSection({ month, entityFilter }: { month: string; entity
                       {it.lap === 'hang-thang' ? 'Hàng tháng' : 'Hàng quý'}
                     </span>
                   )}
-                  <button onClick={() => openEdit(it)} title="Sửa"
-                    style={{ ...BtnSmall('#F3F4F6', '#374151'), width: 20, height: 20, fontSize: 11 }}>✎</button>
-                  <button onClick={() => xoa(it)} title="Xoá"
-                    style={{ ...BtnSmall('#FEE2E2', '#991B1B'), width: 20, height: 20, fontSize: 11 }}>✕</button>
+                  {it.nguonTuDong ? (
+                    <span title="Tự động từ List ngân hàng — không sửa tay" style={{ width: 44, textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#92400E' }}>🔒 AUTO</span>
+                  ) : (<>
+                    <button onClick={() => openEdit(it)} title="Sửa"
+                      style={{ ...BtnSmall('#F3F4F6', '#374151'), width: 20, height: 20, fontSize: 11 }}>✎</button>
+                    <button onClick={() => xoa(it)} title="Xoá"
+                      style={{ ...BtnSmall('#FEE2E2', '#991B1B'), width: 20, height: 20, fontSize: 11 }}>✕</button>
+                  </>)}
                 </div>
               ))}
             </div>
@@ -622,6 +627,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
         </div>
       </div>
 
+      <KeHoachVayAuto month={month} />
       <KeHoachDongTienSection month={month} entityFilter={entityFilter} />
 
       <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 8 }}>
