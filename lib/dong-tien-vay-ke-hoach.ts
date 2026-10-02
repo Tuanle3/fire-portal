@@ -52,22 +52,13 @@ const bankCode = (s: string) => {
 }
 
 /**
- * Vay CÁ NHÂN: bảng Nhập Data đặt mã theo TỪNG KHOẢN VAY, dạng {Chủ}_{NH}_{số tỷ}_{Goc|Lai}
- * (VD hợp đồng "TPB_SON_2.500" → "Son_TPB_2.5_Goc", "BIDV_VU_2.500" → "Vu_BIDV_2.5_Lai",
- *  "ACB_SON_700" → "Son_ACB_0.7_Goc", "AGR_AN_3.000" → "AN_AGR_3_Lai").
- * Trả về null nếu số hợp đồng không đúng mẫu → dùng mã theo ngân hàng như cũ.
+ * Vay CÁ NHÂN: bảng Nhập Data đặt mã theo TỪNG KHOẢN VAY = số hợp đồng + _Goc/_Lai
+ * (VD hợp đồng "TPB_SON_2.500" → "TPB_SON_2.500_Lai"). Khi số hợp đồng trống → mã theo ngân hàng như cũ.
+ * (Phía bảng còn so khớp "mềm" — không phân biệt hoa/thường, thứ tự, cách viết số — nên lệch nhẹ vẫn khớp.)
  */
-const CHU_VAY: Record<string, string> = { SON: 'Son', VU: 'Vu', TRANG: 'Trang', DAI: 'Dai', AN: 'AN', NV: 'NV' }
 function maKmcpCaNhan(soHopDong: string | undefined, loai: 'Goc' | 'Lai'): string | null {
-  const m = (soHopDong ?? '').trim().match(/^([A-Za-z]+)_([A-Za-z]+)_(\d+(?:\.\d+)?)/)
-  if (!m) return null
-  const bank = m[1].toUpperCase()
-  const chuKey = m[2].toUpperCase()
-  const chu = CHU_VAY[chuKey] ?? (chuKey.charAt(0) + chuKey.slice(1).toLowerCase())
-  // "2.500" = 2.500 tỷ (dấu chấm là thập phân của tỷ); "700" (không chấm) = 700 triệu = 0.7 tỷ
-  const ty = m[3].includes('.') ? parseFloat(m[3]) : parseFloat(m[3]) / 1000
-  if (!isFinite(ty)) return null
-  return `${chu}_${bank}_${String(ty)}_${loai}`
+  const so = (soHopDong ?? '').trim()
+  return so ? `${so}_${loai}` : null
 }
 
 const trongThang = (iso: string | undefined, thang: string) => !!iso && iso.startsWith(thang)

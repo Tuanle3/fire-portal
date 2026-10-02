@@ -48,6 +48,16 @@ const TABS: { key: Tab; label: string; emoji: string }[] = [
   { key: 'giai-phap',  label: 'Giải pháp cân đối',     emoji: '⚖️' },
 ]
 
+// Chuẩn hoá mã KMCP để so khớp "mềm": không phân biệt hoa/thường, dấu, thứ tự các thành phần,
+// và cách viết số (2.500 = 2.5; 700 = 0.7).  VD "TPB_SON_2.500_Lai" ≡ "Son_TPB_2.5_Lai",
+// "AN_AGR_3_Lai" ≡ "AGR_AN_3.000_Lai", "ACB_SON_700_Goc" ≡ "Son_ACB_0.7_Goc".
+function chuanMa(k: string): string {
+  return k.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toUpperCase()
+    .split(/[^A-Z0-9.]+/).filter(Boolean)
+    .map(t => /^\d+(\.\d+)?$/.test(t) ? String(!t.includes('.') && Number(t) >= 100 ? Number(t) / 1000 : Number(t)) : t)
+    .sort().join('|')
+}
+
 function defaultThang(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -296,11 +306,11 @@ const [denNgay, setDenNgay] = useState(() => {
   // gõ "SAHS_DH_ACB_lai") → tạo thêm khoá theo ĐÚNG mã của dòng trong bảng.
   const kmcpPlannedFinal = useMemo(() => {
     const merged: Record<string, number> = { ...kmcpPlanned, ...autoPlanned }
-    const lower = new Map<string, number>()
-    Object.entries(autoPlanned).forEach(([k, v]) => lower.set(k.trim().toLowerCase(), v))
+    const mem = new Map<string, number>()
+    Object.entries(autoPlanned).forEach(([k, v]) => mem.set(chuanMa(k), v))
     localData.items.forEach(it => {
       if (it.is_section || it.is_group || !it.kmcp || merged[it.kmcp] !== undefined) return
-      const v = lower.get(it.kmcp.trim().toLowerCase())
+      const v = mem.get(chuanMa(it.kmcp))
       if (v !== undefined) merged[it.kmcp] = v
     })
     return merged
@@ -312,12 +322,12 @@ const [denNgay, setDenNgay] = useState(() => {
   // Dòng đã khớp mã (kể cả khác hoa/thường) thì đã tính qua kmcpPlannedFinal — không cộng lần 2.
   const khBoSung = useMemo(() => {
     const co = new Set(
-      localData.items.filter(i => !i.is_section && !i.is_group && i.kmcp).map(i => i.kmcp.trim().toLowerCase()),
+      localData.items.filter(i => !i.is_section && !i.is_group && i.kmcp).map(i => chuanMa(i.kmcp)),
     )
     const out: Record<string, number> = {}
     const add = (k: string, v: number) => { out[k] = (out[k] ?? 0) + v }
     autoRows.forEach(r => {
-      if (r.kmcp && co.has(r.kmcp.trim().toLowerCase())) return
+      if (r.kmcp && co.has(chuanMa(r.kmcp))) return
       if (r.loai === 'thu') { add('DT-VNH', r.soTien); return }
       const ma = (r.kmcp ?? '').normalize('NFC')
       if (/^cá nhân_/i.test(ma)) add(/_goc$/i.test(ma) ? '@Gốc vay cá nhân' : '@Lãi vay cá nhân', r.soTien)
