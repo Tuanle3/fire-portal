@@ -71,6 +71,8 @@ export async function saveKhoanDongTien(
     'daThucHien', 'ngayThucHien', 'soTienThucTe', 'ghiChu',
     // Bước A — liên kết kế hoạch ↔ thực hiện
     'loaiKhoan', 'nhomCha', 'nhomChaLabel',
+    // Tab Kế hoạch dòng tiền — để trống thì xoá field (không ghi undefined)
+    'nguonThanhToan', 'doiTac', 'loaiGiaoDich', 'nhomBaoCao',
   ]
 
   // ── EDIT: sửa đúng 1 bản ghi, không sinh lại chuỗi lặp ──

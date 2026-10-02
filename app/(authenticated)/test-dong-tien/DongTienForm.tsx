@@ -22,6 +22,74 @@ import { DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
 
 const ENTITIES: EntityType[] = ['SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 const NHOM_MOI = '__nhom_moi__'
+
+// ── Gợi ý cho 4 trường của Tab "Kế hoạch dòng tiền" (lấy từ file template).
+//    Vẫn cho gõ giá trị mới — chỉ là datalist gợi ý. ──
+const GOI_Y_NGUON: string[] = [
+  "NOXH -Quỹ - LD Sơn An",
+  "Quỹ - SAHS",
+  "Quỹ - SAP",
+  "Quỹ - YANA",
+  "Quỹ - ĐTSA",
+  "Quỹ chung - SAG",
+  "[HM mới] AGR_DAI_2.800",
+  "[HM mới] AGR_SAP_6.400",
+  "[HM mới] BIDV_DUONG_1.600",
+  "[HM] ACB_SAHS_3.800",
+  "[HM] ACB_SAP_13.000",
+  "[HM] ACB_SHS_3.800",
+  "[HM] BIDV_SAP_13.000",
+]
+const GOI_Y_NHOM_BC: string[] = [
+  "1. Thu từ chợ Gôi",
+  "2. Chi trả nhà thầu: NOXH Nguyễn Trãi",
+  "3. Thu từ Đô Thị Sơn An",
+  "6. Thu khác",
+  "6. Trả ngân hàng: Gốc, lãi (cá nhân)",
+  "6. Trả ngân hàng: Gốc, lãi (doanh nghiệp)",
+  "8. Thu vay đáo hạn (ngân hàng)",
+  "9. Lãi vay cá nhân",
+  "9. Thu vay mới (hạn mức mới)",
+  "11. CPHĐ - Lương & các khoản theo lương",
+  "12. CPHĐ - Hành chính",
+  "14. CPHĐ - Thuế, phí, lệ phí",
+  "18. Chi khác",
+]
+const GOI_Y_LOAI_GD: string[] = [
+  "Chi - Cá nhân - Chuyển mục đích SDĐ",
+  "Chi - Cá nhân - Trả Gốc + Lãi",
+  "Chi - SAG - Dự trù",
+  "Chi - SAG - Lương & các khoản theo lương",
+  "Chi - SAG - TT tiền điện",
+  "Chi - SAG - Trả gốc lãi thẻ tín dụng",
+  "Chi - SAG - Trả gốc lãi vay ngoài",
+  "Chi - SAG - Trả tiền mượn",
+  "Chi - SAHS - TT tiền điện",
+  "Chi - SAHS - Thuế và các khoản phải nộp",
+  "Chi - SAHS - Tiền nước NPC",
+  "Chi - SAHS - Trả Gốc + Lãi",
+  "Chi - SAHS - Trả Lãi",
+  "Chi - SAP - Rút tiền mặt nhập quỹ",
+  "Chi - SAP - Trả Gốc + Lãi",
+  "Chi - SAP - Trả Lãi",
+  "Chi - Yana - Lương & các khoản theo lương",
+  "Chi - ĐTSA - TT tiền điện",
+  "Chi - ĐTSA - Tiền thuê mặt bằng",
+  "Chi - ĐTSA - Trả Gốc + Lãi",
+  "Chi - ĐTSA - Trả gốc lãi vay ngoài",
+  "NOXH - SAHS - Hạng mục",
+  "NOXH - SAHS - Phí bảo lãnh",
+  "NOXH - SAHS - Tiền thuê nhà",
+  "NOXH - SAP thi công",
+  "Thu - Cá nhân - Vay hạn mức mới",
+  "Thu - SAG - Rút tiền nhập quỹ",
+  "Thu - SAHS - Tiền MB, điện, nước",
+  "Thu - SAHS - Tiền cho thuê xe",
+  "Thu - SAHS - Vay đáo hạn",
+  "Thu - SAP - Vay hạn mức mới",
+  "Thu - SAP - Vay đáo hạn",
+  "Thu - ĐTSA - Tiền MB, điện, nước",
+]
 const VND = new Intl.NumberFormat('vi-VN')
 
 // ── Danh sách mã KMCP cố định cũ, tách theo Thu (nhóm B)/Chi (nhóm C) —
@@ -55,6 +123,10 @@ const emptyForm = (entityMacDinh?: EntityType) => ({
   lap:          'mot-lan' as ChuKyLap,
   soKyLap:      1,
   ghiChu:       '',
+  nguonThanhToan: '',
+  doiTac:         '',
+  loaiGiaoDich:   '',
+  nhomBaoCao:     '',
 })
 
 interface Props {
@@ -100,6 +172,10 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
         lap:          'mot-lan',
         soKyLap:      1,
         ghiChu:       editing.ghiChu ?? '',
+        nguonThanhToan: editing.nguonThanhToan ?? '',
+        doiTac:         editing.doiTac ?? '',
+        loaiGiaoDich:   editing.loaiGiaoDich ?? '',
+        nhomBaoCao:     editing.nhomBaoCao ?? '',
       })
     } else {
       const base = emptyForm(entityMacDinh)
@@ -216,6 +292,11 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
           loaiKhoan:    form.loaiKhoan,
           nhomCha:      form.nhomCha,
           nhomChaLabel: form.nhomChaLabel,
+          // ── MỚI: 4 trường cho Tab Kế hoạch dòng tiền (để trống = adapter tự suy ra) ──
+          nguonThanhToan: form.nguonThanhToan.trim() || undefined,
+          doiTac:         form.doiTac.trim() || undefined,
+          loaiGiaoDich:   form.loaiGiaoDich.trim() || undefined,
+          nhomBaoCao:     form.nhomBaoCao.trim() || undefined,
         },
         editing?.id,
       )
@@ -320,6 +401,37 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
                     {DO_TIN_CAY_LABEL[d]}
                   </label>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {form.loaiKhoan === 'ke-hoach' && (
+            <div className="nh-form-grid" style={{ marginBottom: 10 }}>
+              <div>
+                <label className="nh-label">Nguồn thanh toán</label>
+                <input type="text" className="nh-input" list="dt-goiy-nguon" value={form.nguonThanhToan}
+                  onChange={e => set('nguonThanhToan', e.target.value)}
+                  placeholder={`Để trống = Quỹ - ${form.entity}`} />
+                <datalist id="dt-goiy-nguon">{GOI_Y_NGUON.map(x => <option key={x} value={x} />)}</datalist>
+              </div>
+              <div>
+                <label className="nh-label">Đối tác / NCC / KH</label>
+                <input type="text" className="nh-input" value={form.doiTac}
+                  onChange={e => set('doiTac', e.target.value)} placeholder="VD: ACB_Đồng Nai" />
+              </div>
+              <div>
+                <label className="nh-label">Loại giao dịch</label>
+                <input type="text" className="nh-input" list="dt-goiy-loaigd" value={form.loaiGiaoDich}
+                  onChange={e => set('loaiGiaoDich', e.target.value)}
+                  placeholder="VD: Chi - SAP - Trả Lãi" />
+                <datalist id="dt-goiy-loaigd">{GOI_Y_LOAI_GD.map(x => <option key={x} value={x} />)}</datalist>
+              </div>
+              <div>
+                <label className="nh-label">Nhóm (báo cáo)</label>
+                <input type="text" className="nh-input" list="dt-goiy-nhombc" value={form.nhomBaoCao}
+                  onChange={e => set('nhomBaoCao', e.target.value)}
+                  placeholder="VD: 6. Trả ngân hàng: Gốc, lãi (doanh nghiệp)" />
+                <datalist id="dt-goiy-nhombc">{GOI_Y_NHOM_BC.map(x => <option key={x} value={x} />)}</datalist>
               </div>
             </div>
           )}

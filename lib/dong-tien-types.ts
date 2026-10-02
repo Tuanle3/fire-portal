@@ -108,6 +108,12 @@ export interface KhoanDongTien {
   nhomCha?:       string                 // key nhóm cha — VD 'cho-goi'
   nhomChaLabel?:  string                 // label nhóm cha — VD 'Thu từ Chợ Gôi'
 
+  // ── MỚI (Tab "Kế hoạch dòng tiền") — optional, dữ liệu cũ không có vẫn chạy ──
+  nguonThanhToan?: string                // VD 'Quỹ - SAP', '[HM] ACB_SAP_13.000'
+  doiTac?:         string                // đối tác / NCC / khách hàng
+  loaiGiaoDich?:   string                // VD 'Chi - SAP - Trả Lãi'
+  nhomBaoCao?:     string                // VD '6. Trả ngân hàng: Gốc, lãi (doanh nghiệp)'
+
   doTinCay?:      DoTinCay
   moTa:           string
 

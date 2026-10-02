@@ -1,9 +1,10 @@
 'use client'
 // ============================================================
 // page.tsx — Module "Test Dòng tiền" (gộp từ module Ngân sách)
-// 4 tab:
+// 5 tab:
 //   dong-tien   — Dòng tiền (TabDongTien cũ — giữ nguyên)
-//   ke-hoach    — Kế hoạch (TabKeHoach, nhập tay + AUTO vay NH)
+//   ke-hoach    — Nhập Data (TabKeHoach, nhập tay + AUTO vay NH)
+//   kh-dong-tien— Kế hoạch dòng tiền (TabKeHoachDongTien, lấy data từ Nhập Data)
 //   tong-hop    — Báo cáo thực hiện (TabTongHop)
 //   giai-phap   — Giải pháp cân đối (TabGiaiPhap)
 // ============================================================
@@ -14,6 +15,7 @@ import NhSharedStyles       from '@/components/NhSharedStyles'
 
 // ── Tab Dòng tiền (giữ nguyên file cũ) ──────────────────────
 import TabDongTien from './TabDongTien'
+import TabKeHoachDongTien from './TabKeHoachDongTien'
 
 // ── Tab Kế hoạch + Tổng hợp (dùng lại từ module Ngân sách) ──
 import { TabKeHoach }   from './TabKeHoach'
@@ -35,11 +37,12 @@ import { subscribeDongTienTuHanMuc } from '@/lib/dong-tien-hanmuc-adapter'
 
 // ============================================================
 
-type Tab = 'dong-tien' | 'ke-hoach' | 'tong-hop' | 'giai-phap'
+type Tab = 'dong-tien' | 'ke-hoach' | 'kh-dong-tien' | 'tong-hop' | 'giai-phap'
 
 const TABS: { key: Tab; label: string; emoji: string }[] = [
   { key: 'dong-tien',  label: 'Dòng tiền',            emoji: '💵' },
-  { key: 'ke-hoach',   label: 'Kế hoạch',              emoji: '📋' },
+  { key: 'ke-hoach',   label: 'Nhập Data',             emoji: '📋' },
+  { key: 'kh-dong-tien', label: 'Kế hoạch dòng tiền', emoji: '📈' },
   { key: 'tong-hop',   label: 'Báo cáo thực hiện',     emoji: '📊' },
   { key: 'giai-phap',  label: 'Giải pháp cân đối',     emoji: '⚖️' },
 ]
@@ -348,6 +351,8 @@ const [denNgay, setDenNgay] = useState(() => {
                 tonQuyDetail={[]}
               />
             )}
+
+            {tab === 'kh-dong-tien' && <TabKeHoachDongTien />}
 
             {tab === 'tong-hop' && (
               <TabTongHop
