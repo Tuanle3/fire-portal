@@ -1,8 +1,7 @@
 'use client'
 // ============================================================
 // page.tsx — Module "Test Dòng tiền" (gộp từ module Ngân sách)
-// 5 tab:
-//   dong-tien   — Dòng tiền (TabDongTien cũ — giữ nguyên)
+// 4 tab:
 //   ke-hoach    — Nhập Data (TabKeHoach, nhập tay + AUTO vay NH)
 //   kh-dong-tien— Kế hoạch dòng tiền (TabKeHoachDongTien, lấy data từ Nhập Data)
 //   tong-hop    — Báo cáo thực hiện (TabTongHop)
@@ -13,8 +12,7 @@ import { useUserSession }   from '@/contexts/user-session'
 import { useTopbarInfo }    from '@/contexts/topbar-info'
 import NhSharedStyles       from '@/components/NhSharedStyles'
 
-// ── Tab Dòng tiền (giữ nguyên file cũ) ──────────────────────
-import TabDongTien from './TabDongTien'
+// ── Tab Kế hoạch dòng tiền ──────────────────────────────────
 import TabKeHoachDongTien from './TabKeHoachDongTien'
 
 // ── Tab Kế hoạch + Tổng hợp (dùng lại từ module Ngân sách) ──
@@ -38,10 +36,9 @@ import { subscribeDongTienTuHanMuc } from '@/lib/dong-tien-hanmuc-adapter'
 
 // ============================================================
 
-type Tab = 'dong-tien' | 'ke-hoach' | 'kh-dong-tien' | 'tong-hop' | 'giai-phap'
+type Tab = 'ke-hoach' | 'kh-dong-tien' | 'tong-hop' | 'giai-phap'
 
 const TABS: { key: Tab; label: string; emoji: string }[] = [
-  { key: 'dong-tien',  label: 'Dòng tiền',            emoji: '💵' },
   { key: 'ke-hoach',   label: 'Nhập Data',             emoji: '📋' },
   { key: 'kh-dong-tien', label: 'Kế hoạch dòng tiền', emoji: '📈' },
   { key: 'tong-hop',   label: 'Báo cáo thực hiện',     emoji: '📊' },
@@ -76,7 +73,7 @@ export default function TestDongTienPage() {
   const { loading: sessLoading, can } = useUserSession()
   const { setLeft, setRight }         = useTopbarInfo()
 
-  const [tab,   setTab]   = useState<Tab>('dong-tien')
+  const [tab,   setTab]   = useState<Tab>('ke-hoach')
   const [month, setMonth] = useState(defaultThang())
 
 const [tuNgay, setTuNgay] = useState(`${defaultThang()}-01`)
@@ -419,8 +416,6 @@ const [denNgay, setDenNgay] = useState(() => {
           <div className="nh-content">
 
             {/* ── TAB CONTENT ─────────────────────────────────── */}
-
-            {tab === 'dong-tien' && <TabDongTien />}
 
             {tab === 'ke-hoach' && (
               <TabKeHoach

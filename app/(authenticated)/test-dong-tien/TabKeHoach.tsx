@@ -925,8 +925,9 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50,
           display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto',
-        }} onClick={dongForm}>
-          <div style={{ width: '100%', maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+        }}>
+          {/* Không đóng khi bấm ra ngoài — tránh mất dữ liệu đang nhập; chỉ đóng bằng Huỷ / Lưu */}
+          <div style={{ width: '100%', maxWidth: 560 }}>
             <DongTienForm
               editing={formEditing}
               loaiKhoanMacDinh="ke-hoach"
