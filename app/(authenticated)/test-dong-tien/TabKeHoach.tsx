@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useMemo, useCallback, useEffect } from 'react'
+import { useState, useRef, useMemo, useCallback, useEffect, Fragment } from 'react'
 import * as XLSX from 'xlsx'
 import { NganSachThang, NganSachItem, GiaiPhap, DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
 import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup } from '@/lib/ngan-sach-store'
@@ -206,139 +206,30 @@ const KMCP_LABEL_ALL: Record<string, string> = Object.fromEntries(
 )
 
 /**
- * SECTION MỚI — Kế hoạch nhập qua dongTienItems (loaiKhoan='ke-hoach').
- * Chạy SONG SONG với bảng KMCP cũ bên dưới (không đụng ngan_sach.items),
- * dùng lại nguyên DongTienForm để nhập (loaiKhoanMacDinh="ke-hoach",
- * khoaLoaiKhoan để khoá radio Kế hoạch/Thực hiện vì ngữ cảnh đã rõ).
- * Tự lọc theo tháng (subscribeKeHoachThang) + entityFilter dùng chung
- * từ page.tsx (nếu có).
+ * THANH CÔNG CỤ — Kế hoạch nhập qua Dòng tiền (loaiKhoan='ke-hoach').
+ * Không liệt kê khoản ở đây nữa: mỗi khoản đã nhập hiển thị thẳng trong BẢNG
+ * bên dưới (dòng nền xanh nhạt, nhãn NHẬP) — sửa/xoá ngay tại dòng đó.
  */
-function KeHoachDongTienSection({ month, entityFilter }: { month: string; entityFilter?: EntityType | 'all' }) {
-  const [items, setItems]   = useState<KhoanDongTien[]>([])
-  const [open, setOpen]     = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editing, setEditing]   = useState<KhoanDongTien | null>(null)
-
-  useEffect(() => {
-    return subscribeKeHoachThang(month, setItems, entityFilter && entityFilter !== 'all' ? entityFilter : undefined)
-  }, [month, entityFilter])
-
-  const thuCong = useMemo(() => items.filter(i => !i.nguonTuDong), [items])
-  const tuDong  = useMemo(() => items.filter(i => !!i.nguonTuDong), [items])
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, { thu: KhoanDongTien[]; chi: KhoanDongTien[] }>()
-    for (const it of thuCong) {
-      const kmcp = it.nhom
-      if (!map.has(kmcp)) map.set(kmcp, { thu: [], chi: [] })
-      map.get(kmcp)![it.loai === 'thu' ? 'thu' : 'chi'].push(it)
-    }
-       return map
-  }, [thuCong])
-
-  const tongThu = thuCong.filter(i => i.loai === 'thu').reduce((s, i) => s + i.soTien, 0)
-  const tongChi = thuCong.filter(i => i.loai === 'chi').reduce((s, i) => s + i.soTien, 0)
-
-  const openNew = () => { setEditing(null); setShowForm(true) }
-  const openEdit = (it: KhoanDongTien) => { setEditing(it); setShowForm(true) }
-  const closeForm = () => { setShowForm(false); setEditing(null) }
-
-  const xoa = async (it: KhoanDongTien) => {
-    if (!confirm(`Xoá khoản "${it.moTa}"?`)) return
-    try { await deleteKhoanDongTien(it.id) } catch { alert('Xoá thất bại, thử lại.') }
-  }
-
+function KeHoachDongTienBar({ soKhoan, tongThu, tongChi, onThem }: {
+  soKhoan: number; tongThu: number; tongChi: number; onThem: () => void
+}) {
   const fmt = (n: number) => n.toLocaleString('vi-VN')
-
   return (
-    <div style={{ border: '1px solid #BFDBFE', borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '10px 14px', background: '#EFF6FF', cursor: 'pointer',
-      }} onClick={() => setOpen(v => !v)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13 }}>{open ? '▾' : '▸'}</span>
-          <span style={{ fontWeight: 700, fontSize: 13, color: '#1C3557' }}>📥 Kế hoạch nhập qua Dòng tiền (mới)</span>
-          <span style={{ fontSize: 11, color: '#6B7280' }}>({thuCong.length} khoản)</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', border: '1px solid #BFDBFE', background: '#EFF6FF', borderRadius: 8, padding: '8px 14px', marginBottom: 12 }}>
+      <div style={{ flex: 1, minWidth: 260 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: '#1C3557' }}>
+          📥 Khoản kế hoạch nhập thêm <span style={{ fontWeight: 400, fontSize: 11.5, color: '#6B7280' }}>({soKhoan} khoản)</span>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <span style={{ fontSize: 11.5, color: '#166534' }}>Thu: {fmt(tongThu)} ₫</span>
-          <span style={{ fontSize: 11.5, color: '#991B1B' }}>Chi: {fmt(tongChi)} ₫</span>
-          <button
-            onClick={e => { e.stopPropagation(); openNew() }}
-            style={{
-              padding: '5px 12px', background: '#1C3557', color: '#fff', border: 'none',
-              borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer',
-            }}
-          >➕ Thêm khoản kế hoạch</button>
+        <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 2 }}>
+          Khoản đã nhập hiển thị ngay trong bảng bên dưới (dòng nền xanh nhạt, nhãn NHẬP) — bấm ✎ để sửa, ✕ để xoá tại dòng đó.
         </div>
       </div>
-
-      {open && (
-                <div style={{ padding: thuCong.length || tuDong.length ? '10px 14px' : '20px 14px' }}>
-          {tuDong.length > 0 && (
-            <div style={{ fontSize: 12, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '6px 10px', marginBottom: 8 }}>
-              🔒 {tuDong.length} dòng vay tự động từ List ngân hàng đã được cộng vào cột "Kế hoạch" của bảng bên dưới.
-            </div>
-          )}
-          {thuCong.length === 0 && (
-            <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 12.5 }}>
-              Chưa có khoản kế hoạch nào nhập qua Dòng tiền cho tháng này.
-            </div>
-          )}
-          {[...grouped.entries()].map(([kmcp, g]) => (
-            <div key={kmcp} style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#374151', marginBottom: 3 }}>
-                {kmcp} — {KMCP_LABEL_ALL[kmcp] ?? kmcp}
-              </div>
-              {[...g.thu, ...g.chi].map(it => (
-                <div key={it.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px',
-                  fontSize: 12, borderBottom: '1px solid #F3F4F6',
-                }}>
-                  <span style={{
-                    width: 30, textAlign: 'center', fontWeight: 700, fontSize: 10,
-                    color: it.loai === 'thu' ? '#166534' : '#991B1B',
-                  }}>{it.loai === 'thu' ? 'THU' : 'CHI'}</span>
-                  <span style={{ width: 70, color: '#6B7280' }}>{it.entity}</span>
-                  <span style={{ flex: 1 }}>{it.moTa}</span>
-                  <span style={{ width: 90, color: '#9CA3AF' }}>{it.ngayDuKien}</span>
-                  <span style={{ width: 130, textAlign: 'right', fontWeight: 600 }}>{fmt(it.soTien)} ₫</span>
-                  {it.lap && it.lap !== 'mot-lan' && (
-                    <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#F3E8FF', color: '#6B21A8' }}>
-                      {it.lap === 'hang-thang' ? 'Hàng tháng' : 'Hàng quý'}
-                    </span>
-                  )}
-                  {it.nguonTuDong ? (
-                    <span title="Tự động từ List ngân hàng — không sửa tay" style={{ width: 44, textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#92400E' }}>🔒 AUTO</span>
-                  ) : (<>
-                    <button onClick={() => openEdit(it)} title="Sửa"
-                      style={{ ...BtnSmall('#F3F4F6', '#374151'), width: 20, height: 20, fontSize: 11 }}>✎</button>
-                    <button onClick={() => xoa(it)} title="Xoá"
-                      style={{ ...BtnSmall('#FEE2E2', '#991B1B'), width: 20, height: 20, fontSize: 11 }}>✕</button>
-                  </>)}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showForm && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50,
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto',
-        }} onClick={closeForm}>
-          <div style={{ width: '100%', maxWidth: 560 }} onClick={e => e.stopPropagation()}>
-            <DongTienForm
-              editing={editing}
-              loaiKhoanMacDinh="ke-hoach"
-              onSaved={closeForm}
-              onCancel={closeForm}
-            />
-          </div>
-        </div>
-      )}
+      <span style={{ fontSize: 11.5, color: '#166534' }}>Thu: {fmt(tongThu)} ₫</span>
+      <span style={{ fontSize: 11.5, color: '#991B1B' }}>Chi: {fmt(tongChi)} ₫</span>
+      <button onClick={onThem}
+        style={{ padding: '6px 14px', background: '#1C3557', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+        ➕ Thêm khoản kế hoạch
+      </button>
     </div>
   )
 }
@@ -377,6 +268,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
   // nghĩa, nút bấm không phản ánh đúng thực tế. Đồng bộ lại mỗi khi tập hợp id
   // nhóm thực sự đổi (đổi tháng, hoặc dữ liệu thật vừa tải xong) — mặc định về
   // "đóng tất cả", không ảnh hưởng khi người dùng chỉ đang gõ số trong cùng 1 tháng.
+  const autoOpened = useRef<Set<string>>(new Set())
   const groupIdsSig = useMemo(
     () => data.items.filter(it => it.is_group).map(it => it.id).sort().join(','),
     [data.items],
@@ -385,6 +277,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
   useEffect(() => {
     if (groupIdsSig === lastSyncedSig.current) return
     lastSyncedSig.current = groupIdsSig
+    autoOpened.current.clear()
     setCollapsed(new Set(groupIdsSig ? groupIdsSig.split(',') : []))
   }, [groupIdsSig])
   const toggleCollapse = (id: string) =>
@@ -445,35 +338,100 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     return map
   }, [data.items])
 
-  // ── Khoản kế hoạch NHẬP QUA FORM "Thêm khoản kế hoạch" → cộng xuống bảng ──
+  // ── Khoản kế hoạch NHẬP QUA FORM "Thêm khoản kế hoạch" → hiện thẳng trong bảng ──
   // Thứ tự khớp: (1) dòng con cùng mã KMCP; (2) nhóm cùng mã KMCP;
   // (3) nhóm cùng TÊN với "Nhóm (báo cáo)" (bỏ số thứ tự đầu); còn lại → "chưa khớp"
-  // (vẫn cộng vào tổng Thu/Chi để số không rơi mất, và báo cảnh báo phía trên bảng).
+  // (hiện ở đầu section Thu/Chi, vẫn cộng vào tổng để số không rơi mất).
   const [nhapTay, setNhapTay] = useState<KhoanDongTien[]>([])
+  const [formOpen, setFormOpen]       = useState(false)
+  const [formEditing, setFormEditing] = useState<KhoanDongTien | null>(null)
   useEffect(() => {
-    return subscribeKeHoachThang(month, rows => setNhapTay(rows.filter(r => !r.nguonTuDong && r.soTien > 0)))
+    return subscribeKeHoachThang(month, rows => setNhapTay(
+      rows.filter(r => !r.nguonTuDong && r.soTien > 0).sort((a, b) => a.ngayDuKien.localeCompare(b.ngayDuKien)),
+    ))
   }, [month])
 
   const nhapTayMap = useMemo(() => {
     const norm = (v?: string) => (v ?? '').normalize('NFC').trim().toLowerCase()
     const tenBC = (v?: string) => norm((v ?? '').replace(/^\s*\d+\s*[.)]\s*/, ''))
-    const leaf: Record<string, number>  = {}   // id dòng con → số nhập tay
-    const group: Record<string, number> = {}   // id nhóm → số nhập tay
-    const chuaKhop = { B: 0, C: 0, rows: [] as KhoanDongTien[] }
+    const leaf: Record<string, number>  = {}
+    const group: Record<string, number> = {}
+    const rowsLeaf: Record<string, KhoanDongTien[]>  = {}
+    const rowsGroup: Record<string, KhoanDongTien[]> = {}
+    const chuaKhop = { B: 0, C: 0, rowsB: [] as KhoanDongTien[], rowsC: [] as KhoanDongTien[] }
     const leaves = data.items.filter(i => !i.is_section && !i.is_group && i.kmcp)
     const groups = data.items.filter(i => i.is_group)
     for (const k of nhapTay) {
       const sec = k.loai === 'thu' ? 'B' : 'C'
       const ma  = norm(k.nhom as string)
       const l = leaves.find(i => i.nhom === sec && norm(i.kmcp) === ma)
-      if (l) { leaf[l.id] = (leaf[l.id] ?? 0) + k.soTien; continue }
+      if (l) { leaf[l.id] = (leaf[l.id] ?? 0) + k.soTien; (rowsLeaf[l.id] ??= []).push(k); continue }
       const g = groups.find(i => i.nhom === sec && (norm(i.kmcp) === ma || (!!k.nhomBaoCao && norm(i.dien_giai) === tenBC(k.nhomBaoCao))))
-      if (g) { group[g.id] = (group[g.id] ?? 0) + k.soTien; continue }
+      if (g) { group[g.id] = (group[g.id] ?? 0) + k.soTien; (rowsGroup[g.id] ??= []).push(k); continue }
       chuaKhop[sec] += k.soTien
-      chuaKhop.rows.push(k)
+      ;(sec === 'B' ? chuaKhop.rowsB : chuaKhop.rowsC).push(k)
     }
-    return { leaf, group, chuaKhop }
+    return { leaf, group, rowsLeaf, rowsGroup, chuaKhop }
   }, [nhapTay, data.items])
+
+  // Tự mở các nhóm đang chứa khoản nhập thêm (1 lần cho mỗi lần dữ liệu nhóm đồng bộ lại)
+  useEffect(() => {
+    const ids = new Set<string>(Object.keys(nhapTayMap.rowsGroup))
+    Object.keys(nhapTayMap.rowsLeaf).forEach(id => { const o = ownerOf.get(id); if (o) ids.add(o) })
+    const fresh = Array.from(ids).filter(id => !autoOpened.current.has(id))
+    if (!fresh.length) return
+    fresh.forEach(id => autoOpened.current.add(id))
+    setCollapsed(prev => { const n = new Set(prev); fresh.forEach(id => n.delete(id)); return n })
+  }, [nhapTayMap, ownerOf])
+
+  const tongNhapThu = nhapTay.filter(k => k.loai === 'thu').reduce((a, k) => a + k.soTien, 0)
+  const tongNhapChi = nhapTay.filter(k => k.loai === 'chi').reduce((a, k) => a + k.soTien, 0)
+
+  const moFormMoi = () => { setFormEditing(null); setFormOpen(true) }
+  const moFormSua = (k: KhoanDongTien) => { setFormEditing(k); setFormOpen(true) }
+  const dongForm  = () => { setFormOpen(false); setFormEditing(null) }
+  const xoaKhoan  = async (k: KhoanDongTien) => {
+    const chuoi = k.lap && k.lap !== 'mot-lan' ? '\n(Khoản có lặp: chỉ xoá khoản của tháng này.)' : ''
+    if (!confirm(`Xoá khoản "${k.moTa}"?${chuoi}`)) return
+    try { await deleteKhoanDongTien(k.id) } catch { alert('Xoá thất bại, thử lại.') }
+  }
+
+  // Dòng hiển thị 1 khoản nhập thêm ngay trong bảng: Diễn giải | KMCP | Kế hoạch | Nguồn | Ghi chú | Ngày DK | Sửa/Xoá
+  const renderKhoanRow = (k: KhoanDongTien) => {
+    const thu = k.loai === 'thu'
+    const nguon = k.nguonThanhToan?.trim()
+    const ngay = k.ngayDuKien ? k.ngayDuKien.split('-').reverse().join('/') : ''
+    return (
+      <tr key={`kh-${k.id}`} style={{ background: '#F3F8FF', borderBottom: '1px solid #DBEAFE' }}>
+        <td style={{ padding: '4px 6px', textAlign: 'center', color: '#93C5FD' }}>↳</td>
+        <td style={{ padding: '4px 10px 4px 22px', fontSize: 12.5 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#DBEAFE', color: '#1D4ED8', marginRight: 6 }}>NHẬP</span>
+          {k.moTa}
+          <span style={{ marginLeft: 8, fontSize: 11, color: '#6B7280' }}>{k.entity}{k.doiTac ? ` · ${k.doiTac}` : ''}</span>
+          {k.lap && k.lap !== 'mot-lan' && (
+            <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#F3E8FF', color: '#6B21A8' }}>
+              {k.lap === 'hang-thang' ? 'Hàng tháng' : 'Hàng quý'}
+            </span>
+          )}
+        </td>
+        <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: 11, fontFamily: 'monospace', color: '#6B7280' }}>{k.nhom}</td>
+        <td style={{ padding: '4px 10px', textAlign: 'right', fontWeight: 700, fontSize: 12.5, color: thu ? '#1D4ED8' : '#C2410C' }}>
+          {k.soTien.toLocaleString('vi-VN')}
+        </td>
+        <td style={{ padding: '4px 8px', fontSize: 12, color: nguon ? '#1C3557' : '#9CA3AF', fontStyle: nguon ? 'normal' : 'italic' }}>
+          {nguon || `Quỹ - ${k.entity}`}
+        </td>
+        <td style={{ padding: '4px 8px', fontSize: 12, color: '#4B5563' }}>{k.ghiChu ?? ''}</td>
+        <td style={{ padding: '4px 8px', fontSize: 12, textAlign: 'center', color: '#1C3557' }}>{ngay}</td>
+        <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+          <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+            <button title="Sửa khoản này" onClick={() => moFormSua(k)} style={BtnSmall('#F3F4F6', '#374151')}>✎</button>
+            <button title="Xoá khoản này" onClick={() => xoaKhoan(k)} style={BtnSmall('#FEE2E2', '#991B1B')}>✕</button>
+          </div>
+        </td>
+      </tr>
+    )
+  }
 
   // Kế hoạch HIỆU LỰC: nếu dòng thuộc 5 mã vay NH → lấy từ kmcpPlanned (AUTO),
   // ngược lại dùng số nhập tay it.ke_hoach. Cộng thêm khoản nhập qua form (nếu khớp dòng).
@@ -701,15 +659,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       </div>
 
       <KeHoachVayAuto month={month} />
-      <KeHoachDongTienSection month={month} entityFilter={entityFilter} />
-
-      {nhapTayMap.chuaKhop.rows.length > 0 && (
-        <div style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#991B1B' }}>
-          ⚠️ {nhapTayMap.chuaKhop.rows.length} khoản nhập qua Dòng tiền chưa khớp dòng/nhóm nào trong bảng
-          (đã cộng vào tổng Thu/Chi): {nhapTayMap.chuaKhop.rows.map(k => `${k.nhom} – ${k.moTa}`).join('; ')}.
-          Hãy thêm dòng có đúng mã KMCP đó vào bảng, hoặc đổi "Nhóm (báo cáo)" cho trùng tên nhóm.
-        </div>
-      )}
+      <KeHoachDongTienBar soKhoan={nhapTay.length} tongThu={tongNhapThu} tongChi={tongNhapChi} onThem={moFormMoi} />
 
       <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -795,6 +745,21 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                       <td /><td /><td /><td />
                     </tr>
                   ))}
+                  {(it.nhom === 'B' || it.nhom === 'C') && (() => {
+                    const rows = it.nhom === 'B' ? nhapTayMap.chuaKhop.rowsB : nhapTayMap.chuaKhop.rowsC
+                    if (!rows.length) return null
+                    return (
+                      <>
+                        <tr key={`ck-${it.id}`} style={{ background: '#FEF2F2' }}>
+                          <td />
+                          <td colSpan={7} style={{ padding: '4px 10px', fontSize: 11.5, color: '#991B1B' }}>
+                            ⚠️ {rows.length} khoản nhập thêm chưa khớp nhóm/dòng nào trong bảng (đã cộng vào tổng) — bấm ✎ đổi "Nhóm/KMCP" hoặc "Nhóm (báo cáo)" cho đúng nhóm.
+                          </td>
+                        </tr>
+                        {rows.map(renderKhoanRow)}
+                      </>
+                    )
+                  })()}
                   </>
                 )
               }
@@ -803,7 +768,8 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
               if (it.is_group) {
                 const bg = it.nhom === 'B' ? '#DBEAFE' : it.nhom === 'C' ? '#FFEDD5' : '#F3F4F6'
                 return (
-                  <tr key={it.id}
+                  <Fragment key={it.id}>
+                  <tr
                     onFocus={() => setActiveId(it.id)}
                     onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setActiveId(null) }}
                     style={{ background: activeId === it.id ? '#FFF9C4' : bg, fontWeight: 600, outline: activeId === it.id ? '2px solid #EAB308' : undefined, outlineOffset: '-1px', transition: 'background .1s' }}>
@@ -837,7 +803,6 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                         <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}
                           title={[coBoSung ? `Gồm ${bs.toLocaleString('vi-VN')} ₫ tự động từ List ngân hàng` : '', nt > 0 ? `Gồm ${nt.toLocaleString('vi-VN')} ₫ nhập qua Dòng tiền` : ''].filter(Boolean).join(' · ') || undefined}>
                           {coBoSung && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#DCFCE7', color: '#166534', marginRight: 6 }}>AUTO</span>}
-                          {nt > 0 && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#DBEAFE', color: '#1D4ED8', marginRight: 6 }}>NHẬP</span>}
                           {fmt(kh)}
                         </td>
                       )
@@ -868,6 +833,8 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                       </div>
                     </td>
                   </tr>
+                  {!collapsed.has(it.id) && (nhapTayMap.rowsGroup[it.id] ?? []).map(renderKhoanRow)}
+                  </Fragment>
                 )
               }
 
@@ -879,7 +846,8 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
 
               const isActive = activeId === it.id
               return (
-                <tr key={it.id}
+                <Fragment key={it.id}>
+                <tr
                   onFocus={() => setActiveId(it.id)}
                   onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setActiveId(null) }}
                   style={{
@@ -945,11 +913,29 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                     </div>
                   </td>
                 </tr>
+                {(nhapTayMap.rowsLeaf[it.id] ?? []).map(renderKhoanRow)}
+                </Fragment>
               )
             })}
           </tbody>
         </table>
       </div>
+
+      {formOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50,
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto',
+        }} onClick={dongForm}>
+          <div style={{ width: '100%', maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+            <DongTienForm
+              editing={formEditing}
+              loaiKhoanMacDinh="ke-hoach"
+              onSaved={dongForm}
+              onCancel={dongForm}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
