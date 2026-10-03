@@ -20,7 +20,6 @@ import type { EntityType } from '@/lib/han-muc-types'
 //    NhomDongTien enum (cho-goi, sap, goc-vay-dn...) vì 2 bộ mã khác nhau
 //    hoàn toàn, và kmcpActual/kmcpPlanned đối chiếu sổ quỹ theo mã KMCP cũ. ──
 import { DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
-import { KMCP_VAY_TU_DONG } from '@/lib/dong-tien-vay-ke-hoach'
 
 const ENTITIES: EntityType[] = ['SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 const NHOM_MOI = '__nhom_moi__'
@@ -98,16 +97,9 @@ const VND = new Intl.NumberFormat('vi-VN')
 //    đúng quy ước NganSachItem.nhom đang dùng ở TabGiaiPhap/TabTongHop.
 //    Dùng làm option "Nhóm/KMCP" khi form ở chế độ Kế hoạch. ──────────
 // Ẩn 5 mã vay NH (THU-VAY, VAY-GOC/LAI-DN/CN): hệ thống tự điền từ List ngân hàng, không nhập tay.
-const KMCP_ITEMS_THU = DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && d.nhom === 'B' && !KMCP_VAY_TU_DONG.includes(d.kmcp as string))
-const KMCP_ITEMS_CHI = DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && d.nhom === 'C' && !KMCP_VAY_TU_DONG.includes(d.kmcp as string))
 const KMCP_LABEL: Record<string, string> = Object.fromEntries(
   DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp && (d.nhom === 'B' || d.nhom === 'C')).map(d => [d.kmcp as string, d.dien_giai]),
 )
-function kmcpOptionsTheoLoai(loai: LoaiDongTien) {
-  return (loai === 'thu' ? KMCP_ITEMS_THU : KMCP_ITEMS_CHI)
-    .map(d => ({ value: d.kmcp as string, label: `${d.kmcp} — ${d.dien_giai}` }))
-}
-
 function parseSoTien(raw: string): number {
   return Number(raw.replace(/\D/g, '')) || 0
 }
@@ -132,19 +124,25 @@ const emptyForm = (entityMacDinh?: EntityType) => ({
   nhomBaoCao:     '',
 })
 
+// Nhóm THẬT của bảng Nhập Data (dòng "cả nhóm"). value = mã KMCP của nhóm, nhóm chưa có mã thì '@' + tên.
+// con = mã KMCP các dòng con (để khoản cũ gắn vào dòng con tự quy về nhóm cha)
+export interface NhomBang { value: string; label: string; ten: string; loai: LoaiDongTien; nhomBC: string; con: string[] }
+
 interface Props {
   editing?:       KhoanDongTien | null
   entityMacDinh?: EntityType
-  // Các dòng/nhóm THỰC TẾ của bảng Nhập Data (mã KMCP + tên) — chế độ Kế hoạch dùng làm danh sách Nhóm/KMCP
-  // để khoản nhập vào luôn khớp đúng dòng trong bảng. Không truyền → dùng danh sách mã mặc định cũ.
-  bangKmcp?:      { value: string; label: string; ten: string; loai: LoaiDongTien; nhomBC?: string; laNhom?: boolean }[]
+  // Các NHÓM thật của bảng Nhập Data — chế độ Kế hoạch chỉ cho chọn trong danh sách này
+  // (không còn mã KMCP cũ). Muốn nhóm mới thì dùng onTaoNhom.
+  bangNhom?:      NhomBang[]
+  // Tạo nhóm mới NGAY trong bảng Nhập Data (có lưu luôn). Ném lỗi nếu trùng tên.
+  onTaoNhom?:     (loai: LoaiDongTien, ten: string) => Promise<{ value: string; ten: string; nhomBC: string }>
   loaiKhoanMacDinh?: LoaiKhoan   // Cho phép mở form sẵn ở chế độ KH hoặc TH
   khoaLoaiKhoan?:  boolean       // true = ẩn radio Kế hoạch/Thực hiện (ngữ cảnh đã rõ, VD mở từ Tab Kế hoạch)
   onSaved:        () => void
   onCancel:       () => void
 }
 
-export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKhoanMacDinh, khoaLoaiKhoan, onSaved, onCancel }: Props) {
+export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNhom, loaiKhoanMacDinh, khoaLoaiKhoan, onSaved, onCancel }: Props) {
   const [form,         setForm]         = useState(emptyForm(entityMacDinh))
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState<string | null>(null)
@@ -156,12 +154,11 @@ export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKho
   const [canhBao,      setCanhBao]      = useState<string | null>(null)
 
   // Danh sách Nhóm/KMCP chế độ Kế hoạch: ưu tiên đúng dòng/nhóm đang có trong bảng Nhập Data
-  const kmcpOpts = (loai: LoaiDongTien): { value: string; label: string }[] => {
-    const tuBang = (bangKmcp ?? []).filter(b => b.loai === loai)
-    return tuBang.length ? tuBang : kmcpOptionsTheoLoai(loai)
-  }
+  // Chế độ Kế hoạch: CHỈ liệt kê nhóm thật của bảng (không còn mã KMCP cũ / nhóm tuỳ chỉnh cũ)
+  const kmcpOpts = (loai: LoaiDongTien): { value: string; label: string }[] =>
+    (bangNhom ?? []).filter(b => b.loai === loai).map(b => ({ value: b.value, label: b.label }))
   const kmcpTen = (value: string): string =>
-    (bangKmcp ?? []).find(b => b.value === value)?.ten ?? KMCP_LABEL[value] ?? value
+    (bangNhom ?? []).find(b => b.value === value)?.ten ?? KMCP_LABEL[value] ?? value
 
   useEffect(() => {
     const unsub = subscribeNhomTuyChinh(setNhomTuyChinh)
@@ -192,27 +189,32 @@ export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKho
         loaiGiaoDich:   editing.loaiGiaoDich ?? '',
         nhomBaoCao:     editing.nhomBaoCao ?? '',
       })
-      // Khoản kế hoạch mang mã KHÔNG có trong bảng (VD THU-KD): thử suy ra từ "Nhóm (báo cáo)", không được thì bắt chọn lại
+      // Khoản kế hoạch cũ: quy về nhóm thật của bảng — (1) đúng mã nhóm, (2) mã dòng con thuộc nhóm, (3) trùng tên "Nhóm (báo cáo)".
+      // Không quy được (VD mã cũ THU-KD) → để trống, bắt chọn lại.
       setCanhBao(null)
-      if (laKeHoach && (bangKmcp?.length ?? 0) > 0 && !bangKmcp!.some(b => b.loai === editing.loai && b.value === (editing.nhom as string))) {
-        const bc = (editing.nhomBaoCao ?? '').trim()
-        const hit = bc ? bangKmcp!.find(b => b.loai === editing.loai && b.laNhom && b.nhomBC === bc) : undefined
+      const ds = (bangNhom ?? []).filter(b => b.loai === editing.loai)
+      if (laKeHoach && ds.length > 0) {
+        const chuanTen = (v?: string) => (v ?? '').replace(/^\s*\d+\s*[.)]\s*/, '').normalize('NFC').trim().toLowerCase()
+        const nhomCu = editing.nhom as string
+        const hit = ds.find(b => b.value === nhomCu)
+          ?? ds.find(b => b.con.includes(nhomCu))
+          ?? (editing.nhomBaoCao ? ds.find(b => chuanTen(b.nhomBC) === chuanTen(editing.nhomBaoCao)) : undefined)
         if (hit) {
-          setForm(f => ({ ...f, nhom: hit.value as NhomDongTien, nhomCha: hit.value, nhomChaLabel: hit.ten }))
+          setForm(f => ({ ...f, nhom: hit.value as NhomDongTien, nhomCha: hit.value, nhomChaLabel: hit.ten, nhomBaoCao: hit.nhomBC }))
         } else {
           setForm(f => ({ ...f, nhom: '' as NhomDongTien, nhomCha: '', nhomChaLabel: '' }))
-          setCanhBao(`Khoản này đang mang mã cũ "${editing.nhom}" không có trong bảng nên không gắn được vào dòng nào. Hãy chọn lại Nhóm/KMCP.`)
+          setCanhBao(`Khoản này đang mang mã cũ "${editing.nhom}" không thuộc nhóm nào trong bảng. Hãy chọn nhóm có sẵn hoặc tạo nhóm mới.`)
         }
       }
     } else {
       const base = emptyForm(entityMacDinh)
       if (loaiKhoanMacDinh) base.loaiKhoan = loaiKhoanMacDinh
-      // Chế độ Kế hoạch: KHÔNG đoán mã mặc định (trước đây lấy mã đầu danh sách → khoản rơi vào mã không có trong bảng).
-      // Để trống, bắt buộc chọn dòng/nhóm đúng trong bảng; chọn xong sẽ tự điền "Nhóm (báo cáo)".
+      // Chế độ Kế hoạch: KHÔNG đoán nhóm mặc định — bắt buộc chọn nhóm có sẵn hoặc tạo mới
       if (loaiKhoanMacDinh === 'ke-hoach') {
         base.nhom = '' as NhomDongTien
         base.nhomCha = ''
         base.nhomChaLabel = ''
+        base.nhomBaoCao = ''
       }
       setForm(base)
     }
@@ -222,17 +224,14 @@ export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKho
   const nhomOptions = useMemo(() => {
     // ── Chế độ KẾ HOẠCH: dùng mã KMCP cũ (DT-CG, CP-BH...) + custom, KHÔNG
     //    dùng NhomDongTien enum — xem ghi chú bridge ở đầu file. ──────────
-    if (form.loaiKhoan === 'ke-hoach') {
-      // Chỉ cho chọn dòng/nhóm THẬT của bảng. Nhóm tuỳ chỉnh (Firestore) không có trong bảng nên luôn thành khoản "chưa gắn" → không đưa vào.
-      return kmcpOpts(form.loai)
-    }
+    if (form.loaiKhoan === 'ke-hoach') return kmcpOpts(form.loai)
     const chuan = NHOM_THEO_LOAI[form.loai].map(v => ({ value: v, label: NHOM_LABEL[v] ?? v }))
     const tuy   = nhomTuyChinh.filter(n => n.loai === form.loai).map(n => ({ value: n.ten, label: n.ten }))
     const list  = [...chuan, ...tuy]
     if (form.nhom && !list.some(o => o.value === form.nhom))
       list.push({ value: form.nhom, label: `${NHOM_LABEL[form.nhom as NhomDongTien] ?? form.nhom} (cũ)` })
     return list
-  }, [form.loai, form.nhom, form.loaiKhoan, nhomTuyChinh, bangKmcp])
+  }, [form.loai, form.nhom, form.loaiKhoan, nhomTuyChinh, bangNhom])
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm(f => ({ ...f, [key]: value }))
@@ -267,31 +266,14 @@ export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKho
     const laKeHoach = form.loaiKhoan === 'ke-hoach'
     setCanhBao(null)
     setForm(f => {
-      // Tự điền "Nhóm (báo cáo)" theo nhóm chứa dòng vừa chọn — chỉ khi đang trống hoặc đang là giá trị tự điền của lựa chọn trước
-      let nhomBaoCao = f.nhomBaoCao
-      if (laKeHoach) {
-        const cu  = (bangKmcp ?? []).find(b => b.loai === f.loai && b.value === (f.nhom as string))?.nhomBC
-        const moi = (bangKmcp ?? []).find(b => b.loai === f.loai && b.value === value)?.nhomBC
-        if (moi && (!f.nhomBaoCao || f.nhomBaoCao === cu)) nhomBaoCao = moi
-      }
+      const b = laKeHoach ? (bangNhom ?? []).find(x => x.loai === f.loai && x.value === value) : undefined
       return {
         ...f,
         nhom: value as NhomDongTien,
         nhomCha: value,
         nhomChaLabel: laKeHoach ? kmcpTen(value) : (NHOM_LABEL[value as NhomDongTien] ?? value),
-        nhomBaoCao,
+        nhomBaoCao: laKeHoach ? (b?.nhomBC ?? '') : f.nhomBaoCao,   // Nhóm (báo cáo) = chính nhóm đã chọn
       }
-    })
-  }
-
-  // Chọn "Nhóm (báo cáo)" trước → nếu Nhóm/KMCP còn trống thì tự nhảy vào nhóm tương ứng trong bảng
-  function chonNhomBC(v: string) {
-    setForm(f => {
-      if (f.loaiKhoan !== 'ke-hoach' || f.nhom || !v) return { ...f, nhomBaoCao: v }
-      const hit = (bangKmcp ?? []).find(b => b.loai === f.loai && b.laNhom && b.nhomBC === v)
-      return hit
-        ? { ...f, nhomBaoCao: v, nhom: hit.value as NhomDongTien, nhomCha: hit.value, nhomChaLabel: hit.ten }
-        : { ...f, nhomBaoCao: v }
     })
   }
 
@@ -299,6 +281,19 @@ export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKho
     setLuuNhomLoi(null)
     const ten = tenNhomMoi.trim()
     if (!ten) { setLuuNhomLoi('Vui lòng nhập tên nhóm.'); return }
+    if (form.loaiKhoan === 'ke-hoach') {
+      if (!onTaoNhom) { setLuuNhomLoi('Chức năng tạo nhóm chưa sẵn sàng ở màn hình này.'); return }
+      setDangLuuNhom(true)
+      try {
+        const r = await onTaoNhom(form.loai, ten)
+        setCanhBao(null)
+        setForm(f => ({ ...f, nhom: r.value as NhomDongTien, nhomCha: r.value, nhomChaLabel: r.ten, nhomBaoCao: r.nhomBC }))
+        setDangThemNhom(false); setTenNhomMoi('')
+      } catch (err: any) {
+        setLuuNhomLoi(err?.message ?? 'Có lỗi, thử lại.')
+      } finally { setDangLuuNhom(false) }
+      return
+    }
     if (nhomOptions.some(o => o.label.toLowerCase() === ten.toLowerCase()))
       { setLuuNhomLoi('Nhóm này đã có, chọn lại trong danh sách.'); return }
 
@@ -316,9 +311,9 @@ export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKho
     e.preventDefault(); setError(null)
     if (editing?.nguonTuDong) { setError('Khoản này do hệ thống tự tạo từ List ngân hàng — không sửa tay. Dùng nút "Cập nhật kế hoạch vay" ở Tab Nhập Data.'); return }
     if (form.loaiKhoan === 'ke-hoach') {
-      if (!form.nhom) { setError('Vui lòng chọn Nhóm/KMCP — là dòng hoặc nhóm trong bảng Nhập Data.'); return }
-      if ((bangKmcp?.length ?? 0) > 0 && !bangKmcp!.some(b => b.loai === form.loai && b.value === (form.nhom as string))) {
-        setError(`Mã "${form.nhom}" không có trong bảng nên khoản sẽ không gắn được vào dòng nào. Hãy chọn lại Nhóm/KMCP.`); return
+      if (!form.nhom) { setError('Vui lòng chọn nhóm có sẵn hoặc tạo nhóm mới.'); return }
+      if (!(bangNhom ?? []).some(b => b.loai === form.loai && b.value === (form.nhom as string))) {
+        setError('Nhóm đã chọn không còn trong bảng. Hãy chọn lại nhóm.'); return
       }
     }
     if (!form.moTa.trim()) { setError('Vui lòng nhập mô tả khoản.'); return }
@@ -402,11 +397,11 @@ export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKho
               </select>
             </div>
             <div>
-              <label className="nh-label">{form.loaiKhoan === 'ke-hoach' ? 'Nhóm/KMCP' : 'Nhóm khoản mục'}</label>
+              <label className="nh-label">{form.loaiKhoan === 'ke-hoach' ? 'Nhóm' : 'Nhóm khoản mục'}</label>
               <select className="nh-select" value={form.nhom} onChange={e => chonNhom(e.target.value)}>
-                {form.loaiKhoan === 'ke-hoach' && <option value="">— Chọn dòng/nhóm trong bảng —</option>}
+                {form.loaiKhoan === 'ke-hoach' && <option value="">— Chọn nhóm —</option>}
                 {nhomOptions.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
-                {form.loaiKhoan !== 'ke-hoach' && <option value={NHOM_MOI}>+ Thêm nhóm mới…</option>}
+                <option value={NHOM_MOI}>{form.loaiKhoan === 'ke-hoach' ? '➕ Tạo nhóm mới…' : '+ Thêm nhóm mới…'}</option>
               </select>
               {canhBao && <div className="nh-err" style={{ marginTop: 4 }}>{canhBao}</div>}
             </div>
@@ -428,7 +423,7 @@ export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKho
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 10px', background: '#F8FAFC', border: '1px solid var(--nh-border)', borderRadius: 8, padding: 10 }}>
               <input type="text" className="nh-input" style={{ flex: 1 }}
                 placeholder={form.loaiKhoan === 'ke-hoach'
-                  ? `Tên khoản mục ${form.loai === 'thu' ? 'thu' : 'chi phí'} mới...`
+                  ? `Tên nhóm ${form.loai === 'thu' ? 'thu' : 'chi'} mới... (VD: Thu từ OBE)`
                   : `Tên nhóm ${form.loai === 'thu' ? 'thu' : 'chi'} mới...`}
                 value={tenNhomMoi} onChange={e => setTenNhomMoi(e.target.value)} autoFocus />
               <button type="button" className="btn-save" disabled={dangLuuNhom} onClick={luuNhomMoi}>
@@ -479,19 +474,6 @@ export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKho
                   moiLabel="➕ Thêm loại giao dịch mới…"
                   placeholderMoi={`VD: ${form.loai === 'thu' ? 'Thu' : 'Chi'} - ${form.entity} - ...`}
                   prefillMoi={`${form.loai === 'thu' ? 'Thu' : 'Chi'} - ${form.entity} - `}
-                />
-              </div>
-              <div>
-                <label className="nh-label">Nhóm (báo cáo)</label>
-                <GoiYChon
-                  kieu="nhomBaoCao" loai={form.loai}
-                  value={form.nhomBaoCao} onChange={chonNhomBC}
-                  builtin={GOI_Y_NHOM_BC}
-                  locBuiltin={x => form.loai === 'thu' ? /^\d+\.\s*thu\b/i.test(x) : !/^\d+\.\s*thu\b/i.test(x)}
-                  locCustomTheoLoai
-                  emptyLabel="— Chưa chọn —"
-                  moiLabel="➕ Thêm nhóm báo cáo mới…"
-                  placeholderMoi="VD: 4. Thu từ ... (gõ cả số thứ tự)"
                 />
               </div>
             </div>

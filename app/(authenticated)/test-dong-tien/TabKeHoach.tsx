@@ -2,14 +2,14 @@
 import { useState, useRef, useMemo, useCallback, useEffect, Fragment } from 'react'
 import * as XLSX from 'xlsx'
 import { NganSachThang, NganSachItem, GiaiPhap, DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
-import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup } from '@/lib/ngan-sach-store'
+import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup, saveNganSach } from '@/lib/ngan-sach-store'
 
 // ── Section mới (song song, không đụng bảng KMCP cũ) — Kế hoạch nhập qua
 //    dongTienItems (loaiKhoan='ke-hoach'), tái dùng DongTienForm ──────────
 import type { KhoanDongTien } from '@/lib/dong-tien-types'
 import { subscribeKeHoachThang } from '@/lib/dong-tien-ke-hoach-store'
 import { deleteKhoanDongTien } from '@/lib/dong-tien-store'
-import DongTienForm from './DongTienForm'
+import DongTienForm, { type NhomBang } from './DongTienForm'
 import KeHoachVayAuto from './KeHoachVayAuto'
 import type { EntityType } from '@/lib/han-muc-types'
 
@@ -366,7 +366,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       const ma  = norm(k.nhom as string)
       const l = leaves.find(i => i.nhom === sec && norm(i.kmcp) === ma)
       if (l) { leaf[l.id] = (leaf[l.id] ?? 0) + k.soTien; (rowsLeaf[l.id] ??= []).push(k); continue }
-      const g = groups.find(i => i.nhom === sec && (norm(i.kmcp) === ma || (!!k.nhomBaoCao && norm(i.dien_giai) === tenBC(k.nhomBaoCao))))
+      const g = groups.find(i => i.nhom === sec && (norm(i.kmcp) === ma || ma === '@' + norm(i.dien_giai) || (!!k.nhomBaoCao && norm(i.dien_giai) === tenBC(k.nhomBaoCao))))
       if (g) { group[g.id] = (group[g.id] ?? 0) + k.soTien; (rowsGroup[g.id] ??= []).push(k); continue }
       chuaKhop[sec] += k.soTien
       ;(sec === 'B' ? chuaKhop.rowsB : chuaKhop.rowsC).push(k)
@@ -384,28 +384,51 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     setCollapsed(prev => { const n = new Set(prev); fresh.forEach(id => n.delete(id)); return n })
   }, [nhapTayMap, ownerOf])
 
-  // Danh sách dòng/nhóm THỰC TẾ của bảng (Thu = section B, Chi = section C) → làm danh sách Nhóm/KMCP của form,
-  // để khoản nhập vào chọn đúng dòng và luôn khớp (không còn đoán theo tên).
-  const bangKmcp = useMemo(() => {
-    const out: { value: string; label: string; ten: string; loai: 'thu' | 'chi'; nhomBC: string; laNhom: boolean }[] = []
+  // Danh sách NHÓM thật của bảng (Thu = section B, Chi = section C) → form chỉ cho chọn nhóm có sẵn hoặc tạo nhóm mới.
+  // value = mã KMCP của nhóm; nhóm chưa có mã thì '@' + tên (cùng quy ước với khBoSung).
+  const bangNhom = useMemo(() => {
+    const out: NhomBang[] = []
     const seen = new Set<string>()
-    const groupById = new Map(data.items.filter(i => i.is_group).map(g => [g.id, g]))
-    const bcCua = (g?: { stt?: unknown; dien_giai?: string }) => g ? `${String(g.stt).trim()}. ${(g.dien_giai ?? '').trim()}` : ''
-    for (const it of data.items) {
-      if (it.is_section || (it.nhom !== 'B' && it.nhom !== 'C')) continue
-      const v = (it.kmcp ?? '').trim()
-      if (!v) continue
-      const loai = it.nhom === 'B' ? 'thu' : 'chi'
-      const key = `${loai}|${v}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      const ten = (it.dien_giai ?? '').trim() || v
-      // "Nhóm (báo cáo)" tương ứng = nhóm chứa dòng này (hoặc chính nhóm đó) → form tự điền khi chọn dòng
-      const g = it.is_group ? it : groupById.get(ownerOf.get(it.id) ?? '')
-      out.push({ value: v, loai, ten, nhomBC: bcCua(g), laNhom: !!it.is_group, label: `${it.stt} · ${v} — ${ten}${it.is_group ? ' (cả nhóm)' : ''}` })
+    for (const g of data.items) {
+      if (!g.is_group || (g.nhom !== 'B' && g.nhom !== 'C')) continue
+      const ten = (g.dien_giai ?? '').trim()
+      if (!ten) continue
+      const loai = g.nhom === 'B' ? 'thu' : 'chi'
+      const value = (g.kmcp ?? '').trim() || '@' + ten
+      if (seen.has(`${loai}|${value}`)) continue
+      seen.add(`${loai}|${value}`)
+      const stt = String(g.stt ?? '').trim()
+      const con = data.items.filter(i => !i.is_section && !i.is_group && i.kmcp && ownerOf.get(i.id) === g.id).map(i => String(i.kmcp).trim())
+      out.push({ value, loai, ten, con, label: `${stt ? stt + ' · ' : ''}${ten}`, nhomBC: stt ? `${stt}. ${ten}` : ten })
     }
     return out
   }, [data.items, ownerOf])
+
+  // Tạo nhóm mới trong bảng + lưu ngay (để khoản nhập xong luôn gắn được vào nhóm, không phụ thuộc bấm Lưu bảng)
+  const taoNhom = useCallback(async (loai: 'thu' | 'chi', tenRaw: string) => {
+    const ten = tenRaw.trim().replace(/\s+/g, ' ')
+    if (!ten) throw new Error('Vui lòng nhập tên nhóm.')
+    const sec = loai === 'thu' ? 'B' : 'C'
+    const norm = (v: string) => v.normalize('NFC').trim().toLowerCase()
+    if (data.items.some(i => i.is_group && i.nhom === sec && norm(i.dien_giai ?? '') === norm(ten)))
+      throw new Error('Nhóm này đã có, chọn lại trong danh sách.')
+    const section = data.items.find(i => i.is_section && i.nhom === sec)
+    if (!section) throw new Error('Không tìm thấy mục ' + (loai === 'thu' ? 'Kế hoạch thu' : 'Kế hoạch chi') + ' trong bảng.')
+    const before = new Set(data.items.map(i => i.id))
+    const next = addGroup(data, section.id, sec)
+    const g = next.items.find(i => !before.has(i.id))
+    if (!g) throw new Error('Không tạo được nhóm, thử lại.')
+    // Cấp mã KMCP cố định cho nhóm mới (không trùng mã nào trong bảng) → sau này đổi tên nhóm trong bảng, khoản đã nhập vẫn gắn đúng
+    const daCo = new Set(next.items.map(i => (i.kmcp ?? '').trim().toLowerCase()))
+    let ma = ''
+    do { ma = 'NH-' + Math.random().toString(36).slice(2, 7).toUpperCase() } while (daCo.has(ma.toLowerCase()))
+    const items = next.items.map(i => i.id === g.id ? { ...i, dien_giai: ten, kmcp: ma } : i)
+    const saved = { ...next, items }
+    onChange(saved)
+    await saveNganSach(saved)
+    const stt = String(g.stt ?? '').trim()
+    return { value: ma, ten, nhomBC: stt ? `${stt}. ${ten}` : ten }
+  }, [data, onChange])
 
   const tongNhapThu = nhapTay.filter(k => k.loai === 'thu').reduce((a, k) => a + k.soTien, 0)
   const tongNhapChi = nhapTay.filter(k => k.loai === 'chi').reduce((a, k) => a + k.soTien, 0)
@@ -776,7 +799,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                         <tr key={`ck-${it.id}`} style={{ background: '#FEF2F2' }}>
                           <td />
                           <td colSpan={7} style={{ padding: '4px 10px', fontSize: 11.5, color: '#991B1B' }}>
-                            ⚠️ {rows.length} khoản nhập thêm chưa gắn vào dòng nào trong bảng (số vẫn đã cộng vào tổng) — bấm ✎ rồi chọn lại "Nhóm/KMCP" là dòng/nhóm đúng trong bảng.
+                            ⚠️ {rows.length} khoản nhập thêm chưa gắn vào dòng nào trong bảng (số vẫn đã cộng vào tổng) — bấm ✎ rồi chọn lại "Nhóm" nhóm có sẵn hoặc tạo nhóm mới.
                           </td>
                         </tr>
                         {rows.map(renderKhoanRow)}
@@ -953,7 +976,8 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
           <div style={{ width: '100%', maxWidth: 560 }}>
             <DongTienForm
               editing={formEditing}
-              bangKmcp={bangKmcp}
+              bangNhom={bangNhom}
+              onTaoNhom={taoNhom}
               loaiKhoanMacDinh="ke-hoach"
               onSaved={dongForm}
               onCancel={dongForm}
