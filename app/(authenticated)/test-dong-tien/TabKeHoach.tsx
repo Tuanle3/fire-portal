@@ -445,11 +445,41 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     return map
   }, [data.items])
 
+  // ── Khoản kế hoạch NHẬP QUA FORM "Thêm khoản kế hoạch" → cộng xuống bảng ──
+  // Thứ tự khớp: (1) dòng con cùng mã KMCP; (2) nhóm cùng mã KMCP;
+  // (3) nhóm cùng TÊN với "Nhóm (báo cáo)" (bỏ số thứ tự đầu); còn lại → "chưa khớp"
+  // (vẫn cộng vào tổng Thu/Chi để số không rơi mất, và báo cảnh báo phía trên bảng).
+  const [nhapTay, setNhapTay] = useState<KhoanDongTien[]>([])
+  useEffect(() => {
+    return subscribeKeHoachThang(month, rows => setNhapTay(rows.filter(r => !r.nguonTuDong && r.soTien > 0)))
+  }, [month])
+
+  const nhapTayMap = useMemo(() => {
+    const norm = (v?: string) => (v ?? '').normalize('NFC').trim().toLowerCase()
+    const tenBC = (v?: string) => norm((v ?? '').replace(/^\s*\d+\s*[.)]\s*/, ''))
+    const leaf: Record<string, number>  = {}   // id dòng con → số nhập tay
+    const group: Record<string, number> = {}   // id nhóm → số nhập tay
+    const chuaKhop = { B: 0, C: 0, rows: [] as KhoanDongTien[] }
+    const leaves = data.items.filter(i => !i.is_section && !i.is_group && i.kmcp)
+    const groups = data.items.filter(i => i.is_group)
+    for (const k of nhapTay) {
+      const sec = k.loai === 'thu' ? 'B' : 'C'
+      const ma  = norm(k.nhom as string)
+      const l = leaves.find(i => i.nhom === sec && norm(i.kmcp) === ma)
+      if (l) { leaf[l.id] = (leaf[l.id] ?? 0) + k.soTien; continue }
+      const g = groups.find(i => i.nhom === sec && (norm(i.kmcp) === ma || (!!k.nhomBaoCao && norm(i.dien_giai) === tenBC(k.nhomBaoCao))))
+      if (g) { group[g.id] = (group[g.id] ?? 0) + k.soTien; continue }
+      chuaKhop[sec] += k.soTien
+      chuaKhop.rows.push(k)
+    }
+    return { leaf, group, chuaKhop }
+  }, [nhapTay, data.items])
+
   // Kế hoạch HIỆU LỰC: nếu dòng thuộc 5 mã vay NH → lấy từ kmcpPlanned (AUTO),
-  // ngược lại dùng số nhập tay it.ke_hoach.
+  // ngược lại dùng số nhập tay it.ke_hoach. Cộng thêm khoản nhập qua form (nếu khớp dòng).
   const effectiveKH = useCallback((it: NganSachItem): number =>
-    it.kmcp && kmcpPlanned[it.kmcp] !== undefined ? kmcpPlanned[it.kmcp] : it.ke_hoach,
-  [kmcpPlanned])
+    (it.kmcp && kmcpPlanned[it.kmcp] !== undefined ? kmcpPlanned[it.kmcp] : it.ke_hoach) + (nhapTayMap.leaf[it.id] ?? 0),
+  [kmcpPlanned, nhapTayMap])
 
   // Khoản AUTO cộng thẳng vào nhóm: khoá theo KMCP nhóm, hoặc '@' + tên nhóm (khi KMCP nhóm còn là "DT-...")
   const boSungCuaNhom = useCallback((g: NganSachItem): number =>
@@ -469,10 +499,10 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     }
     // Khoản AUTO cộng thẳng vào nhóm (không có dòng con khớp mã)
     for (const g of data.items) {
-      if (g.is_group) sums.get(g.id)!.kh += boSungCuaNhom(g)
+      if (g.is_group) sums.get(g.id)!.kh += boSungCuaNhom(g) + (nhapTayMap.group[g.id] ?? 0)
     }
     return sums
-  }, [data.items, ownerOf, kmcpActual, effectiveKH, boSungCuaNhom])
+  }, [data.items, ownerOf, kmcpActual, effectiveKH, boSungCuaNhom, nhapTayMap])
   const groupSum = (groupId: string) => groupSums.get(groupId) ?? { kh: 0, th: 0 }
 
   // Tổng chi tiết theo section (mỗi dòng chi tiết đếm đúng 1 lần: standalone + con nhóm)
@@ -485,10 +515,11 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       th += autoVal !== undefined ? autoVal : it.thuc_hien
     }
     for (const g of data.items) {
-      if (g.is_group && g.nhom === nhom) kh += boSungCuaNhom(g)
+      if (g.is_group && g.nhom === nhom) kh += boSungCuaNhom(g) + (nhapTayMap.group[g.id] ?? 0)
     }
+    if (nhom === 'B' || nhom === 'C') kh += nhapTayMap.chuaKhop[nhom]
     return { kh, th }
-  }, [data.items, kmcpActual, effectiveKH, boSungCuaNhom])
+  }, [data.items, kmcpActual, effectiveKH, boSungCuaNhom, nhapTayMap])
 
   // B/C totals for computing D = A+B-C
   const sectionTotals = useMemo(() => {
@@ -672,6 +703,14 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       <KeHoachVayAuto month={month} />
       <KeHoachDongTienSection month={month} entityFilter={entityFilter} />
 
+      {nhapTayMap.chuaKhop.rows.length > 0 && (
+        <div style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#991B1B' }}>
+          ⚠️ {nhapTayMap.chuaKhop.rows.length} khoản nhập qua Dòng tiền chưa khớp dòng/nhóm nào trong bảng
+          (đã cộng vào tổng Thu/Chi): {nhapTayMap.chuaKhop.rows.map(k => `${k.nhom} – ${k.moTa}`).join('; ')}.
+          Hãy thêm dòng có đúng mã KMCP đó vào bảng, hoặc đổi "Nhóm (báo cáo)" cho trùng tên nhóm.
+        </div>
+      )}
+
       <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
@@ -793,10 +832,12 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                       const fmt = (n: number) => n ? n.toLocaleString('vi-VN') : '—'
                       const bs = boSungCuaNhom(it)
                       const coBoSung = bs > 0
+                      const nt = nhapTayMap.group[it.id] ?? 0
                       return (
                         <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: '#1C3557', fontSize: 12.5 }}
-                          title={coBoSung ? `Gồm ${bs.toLocaleString('vi-VN')} ₫ tự động từ List ngân hàng` : undefined}>
+                          title={[coBoSung ? `Gồm ${bs.toLocaleString('vi-VN')} ₫ tự động từ List ngân hàng` : '', nt > 0 ? `Gồm ${nt.toLocaleString('vi-VN')} ₫ nhập qua Dòng tiền` : ''].filter(Boolean).join(' · ') || undefined}>
                           {coBoSung && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#DCFCE7', color: '#166534', marginRight: 6 }}>AUTO</span>}
+                          {nt > 0 && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#DBEAFE', color: '#1D4ED8', marginRight: 6 }}>NHẬP</span>}
                           {fmt(kh)}
                         </td>
                       )
@@ -867,6 +908,14 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
                         {numInput(it.id, 'ke_hoach', kmcpPlanned[it.kmcp], true)}
                         <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#DCFCE7', color: '#166534', flexShrink: 0 }}>AUTO</span>
+                      </div>
+                    ) : (nhapTayMap.leaf[it.id] ?? 0) > 0 ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}
+                        title={`Gồm ${nhapTayMap.leaf[it.id].toLocaleString('vi-VN')} ₫ nhập qua Dòng tiền (ô bên cạnh là phần gõ tay)`}>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#DBEAFE', color: '#1D4ED8', flexShrink: 0 }}>
+                          NHẬP +{nhapTayMap.leaf[it.id].toLocaleString('vi-VN')}
+                        </span>
+                        {numInput(it.id, 'ke_hoach', it.ke_hoach)}
                       </div>
                     ) : numInput(it.id, 'ke_hoach', it.ke_hoach)}
                   </td>
