@@ -24,6 +24,8 @@ interface Props {
   prefillMoi?:        string
   // Có → khi ĐỔI TÊN, chạy hàm này để cập nhật mọi khoản đã lưu đang dùng tên cũ (trả về số khoản đã cập nhật)
   onDoiTen?:          (cu: string, moi: string) => Promise<number>
+  giuThuTu?:          boolean   // true → giữ thứ tự gợi ý có sẵn, mục thêm mới nối cuối (không sắp theo chữ cái)
+  chiSuaMucTuyChinh?: boolean   // true → chỉ cho ✎ đổi tên mục do người dùng thêm (mục có sẵn trong code bị khoá)
 }
 
 export default function GoiYChon(p: Props) {
@@ -55,9 +57,12 @@ export default function GoiYChon(p: Props) {
     }
     if (p.value && !info.has(p.value)) push(p.value, {})   // giá trị cũ ngoài danh sách vẫn giữ
     // Sắp xếp theo số thứ tự đầu tên (1, 2, 3 … 10, 11 — đúng thứ tự số), sau đó theo chữ cái
-    out.sort((a, b) => a.localeCompare(b, 'vi', { numeric: true, sensitivity: 'base' }))
+    if (!p.giuThuTu) out.sort((a, b) => a.localeCompare(b, 'vi', { numeric: true, sensitivity: 'base' }))
     return { options: out, info }
   }, [list, p.builtin, p.locBuiltin, p.locCustomTheoLoai, p.loai, p.value])
+
+  const metaDangChon = info.get(p.value)
+  const khoaSua = !!p.chiSuaMucTuyChinh && !(metaDangChon?.id && !metaDangChon?.goc)
 
   function moThem() { setMode('them'); setTen(p.prefillMoi ?? ''); setErr(null) }
   function moSua()  { if (!p.value) return; setMode('sua'); setTen(p.value); setErr(null) }
@@ -108,8 +113,8 @@ export default function GoiYChon(p: Props) {
           {options.map(o => <option key={o} value={o}>{o}</option>)}
           <option value={MOI}>{p.moiLabel}</option>
         </select>
-        <button type="button" className="btn-ghost" disabled={!p.value} onClick={moSua}
-          title="Sửa tên mục đang chọn" style={{ padding: '0 10px', flexShrink: 0 }}>✎</button>
+        <button type="button" className="btn-ghost" disabled={!p.value || khoaSua} onClick={moSua}
+          title={khoaSua ? 'Mục có sẵn không đổi tên được (chỉ đổi tên mục bạn đã thêm)' : 'Sửa tên mục đang chọn'} style={{ padding: '0 10px', flexShrink: 0 }}>✎</button>
       </div>
 
       {note && <div style={{ marginTop: 4, fontSize: 11.5, color: '#374151' }}>{note}</div>}

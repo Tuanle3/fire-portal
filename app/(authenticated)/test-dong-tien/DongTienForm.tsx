@@ -318,6 +318,7 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
         setError('Nhóm đã chọn không còn trong bảng. Hãy chọn lại nhóm.'); return
       }
     }
+    if (!form.entity) { setError('Vui lòng chọn pháp nhân.'); return }
     if (!form.moTa.trim()) { setError('Vui lòng nhập mô tả khoản.'); return }
     if (!form.soTien || form.soTien <= 0) { setError('Số tiền phải lớn hơn 0.'); return }
 
@@ -401,9 +402,16 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
           <div className="nh-form-grid">
             <div>
               <label className="nh-label">Pháp nhân</label>
-              <select className="nh-select" value={form.entity} onChange={e => set('entity', e.target.value as EntityType)}>
-                {ENTITIES.map(e => <option key={e} value={e}>{e}</option>)}
-              </select>
+              <GoiYChon
+                kieu="phapNhan" loai={form.loai}
+                value={form.entity} onChange={v => set('entity', v as EntityType)}
+                builtin={ENTITIES}
+                giuThuTu chiSuaMucTuyChinh
+                onDoiTen={(cu, moi) => doiTenTruongKhoan('entity', cu, moi)}
+                emptyLabel="— Chọn pháp nhân —"
+                moiLabel="➕ Thêm pháp nhân mới…"
+                placeholderMoi="VD: Công ty CP ABC (tên ngắn dễ nhớ)"
+              />
             </div>
             <div>
               <label className="nh-label">{form.loaiKhoan === 'ke-hoach' ? 'Nhóm' : 'Nhóm khoản mục'}</label>

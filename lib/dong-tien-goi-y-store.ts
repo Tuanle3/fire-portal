@@ -11,7 +11,7 @@ import { diennuocDb } from '@/lib/firebase-diennuoc'
 
 const COL = 'dong_tien_goi_y'
 
-export type KieuGoiY = 'loaiGiaoDich' | 'nhomBaoCao' | 'nguonThanhToan'
+export type KieuGoiY = 'loaiGiaoDich' | 'nhomBaoCao' | 'nguonThanhToan' | 'phapNhan'
 
 export interface GoiYTuyChinh {
   id:    string

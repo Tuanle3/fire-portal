@@ -202,9 +202,9 @@ async function capNhatHangLoat(
   return dem
 }
 
-/** Đổi tên 1 giá trị ở trường loaiGiaoDich / nguonThanhToan / nhomBaoCao trên mọi khoản đang dùng tên cũ. Trả về số khoản đã cập nhật. */
+/** Đổi tên 1 giá trị ở trường loaiGiaoDich / nguonThanhToan / nhomBaoCao / entity (pháp nhân) trên mọi khoản đang dùng tên cũ. Trả về số khoản đã cập nhật. */
 export async function doiTenTruongKhoan(
-  field: 'loaiGiaoDich' | 'nguonThanhToan' | 'nhomBaoCao',
+  field: 'loaiGiaoDich' | 'nguonThanhToan' | 'nhomBaoCao' | 'entity',
   tenCu: string,
   tenMoi: string,
 ): Promise<number> {
