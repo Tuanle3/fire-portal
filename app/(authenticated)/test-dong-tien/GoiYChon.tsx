@@ -51,6 +51,8 @@ export default function GoiYChon(p: Props) {
       push(x.ten, { id: x.id })
     }
     if (p.value && !info.has(p.value)) push(p.value, {})   // giá trị cũ ngoài danh sách vẫn giữ
+    // Sắp xếp theo số thứ tự đầu tên (1, 2, 3 … 10, 11 — đúng thứ tự số), sau đó theo chữ cái
+    out.sort((a, b) => a.localeCompare(b, 'vi', { numeric: true, sensitivity: 'base' }))
     return { options: out, info }
   }, [list, p.builtin, p.locBuiltin, p.locCustomTheoLoai, p.loai, p.value])
 
