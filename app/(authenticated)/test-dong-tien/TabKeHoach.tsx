@@ -384,6 +384,25 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     setCollapsed(prev => { const n = new Set(prev); fresh.forEach(id => n.delete(id)); return n })
   }, [nhapTayMap, ownerOf])
 
+  // Danh sách dòng/nhóm THỰC TẾ của bảng (Thu = section B, Chi = section C) → làm danh sách Nhóm/KMCP của form,
+  // để khoản nhập vào chọn đúng dòng và luôn khớp (không còn đoán theo tên).
+  const bangKmcp = useMemo(() => {
+    const out: { value: string; label: string; ten: string; loai: 'thu' | 'chi' }[] = []
+    const seen = new Set<string>()
+    for (const it of data.items) {
+      if (it.is_section || (it.nhom !== 'B' && it.nhom !== 'C')) continue
+      const v = (it.kmcp ?? '').trim()
+      if (!v) continue
+      const loai = it.nhom === 'B' ? 'thu' : 'chi'
+      const key = `${loai}|${v}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const ten = (it.dien_giai ?? '').trim() || v
+      out.push({ value: v, loai, ten, label: `${it.stt} · ${v} — ${ten}${it.is_group ? ' (cả nhóm)' : ''}` })
+    }
+    return out
+  }, [data.items])
+
   const tongNhapThu = nhapTay.filter(k => k.loai === 'thu').reduce((a, k) => a + k.soTien, 0)
   const tongNhapChi = nhapTay.filter(k => k.loai === 'chi').reduce((a, k) => a + k.soTien, 0)
 
@@ -753,7 +772,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
                         <tr key={`ck-${it.id}`} style={{ background: '#FEF2F2' }}>
                           <td />
                           <td colSpan={7} style={{ padding: '4px 10px', fontSize: 11.5, color: '#991B1B' }}>
-                            ⚠️ {rows.length} khoản nhập thêm chưa khớp nhóm/dòng nào trong bảng (đã cộng vào tổng) — bấm ✎ đổi "Nhóm/KMCP" hoặc "Nhóm (báo cáo)" cho đúng nhóm.
+                            ⚠️ {rows.length} khoản nhập thêm chưa gắn vào dòng nào trong bảng (số vẫn đã cộng vào tổng) — bấm ✎ rồi chọn lại "Nhóm/KMCP" là dòng/nhóm đúng trong bảng.
                           </td>
                         </tr>
                         {rows.map(renderKhoanRow)}
@@ -930,6 +949,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
           <div style={{ width: '100%', maxWidth: 560 }}>
             <DongTienForm
               editing={formEditing}
+              bangKmcp={bangKmcp}
               loaiKhoanMacDinh="ke-hoach"
               onSaved={dongForm}
               onCancel={dongForm}

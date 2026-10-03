@@ -135,13 +135,16 @@ const emptyForm = (entityMacDinh?: EntityType) => ({
 interface Props {
   editing?:       KhoanDongTien | null
   entityMacDinh?: EntityType
+  // Các dòng/nhóm THỰC TẾ của bảng Nhập Data (mã KMCP + tên) — chế độ Kế hoạch dùng làm danh sách Nhóm/KMCP
+  // để khoản nhập vào luôn khớp đúng dòng trong bảng. Không truyền → dùng danh sách mã mặc định cũ.
+  bangKmcp?:      { value: string; label: string; ten: string; loai: LoaiDongTien }[]
   loaiKhoanMacDinh?: LoaiKhoan   // Cho phép mở form sẵn ở chế độ KH hoặc TH
   khoaLoaiKhoan?:  boolean       // true = ẩn radio Kế hoạch/Thực hiện (ngữ cảnh đã rõ, VD mở từ Tab Kế hoạch)
   onSaved:        () => void
   onCancel:       () => void
 }
 
-export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh, khoaLoaiKhoan, onSaved, onCancel }: Props) {
+export default function DongTienForm({ editing, entityMacDinh, bangKmcp, loaiKhoanMacDinh, khoaLoaiKhoan, onSaved, onCancel }: Props) {
   const [form,         setForm]         = useState(emptyForm(entityMacDinh))
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState<string | null>(null)
@@ -150,6 +153,14 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
   const [tenNhomMoi,   setTenNhomMoi]   = useState('')
   const [luuNhomLoi,   setLuuNhomLoi]   = useState<string | null>(null)
   const [dangLuuNhom,  setDangLuuNhom]  = useState(false)
+
+  // Danh sách Nhóm/KMCP chế độ Kế hoạch: ưu tiên đúng dòng/nhóm đang có trong bảng Nhập Data
+  const kmcpOpts = (loai: LoaiDongTien): { value: string; label: string }[] => {
+    const tuBang = (bangKmcp ?? []).filter(b => b.loai === loai)
+    return tuBang.length ? tuBang : kmcpOptionsTheoLoai(loai)
+  }
+  const kmcpTen = (value: string): string =>
+    (bangKmcp ?? []).find(b => b.value === value)?.ten ?? KMCP_LABEL[value] ?? value
 
   useEffect(() => {
     const unsub = subscribeNhomTuyChinh(setNhomTuyChinh)
@@ -185,11 +196,11 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
       if (loaiKhoanMacDinh) base.loaiKhoan = loaiKhoanMacDinh
       // Chế độ Kế hoạch: mặc định nhóm = mã KMCP đầu tiên (Thu), không phải NhomDongTien enum
       if (loaiKhoanMacDinh === 'ke-hoach') {
-        const first = kmcpOptionsTheoLoai('thu')[0]
+        const first = kmcpOpts('thu')[0]
         if (first) {
           base.nhom = first.value as NhomDongTien
           base.nhomCha = first.value
-          base.nhomChaLabel = KMCP_LABEL[first.value] ?? first.value
+          base.nhomChaLabel = kmcpTen(first.value)
         }
       }
       setForm(base)
@@ -201,11 +212,11 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
     // ── Chế độ KẾ HOẠCH: dùng mã KMCP cũ (DT-CG, CP-BH...) + custom, KHÔNG
     //    dùng NhomDongTien enum — xem ghi chú bridge ở đầu file. ──────────
     if (form.loaiKhoan === 'ke-hoach') {
-      const chuan = kmcpOptionsTheoLoai(form.loai)
+      const chuan = kmcpOpts(form.loai)
       const tuy   = nhomTuyChinh.filter(n => n.loai === form.loai).map(n => ({ value: n.ten, label: n.ten }))
       const list  = [...chuan, ...tuy]
       if (form.nhom && !list.some(o => o.value === form.nhom))
-        list.push({ value: form.nhom, label: `${KMCP_LABEL[form.nhom as string] ?? form.nhom} (cũ)` })
+        list.push({ value: form.nhom, label: `${KMCP_LABEL[form.nhom as string] ?? form.nhom} (cũ — chọn lại dòng đúng trong bảng)` })
       return list
     }
     const chuan = NHOM_THEO_LOAI[form.loai].map(v => ({ value: v, label: NHOM_LABEL[v] ?? v }))
@@ -214,7 +225,7 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
     if (form.nhom && !list.some(o => o.value === form.nhom))
       list.push({ value: form.nhom, label: `${NHOM_LABEL[form.nhom as NhomDongTien] ?? form.nhom} (cũ)` })
     return list
-  }, [form.loai, form.nhom, form.loaiKhoan, nhomTuyChinh])
+  }, [form.loai, form.nhom, form.loaiKhoan, nhomTuyChinh, bangKmcp])
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm(f => ({ ...f, [key]: value }))
@@ -223,13 +234,13 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
   function chonLoaiKhoan(loaiKhoan: LoaiKhoan) {
     const laKeHoach = loaiKhoan === 'ke-hoach'
     const nhomMacDinh = laKeHoach
-      ? (kmcpOptionsTheoLoai(form.loai)[0]?.value ?? '')
+      ? (kmcpOpts(form.loai)[0]?.value ?? '')
       : NHOM_THEO_LOAI[form.loai][0]
     setForm(f => ({
       ...f, loaiKhoan,
       nhom: nhomMacDinh as NhomDongTien,
       nhomCha: nhomMacDinh,
-      nhomChaLabel: laKeHoach ? (KMCP_LABEL[nhomMacDinh] ?? nhomMacDinh) : (NHOM_LABEL[nhomMacDinh] ?? nhomMacDinh),
+      nhomChaLabel: laKeHoach ? kmcpTen(nhomMacDinh) : (NHOM_LABEL[nhomMacDinh] ?? nhomMacDinh),
     }))
     setDangThemNhom(false)
   }
@@ -237,13 +248,13 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
   function chonLoai(loai: LoaiDongTien) {
     const laKeHoach = form.loaiKhoan === 'ke-hoach'
     const nhomMacDinh = laKeHoach
-      ? (kmcpOptionsTheoLoai(loai)[0]?.value ?? '')
+      ? (kmcpOpts(loai)[0]?.value ?? '')
       : NHOM_THEO_LOAI[loai][0]
     setForm(f => ({
       ...f, loai,
       nhom: nhomMacDinh as NhomDongTien,
       nhomCha: nhomMacDinh,
-      nhomChaLabel: laKeHoach ? (KMCP_LABEL[nhomMacDinh] ?? nhomMacDinh) : (NHOM_LABEL[nhomMacDinh] ?? nhomMacDinh),
+      nhomChaLabel: laKeHoach ? kmcpTen(nhomMacDinh) : (NHOM_LABEL[nhomMacDinh] ?? nhomMacDinh),
     }))
     setDangThemNhom(false)
   }
@@ -255,7 +266,7 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
       ...f,
       nhom: value as NhomDongTien,
       nhomCha: value,
-      nhomChaLabel: laKeHoach ? (KMCP_LABEL[value] ?? value) : (NHOM_LABEL[value as NhomDongTien] ?? value),
+      nhomChaLabel: laKeHoach ? kmcpTen(value) : (NHOM_LABEL[value as NhomDongTien] ?? value),
     }))
   }
 
