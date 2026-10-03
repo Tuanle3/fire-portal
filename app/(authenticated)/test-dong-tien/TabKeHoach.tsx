@@ -387,8 +387,10 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
   // Danh sách dòng/nhóm THỰC TẾ của bảng (Thu = section B, Chi = section C) → làm danh sách Nhóm/KMCP của form,
   // để khoản nhập vào chọn đúng dòng và luôn khớp (không còn đoán theo tên).
   const bangKmcp = useMemo(() => {
-    const out: { value: string; label: string; ten: string; loai: 'thu' | 'chi' }[] = []
+    const out: { value: string; label: string; ten: string; loai: 'thu' | 'chi'; nhomBC: string; laNhom: boolean }[] = []
     const seen = new Set<string>()
+    const groupById = new Map(data.items.filter(i => i.is_group).map(g => [g.id, g]))
+    const bcCua = (g?: { stt?: unknown; dien_giai?: string }) => g ? `${String(g.stt).trim()}. ${(g.dien_giai ?? '').trim()}` : ''
     for (const it of data.items) {
       if (it.is_section || (it.nhom !== 'B' && it.nhom !== 'C')) continue
       const v = (it.kmcp ?? '').trim()
@@ -398,10 +400,12 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       if (seen.has(key)) continue
       seen.add(key)
       const ten = (it.dien_giai ?? '').trim() || v
-      out.push({ value: v, loai, ten, label: `${it.stt} · ${v} — ${ten}${it.is_group ? ' (cả nhóm)' : ''}` })
+      // "Nhóm (báo cáo)" tương ứng = nhóm chứa dòng này (hoặc chính nhóm đó) → form tự điền khi chọn dòng
+      const g = it.is_group ? it : groupById.get(ownerOf.get(it.id) ?? '')
+      out.push({ value: v, loai, ten, nhomBC: bcCua(g), laNhom: !!it.is_group, label: `${it.stt} · ${v} — ${ten}${it.is_group ? ' (cả nhóm)' : ''}` })
     }
     return out
-  }, [data.items])
+  }, [data.items, ownerOf])
 
   const tongNhapThu = nhapTay.filter(k => k.loai === 'thu').reduce((a, k) => a + k.soTien, 0)
   const tongNhapChi = nhapTay.filter(k => k.loai === 'chi').reduce((a, k) => a + k.soTien, 0)
