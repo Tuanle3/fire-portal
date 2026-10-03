@@ -645,7 +645,41 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
           >
             🔢 Đánh lại STT
           </button>
+          {/* Renumber */}
+          <button
+            onClick={renumberSTT}
+            title="Đánh lại STT theo thứ tự hiện tại"
+            style={{
+              padding: '8px 14px', background: '#FEF9C3', color: '#854D0E',
+              border: '1px solid #FDE68A', borderRadius: 7, fontWeight: 600, fontSize: 12.5, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
+          >
+            🔢 Đánh lại STT
+          </button>
 
+          {/* ▼▼▼ MỚI: nút Lưu — ghi Nguồn, Ghi chú, Ngày DK, Kế hoạch lên Firestore ▼▼▼ */}
+          <button
+            onClick={onSave}
+            disabled={saving}
+            title="Lưu toàn bộ Data kế hoạch của tháng đang chọn"
+            style={{
+              padding: '8px 16px', background: saving ? '#9CA3AF' : '#1C3557', color: '#fff',
+              border: 'none', borderRadius: 7, fontWeight: 600, fontSize: 12.5,
+              fontFamily: 'inherit', cursor: saving ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
+          >
+            {saving ? '⏳ Đang lưu…' : '💾 Lưu'}
+          </button>
+          {saveMsg && (
+            <span style={{ fontSize: 12, fontWeight: 600, color: saveMsg.startsWith('✅') ? '#166534' : '#991B1B' }}>
+              {saveMsg}
+            </span>
+          )}
+          {/* ▲▲▲ HẾT PHẦN MỚI ▲▲▲ */}
+
+        </div>
         </div>
       </div>
 
