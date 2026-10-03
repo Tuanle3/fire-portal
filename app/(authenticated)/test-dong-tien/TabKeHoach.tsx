@@ -8,7 +8,7 @@ import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup, s
 //    dongTienItems (loaiKhoan='ke-hoach'), tái dùng DongTienForm ──────────
 import type { KhoanDongTien } from '@/lib/dong-tien-types'
 import { subscribeKeHoachThang } from '@/lib/dong-tien-ke-hoach-store'
-import { deleteKhoanDongTien } from '@/lib/dong-tien-store'
+import { deleteKhoanDongTien, dongBoTenNhomKhoan, doiMaNhomKhoan } from '@/lib/dong-tien-store'
 import DongTienForm, { type NhomBang } from './DongTienForm'
 import KeHoachVayAuto from './KeHoachVayAuto'
 import type { EntityType } from '@/lib/han-muc-types'
@@ -30,6 +30,14 @@ function buildExportItems(items: NganSachItem[]): NganSachItem[] {
     result.splice(insertAt, 0, { ...m, id: `auto-${m.kmcp}` })
   }
   return result
+}
+
+// Mã KMCP cố định, không trùng mã nào đang có trong bảng
+function sinhMaNhom(items: NganSachItem[]): string {
+  const daCo = new Set(items.map(i => (i.kmcp ?? '').trim().toLowerCase()))
+  let ma = ''
+  do { ma = 'NH-' + Math.random().toString(36).slice(2, 7).toUpperCase() } while (daCo.has(ma.toLowerCase()))
+  return ma
 }
 
 function downloadTemplate(data: NganSachThang, month: string) {
@@ -399,7 +407,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       seen.add(`${loai}|${value}`)
       const stt = String(g.stt ?? '').trim()
       const con = data.items.filter(i => !i.is_section && !i.is_group && i.kmcp && ownerOf.get(i.id) === g.id).map(i => String(i.kmcp).trim())
-      out.push({ value, loai, ten, con, label: `${stt ? stt + ' · ' : ''}${ten}`, nhomBC: stt ? `${stt}. ${ten}` : ten })
+      out.push({ value, loai, ten, stt, con, label: `${stt ? stt + ' · ' : ''}${ten}`, nhomBC: stt ? `${stt}. ${ten}` : ten })
     }
     return out
   }, [data.items, ownerOf])
@@ -418,10 +426,8 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     const next = addGroup(data, section.id, sec)
     const g = next.items.find(i => !before.has(i.id))
     if (!g) throw new Error('Không tạo được nhóm, thử lại.')
-    // Cấp mã KMCP cố định cho nhóm mới (không trùng mã nào trong bảng) → sau này đổi tên nhóm trong bảng, khoản đã nhập vẫn gắn đúng
-    const daCo = new Set(next.items.map(i => (i.kmcp ?? '').trim().toLowerCase()))
-    let ma = ''
-    do { ma = 'NH-' + Math.random().toString(36).slice(2, 7).toUpperCase() } while (daCo.has(ma.toLowerCase()))
+    // Cấp mã KMCP cố định cho nhóm mới → sau này đổi tên nhóm trong bảng, khoản đã nhập vẫn gắn đúng
+    const ma = sinhMaNhom(next.items)
     const items = next.items.map(i => i.id === g.id ? { ...i, dien_giai: ten, kmcp: ma } : i)
     const saved = { ...next, items }
     onChange(saved)
@@ -429,6 +435,35 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     const stt = String(g.stt ?? '').trim()
     return { value: ma, ten, nhomBC: stt ? `${stt}. ${ten}` : ten }
   }, [data, onChange])
+
+  // Nhóm chưa có mã KMCP (value '@Tên') → cấp mã cố định, lưu bảng, đổi mã các khoản đã gắn bằng '@Tên'
+  const capMaNhom = useCallback(async (loai: 'thu' | 'chi', value: string) => {
+    const sec = loai === 'thu' ? 'B' : 'C'
+    const g = data.items.find(i => i.is_group && i.nhom === sec && !(i.kmcp ?? '').trim() && '@' + (i.dien_giai ?? '').trim() === value)
+    if (!g) return value
+    const ma = sinhMaNhom(data.items)
+    const saved = { ...data, items: data.items.map(i => i.id === g.id ? { ...i, kmcp: ma } : i) }
+    onChange(saved)
+    await saveNganSach(saved)
+    await doiMaNhomKhoan(value, ma)
+    return ma
+  }, [data, onChange])
+
+  // Đồng bộ TÊN nhóm sang các khoản đã nhập: khoản gắn nhóm bằng mã (không đổi) nhưng giữ bản sao tên
+  // (nhomBaoCao, nhomChaLabel) dùng ở Tab Kế hoạch dòng tiền. So khoản với tên nhóm hiện tại trong bảng → chỉ nhóm nào lệch mới ghi.
+  const dongBoTenNhom = async () => {
+    const chuanTen = (v?: string) => (v ?? '').replace(/^\s*\d+\s*[.)]\s*/, '').normalize('NFC').trim()
+    const can = new Map<string, NhomBang>()
+    for (const k of nhapTay) {
+      const b = bangNhom.find(x => x.loai === k.loai && x.value === (k.nhom as string))
+      if (b && (chuanTen(k.nhomBaoCao) !== b.ten || (k.nhomChaLabel ?? '') !== b.ten)) can.set(b.value, b)
+    }
+    for (const b of can.values()) await dongBoTenNhomKhoan({ nhom: b.value, ten: b.ten, sttMacDinh: b.stt })
+  }
+  const luuVaDongBo = async () => {
+    try { await dongBoTenNhom() } catch (e) { console.error('[dong-bo-ten-nhom]', e) }
+    onSave()
+  }
 
   const tongNhapThu = nhapTay.filter(k => k.loai === 'thu').reduce((a, k) => a + k.soTien, 0)
   const tongNhapChi = nhapTay.filter(k => k.loai === 'chi').reduce((a, k) => a + k.soTien, 0)
@@ -683,7 +718,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
 
           {/* MỚI: nút Lưu — ghi Nguồn, Ghi chú, Ngày DK, Kế hoạch lên Firestore */}
           <button
-            onClick={onSave}
+            onClick={luuVaDongBo}
             disabled={saving}
             title="Lưu toàn bộ Data kế hoạch của tháng đang chọn"
             style={{
@@ -978,6 +1013,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
               editing={formEditing}
               bangNhom={bangNhom}
               onTaoNhom={taoNhom}
+              onCapMaNhom={capMaNhom}
               loaiKhoanMacDinh="ke-hoach"
               onSaved={dongForm}
               onCancel={dongForm}

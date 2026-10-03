@@ -22,6 +22,8 @@ interface Props {
   moiLabel:           string
   placeholderMoi:     string
   prefillMoi?:        string
+  // Có → khi ĐỔI TÊN, chạy hàm này để cập nhật mọi khoản đã lưu đang dùng tên cũ (trả về số khoản đã cập nhật)
+  onDoiTen?:          (cu: string, moi: string) => Promise<number>
 }
 
 export default function GoiYChon(p: Props) {
@@ -30,6 +32,7 @@ export default function GoiYChon(p: Props) {
   const [ten,  setTen]  = useState('')
   const [err,  setErr]  = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => subscribeGoiY(p.kieu, setList), [p.kieu])
 
@@ -67,6 +70,7 @@ export default function GoiYChon(p: Props) {
     if (options.some(o => o.toLowerCase() === t.toLowerCase() && !(mode === 'sua' && o === p.value))) {
       setErr('Tên này đã có trong danh sách.'); return
     }
+    const cu = p.value
     setBusy(true)
     try {
       let daLuu: string
@@ -78,8 +82,18 @@ export default function GoiYChon(p: Props) {
       } else {
         daLuu = await themGoiY(p.kieu, p.loai, t)
       }
+      let ghiChu: string | null = null
+      if (mode === 'sua' && p.onDoiTen && cu && cu !== daLuu) {
+        try {
+          const n = await p.onDoiTen(cu, daLuu)
+          ghiChu = `✅ Đã đổi tên và cập nhật ${n} khoản đã lưu.`
+        } catch {
+          ghiChu = '⚠️ Đã đổi tên trong danh sách nhưng cập nhật các khoản đã lưu bị lỗi — kiểm tra mạng rồi báo lại.'
+        }
+      }
       p.onChange(daLuu)
       dong()
+      if (ghiChu) { setNote(ghiChu); setTimeout(() => setNote(null), 7000) }
     } catch (e: any) {
       setErr(e?.message ?? 'Có lỗi khi lưu, thử lại.')
     } finally { setBusy(false) }
@@ -98,10 +112,14 @@ export default function GoiYChon(p: Props) {
           title="Sửa tên mục đang chọn" style={{ padding: '0 10px', flexShrink: 0 }}>✎</button>
       </div>
 
+      {note && <div style={{ marginTop: 4, fontSize: 11.5, color: '#374151' }}>{note}</div>}
+
       {mode && (
         <div style={{ marginTop: 6, background: '#F8FAFC', border: '1px solid var(--nh-border)', borderRadius: 8, padding: 8 }}>
           <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>
-            {mode === 'sua' ? 'Đổi tên mục đang chọn (không sửa các khoản đã lưu trước đó)' : 'Thêm mục mới vào danh sách'}
+            {mode === 'sua'
+              ? (p.onDoiTen ? 'Đổi tên mục đang chọn — các khoản đã lưu đang dùng tên cũ sẽ tự cập nhật theo' : 'Đổi tên mục đang chọn (không sửa các khoản đã lưu trước đó)')
+              : 'Thêm mục mới vào danh sách'}
           </div>
           <input type="text" className="nh-input" autoFocus value={ten}
             placeholder={p.placeholderMoi} onChange={e => setTen(e.target.value)}

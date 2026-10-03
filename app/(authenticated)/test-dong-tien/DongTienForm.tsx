@@ -11,7 +11,7 @@ import {
   KhoanDongTien, LoaiDongTien, NhomDongTien, DoTinCay, ChuKyLap, LoaiKhoan,
   NHOM_THEO_LOAI, NHOM_LABEL, DO_TIN_CAY_LABEL,
 } from '@/lib/dong-tien-types'
-import { saveKhoanDongTien } from '@/lib/dong-tien-store'
+import { saveKhoanDongTien, doiTenTruongKhoan } from '@/lib/dong-tien-store'
 import { subscribeNhomTuyChinh, themNhomTuyChinh, NhomTuyChinh } from '@/lib/dong-tien-nhom-store'
 import GoiYChon from './GoiYChon'
 import type { EntityType } from '@/lib/han-muc-types'
@@ -126,7 +126,7 @@ const emptyForm = (entityMacDinh?: EntityType) => ({
 
 // Nhóm THẬT của bảng Nhập Data (dòng "cả nhóm"). value = mã KMCP của nhóm, nhóm chưa có mã thì '@' + tên.
 // con = mã KMCP các dòng con (để khoản cũ gắn vào dòng con tự quy về nhóm cha)
-export interface NhomBang { value: string; label: string; ten: string; loai: LoaiDongTien; nhomBC: string; con: string[] }
+export interface NhomBang { value: string; label: string; ten: string; stt: string; loai: LoaiDongTien; nhomBC: string; con: string[] }
 
 interface Props {
   editing?:       KhoanDongTien | null
@@ -136,13 +136,15 @@ interface Props {
   bangNhom?:      NhomBang[]
   // Tạo nhóm mới NGAY trong bảng Nhập Data (có lưu luôn). Ném lỗi nếu trùng tên.
   onTaoNhom?:     (loai: LoaiDongTien, ten: string) => Promise<{ value: string; ten: string; nhomBC: string }>
+  // Nhóm chưa có mã KMCP (value dạng '@Tên') → cấp mã cố định trong bảng, đổi mã các khoản cũ; trả về mã mới
+  onCapMaNhom?:   (loai: LoaiDongTien, value: string) => Promise<string>
   loaiKhoanMacDinh?: LoaiKhoan   // Cho phép mở form sẵn ở chế độ KH hoặc TH
   khoaLoaiKhoan?:  boolean       // true = ẩn radio Kế hoạch/Thực hiện (ngữ cảnh đã rõ, VD mở từ Tab Kế hoạch)
   onSaved:        () => void
   onCancel:       () => void
 }
 
-export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNhom, loaiKhoanMacDinh, khoaLoaiKhoan, onSaved, onCancel }: Props) {
+export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNhom, onCapMaNhom, loaiKhoanMacDinh, khoaLoaiKhoan, onSaved, onCancel }: Props) {
   const [form,         setForm]         = useState(emptyForm(entityMacDinh))
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState<string | null>(null)
@@ -321,9 +323,16 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
 
     setSaving(true)
     try {
+      // Nhóm chưa có mã → cấp mã cố định trước khi lưu, để sau này đổi tên nhóm khoản vẫn gắn đúng
+      let nhomLuu = form.nhom as string
+      let nhomChaLuu = form.nhomCha
+      if (form.loaiKhoan === 'ke-hoach' && nhomLuu.startsWith('@') && onCapMaNhom) {
+        nhomLuu = await onCapMaNhom(form.loai, nhomLuu)
+        nhomChaLuu = nhomLuu
+      }
       await saveKhoanDongTien(
         {
-          entity: form.entity, loai: form.loai, nhom: form.nhom,
+          entity: form.entity, loai: form.loai, nhom: nhomLuu as NhomDongTien,
           ngayDuKien: form.ngayDuKien, soTien: form.soTien,
           doTinCay: form.loai === 'thu' ? form.doTinCay : undefined,
           moTa: form.moTa.trim(), lap: form.lap,
@@ -331,7 +340,7 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
           ghiChu: form.ghiChu.trim() || undefined,
           // ── MỚI: loại khoản + nhóm cha ──
           loaiKhoan:    form.loaiKhoan,
-          nhomCha:      form.nhomCha,
+          nhomCha:      nhomChaLuu,
           nhomChaLabel: form.nhomChaLabel,
           // ── MỚI: 4 trường cho Tab Kế hoạch dòng tiền (để trống = adapter tự suy ra) ──
           nguonThanhToan: form.nguonThanhToan.trim() || undefined,
@@ -452,10 +461,15 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
             <div className="nh-form-grid" style={{ marginBottom: 10 }}>
               <div>
                 <label className="nh-label">Nguồn thanh toán</label>
-                <input type="text" className="nh-input" list="dt-goiy-nguon" value={form.nguonThanhToan}
-                  onChange={e => set('nguonThanhToan', e.target.value)}
-                  placeholder={`Để trống = Quỹ - ${form.entity}`} />
-                <datalist id="dt-goiy-nguon">{GOI_Y_NGUON.map(x => <option key={x} value={x} />)}</datalist>
+                <GoiYChon
+                  kieu="nguonThanhToan" loai={form.loai}
+                  value={form.nguonThanhToan} onChange={v => set('nguonThanhToan', v)}
+                  builtin={GOI_Y_NGUON}
+                  onDoiTen={(cu, moi) => doiTenTruongKhoan('nguonThanhToan', cu, moi)}
+                  emptyLabel={`— Để trống = Quỹ - ${form.entity} —`}
+                  moiLabel="➕ Thêm nguồn thanh toán mới…"
+                  placeholderMoi="VD: [HM mới] ACB_ABC_5.000 hoặc Quỹ - ..."
+                />
               </div>
               <div>
                 <label className="nh-label">Đối tác / NCC / KH</label>
@@ -468,6 +482,7 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
                   kieu="loaiGiaoDich" loai={form.loai}
                   value={form.loaiGiaoDich} onChange={v => set('loaiGiaoDich', v)}
                   builtin={GOI_Y_LOAI_GD}
+                  onDoiTen={(cu, moi) => doiTenTruongKhoan('loaiGiaoDich', cu, moi)}
                   locBuiltin={x => form.loai === 'thu' ? /^thu\b/i.test(x) : !/^thu\b/i.test(x)}
                   locCustomTheoLoai
                   emptyLabel="— Để trống (tự suy ra) —"

@@ -8,7 +8,7 @@ import {
   collection, doc, onSnapshot, setDoc, deleteDoc,
   query, orderBy, where, writeBatch,
   getDoc, getDocs, deleteField,
-  QuerySnapshot, DocumentData,
+  QuerySnapshot, QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore'
 import { tasksDb, ensureTasksAuth } from '@/lib/firebase-tasks'
 import { KhoanDongTien, ChuKyLap } from './dong-tien-types'
@@ -177,4 +177,69 @@ export async function unmarkDongTienThucHien(id: string): Promise<void> {
     soTienThucTe: deleteField(),
     updatedAt: Date.now(),
   }, { merge: true })
+}
+
+// ============================================================
+// ĐỒNG BỘ KHI ĐỔI TÊN / ĐỔI MÃ (Loại giao dịch, Nguồn thanh toán, Nhóm)
+// Mọi hàm chạy trên TOÀN BỘ khoản đã lưu (mọi tháng) và ghi theo lô 400.
+// ============================================================
+async function capNhatHangLoat(
+  docs: QueryDocumentSnapshot<DocumentData>[],
+  patch: (d: any) => Record<string, any> | null,
+): Promise<number> {
+  let dem = 0
+  const BATCH_SIZE = 400
+  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db())
+    let coGhi = false
+    for (const d of docs.slice(i, i + BATCH_SIZE)) {
+      const p = patch(d.data())
+      if (!p) continue
+      batch.update(d.ref, p); dem++; coGhi = true
+    }
+    if (coGhi) await batch.commit()
+  }
+  return dem
+}
+
+/** Đổi tên 1 giá trị ở trường loaiGiaoDich / nguonThanhToan / nhomBaoCao trên mọi khoản đang dùng tên cũ. Trả về số khoản đã cập nhật. */
+export async function doiTenTruongKhoan(
+  field: 'loaiGiaoDich' | 'nguonThanhToan' | 'nhomBaoCao',
+  tenCu: string,
+  tenMoi: string,
+): Promise<number> {
+  await ensureTasksAuth()
+  if (!tenCu || !tenMoi || tenCu === tenMoi) return 0
+  const snaps = await getDocs(query(ktCol(), where(field, '==', tenCu)))
+  const now = Date.now()
+  return capNhatHangLoat(snaps.docs, () => ({ [field]: tenMoi, updatedAt: now }))
+}
+
+/**
+ * Đổi tên NHÓM: khoản gắn nhóm bằng mã (nhom), nhưng còn giữ bản sao tên ở nhomBaoCao ("4. Tên nhóm") và nhomChaLabel.
+ * Cập nhật 2 bản sao này cho mọi khoản kế hoạch thuộc nhóm `nhom`. Giữ số thứ tự riêng của từng khoản
+ * (nếu khoản chưa có số thì dùng sttMacDinh).
+ */
+export async function dongBoTenNhomKhoan(p: { nhom: string; ten: string; sttMacDinh?: string }): Promise<number> {
+  await ensureTasksAuth()
+  const snaps = await getDocs(query(ktCol(), where('nhom', '==', p.nhom)))
+  const now = Date.now()
+  return capNhatHangLoat(snaps.docs, d => {
+    if ((d.loaiKhoan ?? 'thuc-hien') !== 'ke-hoach') return null
+    const m = String(d.nhomBaoCao ?? '').match(/^\s*(\d+)\s*[.)]\s*/)
+    const stt = m ? m[1] : (p.sttMacDinh ?? '')
+    const bc = stt ? `${stt}. ${p.ten}` : p.ten
+    if (d.nhomBaoCao === bc && d.nhomChaLabel === p.ten) return null
+    return { nhomBaoCao: bc, nhomChaLabel: p.ten, updatedAt: now }
+  })
+}
+
+/** Đổi MÃ nhóm của các khoản kế hoạch (VD nhóm chưa có mã '@Tên' → được cấp mã NH-xxxxx). */
+export async function doiMaNhomKhoan(maCu: string, maMoi: string): Promise<number> {
+  await ensureTasksAuth()
+  if (!maCu || !maMoi || maCu === maMoi) return 0
+  const snaps = await getDocs(query(ktCol(), where('nhom', '==', maCu)))
+  const now = Date.now()
+  return capNhatHangLoat(snaps.docs, d =>
+    (d.loaiKhoan ?? 'thuc-hien') === 'ke-hoach' ? { nhom: maMoi, nhomCha: maMoi, updatedAt: now } : null)
 }
