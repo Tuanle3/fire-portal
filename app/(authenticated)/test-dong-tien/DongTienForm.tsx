@@ -13,6 +13,7 @@ import {
 } from '@/lib/dong-tien-types'
 import { saveKhoanDongTien } from '@/lib/dong-tien-store'
 import { subscribeNhomTuyChinh, themNhomTuyChinh, NhomTuyChinh } from '@/lib/dong-tien-nhom-store'
+import { subscribeGoiY, themGoiY, GoiYTuyChinh } from '@/lib/dong-tien-goi-y-store'
 import type { EntityType } from '@/lib/han-muc-types'
 // ── Bridge Kế hoạch: khi loaiKhoan='ke-hoach', dropdown "Nhóm/KMCP" phải
 //    dùng đúng mã KMCP cũ (DT-CG, CP-BH, VAY-GOC-DN...) — KHÔNG dùng
@@ -23,6 +24,7 @@ import { KMCP_VAY_TU_DONG } from '@/lib/dong-tien-vay-ke-hoach'
 
 const ENTITIES: EntityType[] = ['SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 const NHOM_MOI = '__nhom_moi__'
+const LOAI_GD_MOI = '__loaigd_moi__'
 
 // ── Gợi ý cho 4 trường của Tab "Kế hoạch dòng tiền" (lấy từ file template).
 //    Vẫn cho gõ giá trị mới — chỉ là datalist gợi ý. ──
@@ -149,11 +151,19 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
   const [tenNhomMoi,   setTenNhomMoi]   = useState('')
   const [luuNhomLoi,   setLuuNhomLoi]   = useState<string | null>(null)
   const [dangLuuNhom,  setDangLuuNhom]  = useState(false)
+  // ── Loại giao dịch: danh sách tuỳ chỉnh + thêm mới ──
+  const [loaiGdTuyChinh,  setLoaiGdTuyChinh]  = useState<GoiYTuyChinh[]>([])
+  const [dangThemLoaiGd,  setDangThemLoaiGd]  = useState(false)
+  const [tenLoaiGdMoi,    setTenLoaiGdMoi]    = useState('')
+  const [luuLoaiGdLoi,    setLuuLoaiGdLoi]    = useState<string | null>(null)
+  const [dangLuuLoaiGd,   setDangLuuLoaiGd]   = useState(false)
 
   useEffect(() => {
     const unsub = subscribeNhomTuyChinh(setNhomTuyChinh)
     return () => unsub()
   }, [])
+
+  useEffect(() => subscribeGoiY('loaiGiaoDich', setLoaiGdTuyChinh), [])
 
   useEffect(() => {
     if (editing) {
@@ -194,6 +204,7 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
       setForm(base)
     }
     setDangThemNhom(false); setTenNhomMoi(''); setLuuNhomLoi(null)
+    setDangThemLoaiGd(false); setTenLoaiGdMoi(''); setLuuLoaiGdLoi(null)
   }, [editing, entityMacDinh, loaiKhoanMacDinh])
 
   const nhomOptions = useMemo(() => {
@@ -214,6 +225,43 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
       list.push({ value: form.nhom, label: `${NHOM_LABEL[form.nhom as NhomDongTien] ?? form.nhom} (cũ)` })
     return list
   }, [form.loai, form.nhom, form.loaiKhoan, nhomTuyChinh])
+
+  // Danh sách "Loại giao dịch": gợi ý có sẵn + tuỳ chỉnh đã thêm, lọc theo Thu/Chi;
+  // luôn giữ giá trị đang chọn (khoản cũ) để ô chọn không bị trống.
+  const loaiGdOptions = useMemo(() => {
+    const laThu = form.loai === 'thu'
+    const chuan = GOI_Y_LOAI_GD.filter(x => laThu ? /^thu\b/i.test(x) : !/^thu\b/i.test(x))
+    const tuy   = loaiGdTuyChinh.filter(x => x.loai === form.loai).map(x => x.ten)
+    const list  = Array.from(new Set([...chuan, ...tuy]))
+    if (form.loaiGiaoDich && !list.includes(form.loaiGiaoDich)) list.push(form.loaiGiaoDich)
+    return list
+  }, [form.loai, form.loaiGiaoDich, loaiGdTuyChinh])
+
+  function chonLoaiGd(value: string) {
+    if (value === LOAI_GD_MOI) {
+      setDangThemLoaiGd(true)
+      setTenLoaiGdMoi(`${form.loai === 'thu' ? 'Thu' : 'Chi'} - ${form.entity} - `)
+      setLuuLoaiGdLoi(null)
+      return
+    }
+    setForm(f => ({ ...f, loaiGiaoDich: value }))
+  }
+
+  async function luuLoaiGdMoi() {
+    setLuuLoaiGdLoi(null)
+    const ten = tenLoaiGdMoi.trim().replace(/\s+/g, ' ')
+    if (!ten) { setLuuLoaiGdLoi('Vui lòng nhập tên loại giao dịch.'); return }
+    if (loaiGdOptions.some(o => o.toLowerCase() === ten.toLowerCase()))
+      { setLuuLoaiGdLoi('Loại giao dịch này đã có, chọn lại trong danh sách.'); return }
+    setDangLuuLoaiGd(true)
+    try {
+      const daLuu = await themGoiY('loaiGiaoDich', form.loai, ten)
+      setForm(f => ({ ...f, loaiGiaoDich: daLuu }))
+      setDangThemLoaiGd(false); setTenLoaiGdMoi('')
+    } catch (err: any) {
+      setLuuLoaiGdLoi(err?.message ?? 'Có lỗi khi lưu, thử lại.')
+    } finally { setDangLuuLoaiGd(false) }
+  }
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm(f => ({ ...f, [key]: value }))
@@ -424,10 +472,11 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
               </div>
               <div>
                 <label className="nh-label">Loại giao dịch</label>
-                <input type="text" className="nh-input" list="dt-goiy-loaigd" value={form.loaiGiaoDich}
-                  onChange={e => set('loaiGiaoDich', e.target.value)}
-                  placeholder="VD: Chi - SAP - Trả Lãi" />
-                <datalist id="dt-goiy-loaigd">{GOI_Y_LOAI_GD.map(x => <option key={x} value={x} />)}</datalist>
+                <select className="nh-select" value={form.loaiGiaoDich} onChange={e => chonLoaiGd(e.target.value)}>
+                  <option value="">— Để trống (tự suy ra) —</option>
+                  {loaiGdOptions.map(x => <option key={x} value={x}>{x}</option>)}
+                  <option value={LOAI_GD_MOI}>➕ Thêm loại giao dịch mới…</option>
+                </select>
               </div>
               <div>
                 <label className="nh-label">Nhóm (báo cáo)</label>
@@ -438,6 +487,20 @@ export default function DongTienForm({ editing, entityMacDinh, loaiKhoanMacDinh,
               </div>
             </div>
           )}
+
+          {form.loaiKhoan === 'ke-hoach' && dangThemLoaiGd && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '0 0 10px', background: '#F8FAFC', border: '1px solid var(--nh-border)', borderRadius: 8, padding: 10 }}>
+              <input type="text" className="nh-input" style={{ flex: 1 }}
+                placeholder={`Tên loại giao dịch ${form.loai === 'thu' ? 'thu' : 'chi'} mới... VD: ${form.loai === 'thu' ? 'Thu' : 'Chi'} - ${form.entity} - ...`}
+                value={tenLoaiGdMoi} onChange={e => setTenLoaiGdMoi(e.target.value)} autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); luuLoaiGdMoi() } }} />
+              <button type="button" className="btn-save" disabled={dangLuuLoaiGd} onClick={luuLoaiGdMoi}>
+                {dangLuuLoaiGd ? 'Đang lưu...' : 'Lưu loại GD'}
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => setDangThemLoaiGd(false)}>Huỷ</button>
+            </div>
+          )}
+          {form.loaiKhoan === 'ke-hoach' && luuLoaiGdLoi && <div className="nh-err" style={{ marginBottom: 10 }}>{luuLoaiGdLoi}</div>}
 
           <div style={{ marginBottom: 10 }}>
             <label className="nh-label">Mô tả</label>
