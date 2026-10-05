@@ -71,16 +71,41 @@ const tenBang = (v?: string) => (v ?? '').replace(/^\s*\d+\s*[.)]\s*/, '')   // 
 export function buildNhomResolver(items: NganSachItem[]): NhomResolver {
   const byMa  = new Map<string, string>()
   const byTen = new Map<string, string>()
-  for (const g of items) {
-    if (!g.is_group || (g.nhom !== 'B' && g.nhom !== 'C')) continue
+  const groups = items.filter(g => g.is_group && (g.nhom === 'B' || g.nhom === 'C'))
+  const groupById = new Map(groups.map(g => [g.id, g]))
+  const byStt = new Map<string, NganSachItem>()
+  const fullOf = (g: NganSachItem) => {
+    const ten = (g.dien_giai ?? '').normalize('NFC').trim().replace(/\s+/g, ' ')
+    const stt = String(g.stt ?? '').trim()
+    return stt ? `${stt}. ${ten}` : ten
+  }
+
+  // Lượt 1: bản thân các nhóm (mã nhóm + tên nhóm)
+  for (const g of groups) {
     const ten = (g.dien_giai ?? '').normalize('NFC').trim().replace(/\s+/g, ' ')
     if (!ten) continue
-    const stt  = String(g.stt ?? '').trim()
-    const full = stt ? `${stt}. ${ten}` : ten
-    const ma   = (g.kmcp ?? '').trim() || '@' + ten
-    byMa.set(`${g.nhom}|${norm(ma)}`, full)
-    byTen.set(`${g.nhom}|${norm(ten)}`, full)
+    const s = String(g.stt ?? '').trim()
+    if (s) byStt.set(`${g.nhom}|${s}`, g)
+    byMa.set(`${g.nhom}|${norm((g.kmcp ?? '').trim() || '@' + ten)}`, fullOf(g))
+    byTen.set(`${g.nhom}|${norm(ten)}`, fullOf(g))
   }
+
+  // Lượt 2: các dòng con (mã KMCP chi tiết) → nhóm chứa nó (cùng cách xác định như ownerOf ở TabKeHoach)
+  let cur: NganSachItem | null = null
+  for (const it of items) {
+    if (it.is_section) { cur = null; continue }
+    if (it.is_group)   { cur = groupById.get(it.id) ?? null; continue }
+    const ma = (it.kmcp ?? '').trim()
+    if (!ma) continue
+    const s = String(it.stt ?? '').trim()
+    const dot = s.lastIndexOf('.')
+    let g: NganSachItem | undefined = dot > 0 ? byStt.get(`${it.nhom}|${s.slice(0, dot)}`) : undefined
+    if (!g && it.parent_id) g = groupById.get(it.parent_id)
+    if (!g && cur) g = cur
+    const key = `${it.nhom}|${norm(ma)}`
+    if (g && !byMa.has(key)) byMa.set(key, fullOf(g))
+  }
+
   return k => {
     const sec = k.loai === 'thu' ? 'B' : 'C'
     return byMa.get(`${sec}|${norm(k.nhom as string)}`)
