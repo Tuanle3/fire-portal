@@ -2,7 +2,7 @@
 import { useState, useRef, useMemo, useCallback, useEffect, Fragment } from 'react'
 import * as XLSX from 'xlsx'
 import { NganSachThang, NganSachItem, GiaiPhap, DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
-import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup, saveNganSach } from '@/lib/ngan-sach-store'
+import { addItem, removeItem, updateItem, addGroup, addChildItem, removeGroup, saveNganSach, layNhomCacThang, ghepNhomTuThangKhac, doiTenNhomCacThang } from '@/lib/ngan-sach-store'
 
 // ── Section mới (song song, không đụng bảng KMCP cũ) — Kế hoạch nhập qua
 //    dongTienItems (loaiKhoan='ke-hoach'), tái dùng DongTienForm ──────────
@@ -263,9 +263,10 @@ export function sapXepKhoan(list: KhoanDongTien[], kieu: KieuSapXep): KhoanDongT
  * Không liệt kê khoản ở đây nữa: mỗi khoản đã nhập hiển thị thẳng trong BẢNG
  * bên dưới (dòng nền xanh nhạt, nhãn NHẬP) — sửa/xoá ngay tại dòng đó.
  */
-function KeHoachDongTienBar({ soKhoan, tongThu, tongChi, onThem, sapXep, onSapXep }: {
+function KeHoachDongTienBar({ soKhoan, tongThu, tongChi, onThem, sapXep, onSapXep, onLayNhom, dangLayNhom }: {
   soKhoan: number; tongThu: number; tongChi: number; onThem: () => void
   sapXep: KieuSapXep; onSapXep: (v: KieuSapXep) => void
+  onLayNhom: () => void; dangLayNhom: boolean
 }) {
   const fmt = (n: number) => n.toLocaleString('vi-VN')
   return (
@@ -287,6 +288,11 @@ function KeHoachDongTienBar({ soKhoan, tongThu, tongChi, onThem, sapXep, onSapXe
       </label>
       <span style={{ fontSize: 11.5, color: '#166534' }}>Thu: {fmt(tongThu)} ₫</span>
       <span style={{ fontSize: 11.5, color: '#991B1B' }}>Chi: {fmt(tongChi)} ₫</span>
+      <button onClick={onLayNhom} disabled={dangLayNhom}
+        title="Thêm vào tháng này các nhóm đã tạo ở tháng khác (để chọn được khi nhập khoản)"
+        style={{ padding: '6px 12px', background: '#fff', color: '#1C3557', border: '1px solid #BFDBFE', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: dangLayNhom ? 'wait' : 'pointer' }}>
+        {dangLayNhom ? 'Đang lấy…' : '⇣ Lấy nhóm từ tháng khác'}
+      </button>
       <button onClick={onThem}
         style={{ padding: '6px 14px', background: '#1C3557', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
         ➕ Thêm khoản kế hoạch
@@ -502,6 +508,45 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     await saveNganSach(saved)
     await doiMaNhomKhoan(value, ma)
     return ma
+  }, [data, onChange])
+
+  // Lấy các nhóm đã tạo ở THÁNG KHÁC vào bảng tháng này (nhóm mới tạo sau khi tháng này đã được lưu thì không tự có)
+  const [dangLayNhom, setDangLayNhom] = useState(false)
+  const layNhomThangKhac = async () => {
+    setDangLayNhom(true)
+    try {
+      const nguon = await layNhomCacThang(data.thang)
+      const r = ghepNhomTuThangKhac(data, nguon)
+      if (!r.them.length) { alert('Tháng này đã có đủ các nhóm của các tháng khác.'); return }
+      if (!confirm(`Thêm ${r.them.length} nhóm từ các tháng khác vào tháng này?\n\n- ${r.them.join('\n- ')}`)) return
+      onChange(r.data)
+      await saveNganSach(r.data)
+    } catch (e) {
+      console.error('[lay-nhom-thang-khac]', e); alert('Không lấy được nhóm, thử lại.')
+    } finally { setDangLayNhom(false) }
+  }
+
+  // Đổi TÊN 1 nhóm: sửa trong bảng tháng này + các tháng khác (theo mã) + bản sao tên ở mọi khoản đã nhập
+  const doiTenNhom = useCallback(async (loai: 'thu' | 'chi', value: string, tenRaw: string) => {
+    const ten = tenRaw.trim().replace(/\s+/g, ' ')
+    if (!ten) throw new Error('Vui lòng nhập tên nhóm.')
+    const sec = loai === 'thu' ? 'B' : 'C'
+    const norm = (v: string) => v.normalize('NFC').trim().toLowerCase()
+    const g = data.items.find(i => i.is_group && i.nhom === sec &&
+      ((i.kmcp ?? '').trim() === value || (!(i.kmcp ?? '').trim() && '@' + (i.dien_giai ?? '').trim() === value)))
+    if (!g) throw new Error('Không tìm thấy nhóm này trong bảng tháng đang chọn.')
+    if (data.items.some(i => i.id !== g.id && i.is_group && i.nhom === sec && norm(i.dien_giai ?? '') === norm(ten)))
+      throw new Error('Đã có nhóm khác trùng tên này.')
+    const maCu = (g.kmcp ?? '').trim()
+    const ma = maCu || sinhMaNhom(data.items)
+    const saved = { ...data, items: data.items.map(i => i.id === g.id ? { ...i, dien_giai: ten, kmcp: ma } : i) }
+    onChange(saved)
+    await saveNganSach(saved)
+    if (!maCu) await doiMaNhomKhoan(value, ma)
+    await doiTenNhomCacThang(ma, ten, data.thang)
+    const stt = String(g.stt ?? '').trim()
+    await dongBoTenNhomKhoan({ nhom: ma, ten, sttMacDinh: stt, ghiDeStt: true })
+    return { value: ma, ten, nhomBC: stt ? `${stt}. ${ten}` : ten }
   }, [data, onChange])
 
   // Đồng bộ TÊN nhóm sang các khoản đã nhập: khoản gắn nhóm bằng mã (không đổi) nhưng giữ bản sao tên
@@ -795,7 +840,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       </div>
 
       <KeHoachVayAuto month={month} />
-      <KeHoachDongTienBar soKhoan={nhapTay.length} tongThu={tongNhapThu} tongChi={tongNhapChi} onThem={moFormMoi} sapXep={sapXep} onSapXep={setSapXep} />
+      <KeHoachDongTienBar soKhoan={nhapTay.length} tongThu={tongNhapThu} tongChi={tongNhapChi} onThem={moFormMoi} sapXep={sapXep} onSapXep={setSapXep} onLayNhom={layNhomThangKhac} dangLayNhom={dangLayNhom} />
 
       <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -1069,6 +1114,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
               bangNhom={bangNhom}
               onTaoNhom={taoNhom}
               onCapMaNhom={capMaNhom}
+              onDoiTenNhom={doiTenNhom}
               loaiKhoanMacDinh="ke-hoach"
               onSaved={dongForm}
               onCancel={dongForm}

@@ -205,3 +205,60 @@ export function removeGiaiPhap(data: NganSachThang, id: string): NganSachThang {
 export function updateGiaiPhap(data: NganSachThang, id: string, patch: Partial<GiaiPhap>): NganSachThang {
   return { ...data, giai_phap: data.giai_phap.map(g => g.id === id ? { ...g, ...patch } : g) }
 }
+
+// ── Nhóm xuyên tháng ─────────────────────────────────────────────────────
+// Mỗi tháng có bảng riêng → nhóm tạo ở tháng này không tự có ở tháng khác (nếu tháng kia đã được lưu trước đó).
+
+/** Mọi nhóm (is_group) của các tháng khác tháng `boQuaThang` — tháng mới nhất đứng trước. */
+export async function layNhomCacThang(boQuaThang: string): Promise<NganSachItem[]> {
+  const snap = await getDocs(query(collection(diennuocDb, COL), orderBy('thang', 'desc')))
+  const out: NganSachItem[] = []
+  snap.docs.forEach(d => {
+    const t = d.data() as NganSachThang
+    if (t.thang === boQuaThang) return
+    ;(t.items ?? []).forEach(i => { if (i.is_group) out.push(i) })
+  })
+  return out
+}
+
+/** Thêm vào `data` các nhóm Thu/Chi của tháng khác mà tháng này chưa có (khớp theo mã KMCP, hoặc theo tên không kể số thứ tự). */
+export function ghepNhomTuThangKhac(data: NganSachThang, nguon: NganSachItem[]): { data: NganSachThang; them: string[] } {
+  const norm  = (v?: string) => (v ?? '').normalize('NFC').trim().toLowerCase()
+  const tenBc = (v?: string) => norm((v ?? '').replace(/^\s*\d+\s*[.)]\s*/, ''))
+  let cur = data
+  const them: string[] = []
+  for (const g of nguon) {
+    if (!g.is_group || (g.nhom !== 'B' && g.nhom !== 'C')) continue
+    const ten = (g.dien_giai ?? '').trim()
+    if (!ten) continue
+    const ma = (g.kmcp ?? '').trim()
+    const da = cur.items.some(i => i.is_group && i.nhom === g.nhom &&
+      ((!!ma && (i.kmcp ?? '').trim() === ma) || tenBc(i.dien_giai) === tenBc(ten)))
+    if (da) continue
+    const section = cur.items.find(i => i.is_section && i.nhom === g.nhom)
+    if (!section) continue
+    const before = new Set(cur.items.map(i => i.id))
+    const next = addGroup(cur, section.id, g.nhom)
+    const added = next.items.find(i => !before.has(i.id))
+    if (!added) continue
+    cur = { ...next, items: next.items.map(i => i.id === added.id ? { ...i, dien_giai: ten, kmcp: ma } : i) }
+    them.push(`${g.nhom === 'B' ? 'Thu' : 'Chi'}: ${ten}`)
+  }
+  return { data: cur, them }
+}
+
+/** Đổi tên nhóm (theo mã KMCP của nhóm) ở TẤT CẢ các tháng, trừ tháng `boQuaThang` (tháng đang sửa, caller tự lưu). */
+export async function doiTenNhomCacThang(ma: string, tenMoi: string, boQuaThang: string): Promise<number> {
+  if (!ma) return 0
+  const snap = await getDocs(collection(diennuocDb, COL))
+  let dem = 0
+  for (const d of snap.docs) {
+    const t = d.data() as NganSachThang
+    if (t.thang === boQuaThang) continue
+    let doi = false
+    const items = (t.items ?? []).map(i =>
+      (i.is_group && (i.kmcp ?? '').trim() === ma && i.dien_giai !== tenMoi) ? (doi = true, { ...i, dien_giai: tenMoi }) : i)
+    if (doi) { await setDoc(d.ref, { items, updatedAt: serverTimestamp() }, { merge: true }); dem++ }
+  }
+  return dem
+}

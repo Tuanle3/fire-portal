@@ -138,13 +138,15 @@ interface Props {
   onTaoNhom?:     (loai: LoaiDongTien, ten: string) => Promise<{ value: string; ten: string; nhomBC: string }>
   // Nhóm chưa có mã KMCP (value dạng '@Tên') → cấp mã cố định trong bảng, đổi mã các khoản cũ; trả về mã mới
   onCapMaNhom?:   (loai: LoaiDongTien, value: string) => Promise<string>
+  // Đổi TÊN nhóm đang chọn (sửa trong bảng + mọi tháng + mọi khoản đã nhập). Trả về mã/tên/nhóm báo cáo mới.
+  onDoiTenNhom?:  (loai: LoaiDongTien, value: string, tenMoi: string) => Promise<{ value: string; ten: string; nhomBC: string }>
   loaiKhoanMacDinh?: LoaiKhoan   // Cho phép mở form sẵn ở chế độ KH hoặc TH
   khoaLoaiKhoan?:  boolean       // true = ẩn radio Kế hoạch/Thực hiện (ngữ cảnh đã rõ, VD mở từ Tab Kế hoạch)
   onSaved:        () => void
   onCancel:       () => void
 }
 
-export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNhom, onCapMaNhom, loaiKhoanMacDinh, khoaLoaiKhoan, onSaved, onCancel }: Props) {
+export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNhom, onCapMaNhom, onDoiTenNhom, loaiKhoanMacDinh, khoaLoaiKhoan, onSaved, onCancel }: Props) {
   const [form,         setForm]         = useState(emptyForm(entityMacDinh))
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState<string | null>(null)
@@ -153,6 +155,10 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
   const [tenNhomMoi,   setTenNhomMoi]   = useState('')
   const [luuNhomLoi,   setLuuNhomLoi]   = useState<string | null>(null)
   const [dangLuuNhom,  setDangLuuNhom]  = useState(false)
+  const [dangDoiTen,   setDangDoiTen]   = useState(false)
+  const [tenNhomSua,   setTenNhomSua]   = useState('')
+  const [doiTenLoi,    setDoiTenLoi]    = useState<string | null>(null)
+  const [dangLuuDoiTen, setDangLuuDoiTen] = useState(false)
   const [canhBao,      setCanhBao]      = useState<string | null>(null)
 
   // Danh sách Nhóm/KMCP chế độ Kế hoạch: ưu tiên đúng dòng/nhóm đang có trong bảng Nhập Data
@@ -277,6 +283,21 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
         nhomBaoCao: laKeHoach ? (b?.nhomBC ?? '') : f.nhomBaoCao,   // Nhóm (báo cáo) = chính nhóm đã chọn
       }
     })
+  }
+
+  async function luuDoiTenNhom() {
+    setDoiTenLoi(null)
+    const ten = tenNhomSua.trim()
+    if (!ten) { setDoiTenLoi('Vui lòng nhập tên nhóm.'); return }
+    if (!onDoiTenNhom) return
+    setDangLuuDoiTen(true)
+    try {
+      const r = await onDoiTenNhom(form.loai, form.nhom as string, ten)
+      setForm(f => ({ ...f, nhom: r.value as NhomDongTien, nhomCha: r.value, nhomChaLabel: r.ten, nhomBaoCao: r.nhomBC }))
+      setDangDoiTen(false)
+    } catch (err: any) {
+      setDoiTenLoi(err?.message ?? 'Có lỗi, thử lại.')
+    } finally { setDangLuuDoiTen(false) }
   }
 
   async function luuNhomMoi() {
@@ -420,6 +441,12 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
                 {nhomOptions.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
                 <option value={NHOM_MOI}>{form.loaiKhoan === 'ke-hoach' ? '➕ Tạo nhóm mới…' : '+ Thêm nhóm mới…'}</option>
               </select>
+              {form.loaiKhoan === 'ke-hoach' && form.nhom && onDoiTenNhom && (
+                <button type="button" className="btn-ghost" style={{ marginTop: 4, fontSize: 11, padding: '2px 8px' }}
+                  onClick={() => { setTenNhomSua(kmcpTen(form.nhom as string)); setDoiTenLoi(null); setDangDoiTen(true) }}>
+                  ✎ Đổi tên nhóm này
+                </button>
+              )}
               {canhBao && <div className="nh-err" style={{ marginTop: 4 }}>{canhBao}</div>}
             </div>
             <div>
@@ -450,6 +477,23 @@ export default function DongTienForm({ editing, entityMacDinh, bangNhom, onTaoNh
             </div>
           )}
           {luuNhomLoi && <div className="nh-err" style={{ marginBottom: 10 }}>{luuNhomLoi}</div>}
+
+          {dangDoiTen && (
+            <div style={{ margin: '4px 0 10px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: 10 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="text" className="nh-input" style={{ flex: 1 }} value={tenNhomSua}
+                  onChange={e => setTenNhomSua(e.target.value)} autoFocus placeholder="Tên nhóm mới…" />
+                <button type="button" className="btn-save" disabled={dangLuuDoiTen} onClick={luuDoiTenNhom}>
+                  {dangLuuDoiTen ? 'Đang lưu...' : 'Lưu tên'}
+                </button>
+                <button type="button" className="btn-ghost" onClick={() => setDangDoiTen(false)}>Huỷ</button>
+              </div>
+              <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>
+                Đổi tên áp dụng cho nhóm trong bảng, mọi tháng và tất cả khoản đã nhập thuộc nhóm này.
+              </div>
+              {doiTenLoi && <div className="nh-err" style={{ marginTop: 6 }}>{doiTenLoi}</div>}
+            </div>
+          )}
 
           {form.loai === 'thu' && (
             <div style={{ marginBottom: 10 }}>
