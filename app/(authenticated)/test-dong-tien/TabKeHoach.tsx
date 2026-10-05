@@ -511,9 +511,9 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
     const can = new Map<string, NhomBang>()
     for (const k of nhapTay) {
       const b = bangNhom.find(x => x.loai === k.loai && x.value === (k.nhom as string))
-      if (b && (chuanTen(k.nhomBaoCao) !== b.ten || (k.nhomChaLabel ?? '') !== b.ten)) can.set(b.value, b)
+      if (b && (chuanTen(k.nhomBaoCao) !== b.ten || (k.nhomChaLabel ?? '') !== b.ten || (k.nhomBaoCao ?? '').trim() !== b.nhomBC)) can.set(b.value, b)
     }
-    for (const b of can.values()) await dongBoTenNhomKhoan({ nhom: b.value, ten: b.ten, sttMacDinh: b.stt })
+    for (const b of can.values()) await dongBoTenNhomKhoan({ nhom: b.value, ten: b.ten, sttMacDinh: b.stt, ghiDeStt: true })
   }
   const luuVaDongBo = async () => {
     try { await dongBoTenNhom() } catch (e) { console.error('[dong-bo-ten-nhom]', e) }

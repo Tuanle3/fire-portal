@@ -220,14 +220,15 @@ export async function doiTenTruongKhoan(
  * Cập nhật 2 bản sao này cho mọi khoản kế hoạch thuộc nhóm `nhom`. Giữ số thứ tự riêng của từng khoản
  * (nếu khoản chưa có số thì dùng sttMacDinh).
  */
-export async function dongBoTenNhomKhoan(p: { nhom: string; ten: string; sttMacDinh?: string }): Promise<number> {
+export async function dongBoTenNhomKhoan(p: { nhom: string; ten: string; sttMacDinh?: string; ghiDeStt?: boolean }): Promise<number> {
   await ensureTasksAuth()
   const snaps = await getDocs(query(ktCol(), where('nhom', '==', p.nhom)))
   const now = Date.now()
   return capNhatHangLoat(snaps.docs, d => {
     if ((d.loaiKhoan ?? 'thuc-hien') !== 'ke-hoach') return null
     const m = String(d.nhomBaoCao ?? '').match(/^\s*(\d+)\s*[.)]\s*/)
-    const stt = m ? m[1] : (p.sttMacDinh ?? '')
+    // ghiDeStt: luôn dùng số thứ tự HIỆN TẠI của nhóm (tránh khoản cũ còn mang số cũ, VD '3.' trong khi nhóm đã thành '4.')
+    const stt = p.ghiDeStt && p.sttMacDinh ? p.sttMacDinh : (m ? m[1] : (p.sttMacDinh ?? ''))
     const bc = stt ? `${stt}. ${p.ten}` : p.ten
     if (d.nhomBaoCao === bc && d.nhomChaLabel === p.ten) return null
     return { nhomBaoCao: bc, nhomChaLabel: p.ten, updatedAt: now }
