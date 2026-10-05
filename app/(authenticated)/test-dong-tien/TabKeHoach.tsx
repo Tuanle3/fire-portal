@@ -213,13 +213,59 @@ const KMCP_LABEL_ALL: Record<string, string> = Object.fromEntries(
   DEFAULT_ITEMS.filter(d => !d.is_section && !d.is_group && d.kmcp).map(d => [d.kmcp as string, d.dien_giai]),
 )
 
+// ── BỘ LỌC SẮP XẾP khoản kế hoạch nhập thêm ─────────────────────────────
+export type KieuSapXep = 'ngay-ten' | 'ngay-noidung' | 'ten-ngay' | 'noidung-ngay' | 'ngay-tien'
+
+export const SAP_XEP_OPTIONS: { value: KieuSapXep; label: string }[] = [
+  { value: 'ngay-ten',     label: 'Ngày → Tên (A-Z)' },
+  { value: 'ngay-noidung', label: 'Ngày → Nội dung (gom cùng loại phí)' },
+  { value: 'ten-ngay',     label: 'Tên (A-Z) → Ngày' },
+  { value: 'noidung-ngay', label: 'Nội dung (gom cùng loại phí) → Ngày' },
+  { value: 'ngay-tien',    label: 'Ngày → Số tiền (lớn → nhỏ)' },
+]
+
+const collator = new Intl.Collator('vi', { sensitivity: 'base', numeric: true })
+const cmpText = (a?: string, b?: string) =>
+  collator.compare((a ?? '').normalize('NFC').trim(), (b ?? '').normalize('NFC').trim())
+
+/** Phần nội dung sau tiền tố công ty: "SAHS - Phí chuyển khoản" → "Phí chuyển khoản" */
+const noiDungChinh = (moTa?: string) => {
+  const s = (moTa ?? '').normalize('NFC').trim()
+  const i = s.indexOf(' - ')
+  return i >= 0 ? s.slice(i + 3) : s
+}
+
+/** Thứ tự ưu tiên giảm dần; luôn có tie-breaker cuối để thứ tự ổn định giữa các lần tải */
+export function sapXepKhoan(list: KhoanDongTien[], kieu: KieuSapXep): KhoanDongTien[] {
+  const ngay    = (a: KhoanDongTien, b: KhoanDongTien) => (a.ngayDuKien ?? '').localeCompare(b.ngayDuKien ?? '')
+  const ten     = (a: KhoanDongTien, b: KhoanDongTien) => cmpText(a.moTa, b.moTa)
+  const noiDung = (a: KhoanDongTien, b: KhoanDongTien) => cmpText(noiDungChinh(a.moTa), noiDungChinh(b.moTa))
+  const tien    = (a: KhoanDongTien, b: KhoanDongTien) => b.soTien - a.soTien
+  const ent     = (a: KhoanDongTien, b: KhoanDongTien) => cmpText(a.entity, b.entity)
+  const id      = (a: KhoanDongTien, b: KhoanDongTien) => a.id.localeCompare(b.id)
+
+  const chain: Record<KieuSapXep, Array<(a: KhoanDongTien, b: KhoanDongTien) => number>> = {
+    'ngay-ten':     [ngay, ten, ent, tien, id],
+    'ngay-noidung': [ngay, noiDung, ent, tien, id],
+    'ten-ngay':     [ten, ngay, tien, id],
+    'noidung-ngay': [noiDung, ent, ngay, tien, id],
+    'ngay-tien':    [ngay, tien, ten, id],
+  }
+  const fns = chain[kieu]
+  return [...list].sort((a, b) => {
+    for (const f of fns) { const r = f(a, b); if (r !== 0) return r }
+    return 0
+  })
+}
+
 /**
  * THANH CÔNG CỤ — Kế hoạch nhập qua Dòng tiền (loaiKhoan='ke-hoach').
  * Không liệt kê khoản ở đây nữa: mỗi khoản đã nhập hiển thị thẳng trong BẢNG
  * bên dưới (dòng nền xanh nhạt, nhãn NHẬP) — sửa/xoá ngay tại dòng đó.
  */
-function KeHoachDongTienBar({ soKhoan, tongThu, tongChi, onThem }: {
+function KeHoachDongTienBar({ soKhoan, tongThu, tongChi, onThem, sapXep, onSapXep }: {
   soKhoan: number; tongThu: number; tongChi: number; onThem: () => void
+  sapXep: KieuSapXep; onSapXep: (v: KieuSapXep) => void
 }) {
   const fmt = (n: number) => n.toLocaleString('vi-VN')
   return (
@@ -232,6 +278,13 @@ function KeHoachDongTienBar({ soKhoan, tongThu, tongChi, onThem }: {
           Khoản đã nhập hiển thị ngay trong bảng bên dưới (dòng nền xanh nhạt, nhãn NHẬP) — bấm ✎ để sửa, ✕ để xoá tại dòng đó.
         </div>
       </div>
+      <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
+        Sắp xếp:
+        <select value={sapXep} onChange={e => onSapXep(e.target.value as KieuSapXep)}
+          style={{ fontSize: 12, padding: '4px 6px', border: '1px solid #BFDBFE', borderRadius: 6, background: '#fff', color: '#1C3557' }}>
+          {SAP_XEP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </label>
       <span style={{ fontSize: 11.5, color: '#166534' }}>Thu: {fmt(tongThu)} ₫</span>
       <span style={{ fontSize: 11.5, color: '#991B1B' }}>Chi: {fmt(tongChi)} ₫</span>
       <button onClick={onThem}
@@ -350,12 +403,14 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
   // Thứ tự khớp: (1) dòng con cùng mã KMCP; (2) nhóm cùng mã KMCP;
   // (3) nhóm cùng TÊN với "Nhóm (báo cáo)" (bỏ số thứ tự đầu); còn lại → "chưa khớp"
   // (hiện ở đầu section Thu/Chi, vẫn cộng vào tổng để số không rơi mất).
-  const [nhapTay, setNhapTay] = useState<KhoanDongTien[]>([])
+  const [nhapTayRaw, setNhapTayRaw] = useState<KhoanDongTien[]>([])
+  const [sapXep, setSapXep] = useState<KieuSapXep>('ngay-ten')
+  const nhapTay = useMemo(() => sapXepKhoan(nhapTayRaw, sapXep), [nhapTayRaw, sapXep])
   const [formOpen, setFormOpen]       = useState(false)
   const [formEditing, setFormEditing] = useState<KhoanDongTien | null>(null)
   useEffect(() => {
-    return subscribeKeHoachThang(month, rows => setNhapTay(
-      rows.filter(r => !r.nguonTuDong && r.soTien > 0).sort((a, b) => a.ngayDuKien.localeCompare(b.ngayDuKien)),
+    return subscribeKeHoachThang(month, rows => setNhapTayRaw(
+      rows.filter(r => !r.nguonTuDong && r.soTien > 0),
     ))
   }, [month])
 
@@ -740,7 +795,7 @@ export function TabKeHoach({ data, month, onChange, onSave, saving, saveMsg = ''
       </div>
 
       <KeHoachVayAuto month={month} />
-      <KeHoachDongTienBar soKhoan={nhapTay.length} tongThu={tongNhapThu} tongChi={tongNhapChi} onThem={moFormMoi} />
+      <KeHoachDongTienBar soKhoan={nhapTay.length} tongThu={tongNhapThu} tongChi={tongNhapChi} onThem={moFormMoi} sapXep={sapXep} onSapXep={setSapXep} />
 
       <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto', border: '1px solid #E5E7EB', borderRadius: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
