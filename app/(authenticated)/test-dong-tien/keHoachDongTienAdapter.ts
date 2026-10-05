@@ -63,7 +63,7 @@ function chuanHoaNoiDung(ct: string, thu: boolean): string {
 // ở bảng ngân sách là các khoản cũ vẫn giữ tên cũ → báo cáo tách thành nhiều nhóm giống nhau.
 // Giờ: tên nhóm luôn lấy từ bảng ngân sách HIỆN TẠI (nguồn duy nhất), tra theo mã KMCP của nhóm
 // (hoặc theo tên nếu khoản cũ không có mã). Không tra được mới dùng chuỗi lưu sẵn.
-export type NhomResolver = (k: KhoanDongTien) => string | undefined
+export type NhomResolver = ((k: KhoanDongTien) => string | undefined) & { labels: { sec: 'B' | 'C'; label: string }[] }
 
 const norm    = (v?: string) => (v ?? '').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase()
 const tenBang = (v?: string) => (v ?? '').replace(/^\s*\d+\s*[.)]\s*/, '')   // bỏ "1. " đầu tên
@@ -74,6 +74,7 @@ export function buildNhomResolver(items: NganSachItem[]): NhomResolver {
   const groups = items.filter(g => g.is_group && (g.nhom === 'B' || g.nhom === 'C'))
   const groupById = new Map(groups.map(g => [g.id, g]))
   const byStt = new Map<string, NganSachItem>()
+  const labels: { sec: 'B' | 'C'; label: string }[] = []
   const fullOf = (g: NganSachItem) => {
     const ten = (g.dien_giai ?? '').normalize('NFC').trim().replace(/\s+/g, ' ')
     const stt = String(g.stt ?? '').trim()
@@ -88,6 +89,7 @@ export function buildNhomResolver(items: NganSachItem[]): NhomResolver {
     if (s) byStt.set(`${g.nhom}|${s}`, g)
     byMa.set(`${g.nhom}|${norm((g.kmcp ?? '').trim() || '@' + ten)}`, fullOf(g))
     byTen.set(`${g.nhom}|${norm(ten)}`, fullOf(g))
+    labels.push({ sec: g.nhom as 'B' | 'C', label: fullOf(g) })
   }
 
   // Lượt 2: các dòng con (mã KMCP chi tiết) → nhóm chứa nó (cùng cách xác định như ownerOf ở TabKeHoach)
@@ -106,12 +108,45 @@ export function buildNhomResolver(items: NganSachItem[]): NhomResolver {
     if (g && !byMa.has(key)) byMa.set(key, fullOf(g))
   }
 
-  return k => {
+  const fn = (k: KhoanDongTien) => {
     const sec = k.loai === 'thu' ? 'B' : 'C'
     return byMa.get(`${sec}|${norm(k.nhom as string)}`)
         ?? byTen.get(`${sec}|${norm(tenBang(k.nhomBaoCao))}`)
         ?? byTen.get(`${sec}|${norm(tenBang(k.nhomChaLabel))}`)
   }
+  return Object.assign(fn, { labels })
+}
+
+/**
+ * Lưới an toàn cuối cùng: các dòng có tên nhóm chỉ khác chữ hoa/thường, khoảng trắng hoặc SỐ THỨ TỰ
+ * ("1. Thu từ chợ Gôi" / "1. Thu từ Chợ Gôi" / "3." / "4. Thu từ Đô Thị Sơn An") → gộp về 1 tên.
+ * Ưu tiên tên của bảng ngân sách hiện tại (canon); không có thì lấy tên xuất hiện nhiều nhất.
+ * Thu / Chi tách riêng nên nhóm Thu và nhóm Chi trùng tên không bị gộp nhầm.
+ */
+export function gopTenNhom(rows: DongTienKHRow[], canon: { sec: 'B' | 'C'; label: string }[] = []): DongTienKHRow[] {
+  const key = (nh: string, thu: boolean) => `${thu ? 'B' : 'C'}|${norm(tenBang(nh))}`
+  const canonBy = new Map<string, string>()
+  for (const c of canon) canonBy.set(`${c.sec}|${norm(tenBang(c.label))}`, c.label)
+
+  const dem = new Map<string, Map<string, number>>()
+  for (const r of rows) {
+    if (!r.nh) continue
+    const k = key(r.nh, r.a >= 0)
+    const m = dem.get(k) ?? new Map<string, number>()
+    m.set(r.nh, (m.get(r.nh) ?? 0) + 1)
+    dem.set(k, m)
+  }
+  const chon = new Map<string, string>()
+  dem.forEach((m, k) => {
+    let best = '', n = -1
+    m.forEach((c, label) => { if (c > n) { best = label; n = c } })
+    chon.set(k, canonBy.get(k) ?? best)
+  })
+  return rows.map(r => {
+    if (!r.nh) return r
+    const to = chon.get(key(r.nh, r.a >= 0))
+    return to && to !== r.nh ? { ...r, nh: to } : r
+  })
 }
 
 export function khoanToRow(k: KhoanDongTien, resolveNhom?: NhomResolver): DongTienKHRow {

@@ -13,7 +13,8 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { subscribeDongTien } from '@/lib/dong-tien-store'
 import type { KhoanDongTien } from '@/lib/dong-tien-types'
-import { khoanListToRows, DongTienKHRow as Row } from './keHoachDongTienAdapter'
+import { khoanListToRows, buildNhomResolver, gopTenNhom, DongTienKHRow as Row } from './keHoachDongTienAdapter'
+import type { NganSachItem } from '@/lib/ngan-sach-types'
 import './ke-hoach-dong-tien.css'
 
 type Dim = 'src' | 'co' | 'typ' | 'pt' | 'nh'
@@ -46,7 +47,7 @@ const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v) } cat
 
 const mo = (a: Row[], m: string) => a.filter(r => r.d.slice(0, 7) === m)
 
-export default function TabKeHoachDongTien() {
+export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSachItem[] }) {
   const [raw, setRaw]     = useState<KhoanDongTien[]>([])
   const [S, setS]         = useState<Filt>({ from: '', to: '', src: '', co: '', dir: '', typ: '', dim: 'src' })
   const [pend, setPend]   = useState<Set<string>>(new Set())
@@ -68,7 +69,9 @@ export default function TabKeHoachDongTien() {
     return () => { document.removeEventListener('click', close); document.removeEventListener('keydown', esc) }
   }, [pop])
 
-  const R = useMemo(() => khoanListToRows(raw), [raw])
+  // Tên nhóm lấy từ bảng ngân sách hiện tại (nguồn duy nhất) → đổi tên/số thứ tự nhóm là báo cáo tự khớp, không cần Lưu lại
+  const resolver = useMemo(() => buildNhomResolver(nhomItems ?? []), [nhomItems])
+  const R = useMemo(() => gopTenNhom(khoanListToRows(raw, resolver), resolver.labels), [raw, resolver])
   const ds = useMemo(() => R.map(r => r.d).sort(), [R])
   const MIN = ds[0] ?? '', MAX = ds[ds.length - 1] ?? ''
   const from = S.from || MIN, to = S.to || MAX

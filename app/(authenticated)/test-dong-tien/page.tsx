@@ -434,7 +434,7 @@ const [denNgay, setDenNgay] = useState(() => {
               />
             )}
 
-            {tab === 'kh-dong-tien' && <TabKeHoachDongTien />}
+            {tab === 'kh-dong-tien' && <TabKeHoachDongTien nhomItems={localData.items} />}
 
             {tab === 'tong-hop' && (
               <TabTongHop
