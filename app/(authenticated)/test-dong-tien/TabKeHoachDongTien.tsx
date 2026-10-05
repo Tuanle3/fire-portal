@@ -15,6 +15,7 @@ import { subscribeDongTien } from '@/lib/dong-tien-store'
 import type { KhoanDongTien } from '@/lib/dong-tien-types'
 import { khoanListToRows, buildNhomResolver, gopTenNhom, DongTienKHRow as Row } from './keHoachDongTienAdapter'
 import type { NganSachItem } from '@/lib/ngan-sach-types'
+import DongTienForm, { type NhomBang } from './DongTienForm'
 import './ke-hoach-dong-tien.css'
 
 type Dim = 'src' | 'co' | 'typ' | 'pt' | 'nh'
@@ -46,6 +47,39 @@ const lsGet = (k: string) => { try { return localStorage.getItem(k) } catch { re
 const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* bỏ qua */ } }
 
 const mo = (a: Row[], m: string) => a.filter(r => r.d.slice(0, 7) === m)
+// Danh sách NHÓM thật của bảng ngân sách cho DongTienForm (cùng quy tắc xác định nhóm chứa dòng con như TabKeHoach)
+function buildBangNhom(items: NganSachItem[]): NhomBang[] {
+  const out: NhomBang[] = [], seen = new Set<string>()
+  const groups = items.filter(g => g.is_group && (g.nhom === 'B' || g.nhom === 'C'))
+  const groupById = new Map(groups.map(g => [g.id, g]))
+  const byStt = new Map<string, NganSachItem>()
+  groups.forEach(g => { const s = String(g.stt ?? '').trim(); if (s) byStt.set(`${g.nhom}|${s}`, g) })
+  const con = new Map<string, string[]>()
+  let cur: NganSachItem | null = null
+  for (const it of items) {
+    if (it.is_section) { cur = null; continue }
+    if (it.is_group)   { cur = groupById.get(it.id) ?? null; continue }
+    const ma = (it.kmcp ?? '').trim()
+    if (!ma) continue
+    const s = String(it.stt ?? '').trim(), dot = s.lastIndexOf('.')
+    let g: NganSachItem | undefined = dot > 0 ? byStt.get(`${it.nhom}|${s.slice(0, dot)}`) : undefined
+    if (!g && it.parent_id) g = groupById.get(it.parent_id)
+    if (!g && cur) g = cur
+    if (g) { const a = con.get(g.id) ?? []; a.push(ma); con.set(g.id, a) }
+  }
+  for (const g of groups) {
+    const ten = (g.dien_giai ?? '').trim()
+    if (!ten) continue
+    const loai = g.nhom === 'B' ? 'thu' as const : 'chi' as const
+    const value = (g.kmcp ?? '').trim() || '@' + ten
+    if (seen.has(`${loai}|${value}`)) continue
+    seen.add(`${loai}|${value}`)
+    const stt = String(g.stt ?? '').trim()
+    out.push({ value, loai, ten, stt, con: con.get(g.id) ?? [], label: `${stt ? stt + ' · ' : ''}${ten}`, nhomBC: stt ? `${stt}. ${ten}` : ten })
+  }
+  return out
+}
+
 
 export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSachItem[] }) {
   const [raw, setRaw]     = useState<KhoanDongTien[]>([])
@@ -55,6 +89,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const [V, setV]         = useState<Record<string, number>>(DEF)
   const [pop, setPop]     = useState<{ top: number; left: number; maxH: number } | null>(null)
   const mainRef           = useRef<HTMLDivElement>(null)
+  const [edit, setEdit]     = useState<KhoanDongTien | null>(null)   // khoản đang sửa trực tiếp từ bảng
 
   useEffect(() => subscribeDongTien(setRaw), [])
   useEffect(() => {
@@ -72,6 +107,8 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   // Tên nhóm lấy từ bảng ngân sách hiện tại (nguồn duy nhất) → đổi tên/số thứ tự nhóm là báo cáo tự khớp, không cần Lưu lại
   const resolver = useMemo(() => buildNhomResolver(nhomItems ?? []), [nhomItems])
   const R = useMemo(() => gopTenNhom(khoanListToRows(raw, resolver), resolver.labels), [raw, resolver])
+  const rawById  = useMemo(() => new Map(raw.map(k => [k.id, k])), [raw])
+  const bangNhom = useMemo(() => buildBangNhom(nhomItems ?? []), [nhomItems])
   const ds = useMemo(() => R.map(r => r.d).sort(), [R])
   const MIN = ds[0] ?? '', MAX = ds[ds.length - 1] ?? ''
   const from = S.from || MIN, to = S.to || MAX
@@ -183,6 +220,11 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
               <th className="f"><div className="di" title={ttl}>
                 {V.c_d ? <span className="dd">{r.d.slice(8)}/{r.d.slice(5, 7)}</span> : null}
                 <div className="db">{V.c_n ? <div className="dn">{r.ct}</div> : null}{sub(r) ? <div className="ds">{sub(r)}</div> : null}</div>
+                {g.length === 1 && rawById.get(r.id) ? (
+                  rawById.get(r.id)!.nguonTuDong
+                    ? <span className="ed lk" title="Khoản tự động từ List ngân hàng — không sửa tay">🔒</span>
+                    : <button type="button" className="ed" title="Sửa khoản này (đổi nhóm, số tiền, ngày…)" onClick={e => { e.stopPropagation(); setEdit(rawById.get(r.id)!) }}>✎</button>
+                ) : null}
               </div></th>
               {ms.map(m => {
                 const cx = g.filter(x => x.d.slice(0, 7) === m)
@@ -336,6 +378,20 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
             <button type="button" onClick={() => { const n = { ...V }; DL.forEach(([k]) => n[k] = k === 'c_n' ? 1 : 0); resetV(n) }}>Chỉ nội dung</button>
           </div>
           <button className="btn" type="button" onClick={() => resetV({ ...DEF })}>Mặc định</button>
+        </div>
+      )}
+      {/* ── Sửa trực tiếp 1 khoản từ bảng (đổi nhóm, số tiền, ngày…) — lưu xong bảng tự cập nhật ── */}
+      {edit && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
+          <div style={{ width: '100%', maxWidth: 560 }}>
+            <DongTienForm
+              editing={edit}
+              bangNhom={bangNhom}
+              loaiKhoanMacDinh="ke-hoach"
+              onSaved={() => setEdit(null)}
+              onCancel={() => setEdit(null)}
+            />
+          </div>
         </div>
       )}
     </div>
