@@ -22,12 +22,6 @@ type Dim = 'src' | 'co' | 'typ' | 'pt' | 'nh'
 interface Filt { from: string; to: string; src: string; co: string; dir: string; typ: string; dim: Dim }
 
 const nf = (n: number) => n ? Math.round(n).toLocaleString('vi-VN') : '–'
-const sh = (n: number) => {
-  const a = Math.abs(n), s = n < 0 ? '-' : ''
-  return a >= 1e9 ? s + (a / 1e9).toFixed(2).replace('.', ',') + ' tỷ'
-    : a >= 1e6 ? s + (a / 1e6).toFixed(1).replace('.', ',') + ' tr'
-    : s + a.toLocaleString('vi-VN')
-}
 const nz = (s: string) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase()
 const rk = (s: string) => s.startsWith('[HM mới]') ? 0 : s.startsWith('[HM]') ? 1 : s.startsWith('Quỹ') ? 2 : s.startsWith('NOXH') ? 3 : 4
 
@@ -89,6 +83,8 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const [V, setV]         = useState<Record<string, number>>(DEF)
   const [pop, setPop]     = useState<{ top: number; left: number; maxH: number } | null>(null)
   const mainRef           = useRef<HTMLDivElement>(null)
+  const rootRef           = useRef<HTMLDivElement>(null)
+  const [rootH, setRootH] = useState<number | null>(null)   // chiều cao khung chính = vừa khít phần màn hình còn lại
   const [edit, setEdit]     = useState<KhoanDongTien | null>(null)   // khoản đang sửa trực tiếp từ bảng
 
   useEffect(() => subscribeDongTien(setRaw), [])
@@ -126,6 +122,23 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
     a.forEach(r => { if (r.a > 0) t += r.a; else if (pend.has(r.id)) p += r.a; else c += r.a })
     return { t, c, p, b: t + c }
   }
+
+  // Khung chính cao đúng bằng phần màn hình còn lại → thanh cuộn ngang luôn nằm sát đáy màn hình,
+  // không phải kéo trang xuống cuối mới thấy. Cuộn dọc/ngang đều nằm TRONG khung bảng.
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = rootRef.current
+      if (!el) return
+      if (window.innerWidth < 900 || window.innerHeight < 680) { setRootH(null); return }
+      let top = el.getBoundingClientRect().top + window.scrollY
+      for (let p = el.parentElement; p; p = p.parentElement) top += p.scrollTop   // bù phần trang đã cuộn
+      setRootH(Math.max(360, Math.floor(window.innerHeight - top - 8)))
+    }
+    fit()
+    const t = setTimeout(fit, 300)
+    window.addEventListener('resize', fit)
+    return () => { clearTimeout(t); window.removeEventListener('resize', fit) }
+  }, [])
 
   const setVk = (k: string, v: number) => setV(o => { const n = { ...o, [k]: v }; lsSet(LS_V, JSON.stringify(n)); return n })
   const resetV = (n: Record<string, number>) => { setV(n); lsSet(LS_V, JSON.stringify(n)) }
@@ -165,10 +178,6 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const tot = st(rs)
   const Z = ms.map(m => st(mo(rs, m)))
   let cu = 0; const L = Z.map(z => cu += z.b)
-  let mn = 0, mm = ''; { let c2 = 0; ms.forEach((m, i) => { c2 += Z[i].b; if (c2 < mn) { mn = c2; mm = m } }) }
-  const nIn = rs.filter(r => r.a > 0).length
-  const nPd = rs.filter(r => r.a < 0 && pend.has(r.id)).length
-  const nOut = rs.filter(r => r.a < 0 && !pend.has(r.id)).length
 
   const sub = (r: Row) => (['pt', 'src', 'co'] as const).filter(f => f !== S.dim && V['c_' + f]).map(f => r[f]).filter(Boolean).join(' · ')
 
@@ -260,16 +269,9 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const dlOn = (k: string) => !!V[k]
 
   return (
-    <div className="khdt">
-      {/* ── Tiêu đề + bộ lọc ── */}
+    <div className={`khdt${rootH ? ' fit' : ''}`} ref={rootRef} style={rootH ? { height: rootH } : undefined}>
+      {/* ── Bộ lọc ── */}
       <section className="panel" aria-label="Bộ lọc">
-        <div className="hd">
-          <div className="brand">
-            <span className="mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 14l4-5 3 3 7-8" stroke="#8DA2FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M3 17h14" stroke="#fff" strokeOpacity=".45" strokeWidth="2" strokeLinecap="round" /></svg></span>
-            <div><h1>Kế hoạch dòng tiền</h1><p className="sub">Theo dõi thu – chi và số tiền thiếu theo tháng</p></div>
-          </div>
-          <span className="chip">{rs.length}/{R.length} giao dịch</span>
-        </div>
         <div className="flt">
           <label className="fld">Từ ngày<input type="date" value={from} onChange={e => setF({ from: e.target.value })} /></label>
           <label className="fld">Đến ngày<input type="date" value={to} onChange={e => setF({ to: e.target.value })} /></label>
@@ -286,17 +288,6 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>Đặt lại</button>
         </div>
       </section>
-
-      {/* ── KPI ── */}
-      {rs.length > 0 && (
-        <section className="kpi" aria-label="Tổng quan kỳ đang xem">
-          <div className="kp k-in"><span className="kl">Tổng thu</span><b className="kv" title={`${nf(tot.t)} đ`}>{sh(tot.t)}</b><span className="ks">{nIn} khoản thu</span></div>
-          <div className="kp k-out"><span className="kl">Chi thanh toán</span><b className="kv" title={`${nf(tot.c)} đ`}>{sh(tot.c)}</b><span className="ks">{nOut} khoản chi</span></div>
-          <div className="kp k-pd"><span className="kl">Pending / trả sau</span><b className="kv" title={`${nf(tot.p)} đ`}>{sh(tot.p)}</b><span className="ks">{nPd} khoản hoãn</span></div>
-          <div className={`kp ${tot.b < 0 ? 'k-neg' : 'k-pos'}`}><span className="kl">Cân đối cuối kỳ</span><b className="kv" title={`${nf(tot.b)} đ`}>{sh(tot.b)}</b>
-            <span className="ks">{mn < 0 ? `Lũy kế thấp nhất ${sh(mn)} · T${mm.slice(5)}/${mm.slice(0, 4)}` : 'Không có tháng nào thiếu tiền'}</span></div>
-        </section>
-      )}
 
       {/* ── Bảng ma trận ── */}
       <section className="card2" aria-label="Bảng dòng tiền">
@@ -330,7 +321,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           </div>
         </div>
 
-        <div ref={mainRef}>
+        <div ref={mainRef} className="mw">
           {!ms.length ? (
             <div className="em">{R.length ? 'Không có giao dịch với bộ lọc này' : 'Chưa có khoản kế hoạch nào — nhập ở Tab Nhập Data (chọn loại “Kế hoạch”).'}</div>
           ) : (

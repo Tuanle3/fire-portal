@@ -179,3 +179,10 @@ display:flex;flex-direction:column;gap:12px}
 .khdt tr.dt:hover .ed{opacity:1}
 .khdt .ed:hover{border-color:var(--brand);color:var(--brand)}
 .khdt .ed.lk{border:0;background:none;cursor:default}
+
+/* ── Bố cục vừa khít màn hình: bảng chiếm hết phần còn lại, thanh cuộn ngang sát đáy ── */
+.khdt .mw{display:flex;flex-direction:column;flex:1;min-height:0}
+.khdt.fit{gap:8px;padding:8px;overflow:hidden}
+.khdt.fit .card2{flex:1;min-height:0}
+.khdt.fit .sc{flex:1;min-height:0;max-height:none}
+.khdt .flt{padding:8px 12px}
