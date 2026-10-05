@@ -8,7 +8,7 @@
 // DongTienForm (chế độ Kế hoạch). Để trống thì tự suy ra từ pháp nhân + nhóm.
 // ============================================================
 import type { KhoanDongTien } from '@/lib/dong-tien-types'
-import { DEFAULT_ITEMS } from '@/lib/ngan-sach-types'
+import { DEFAULT_ITEMS, type NganSachItem } from '@/lib/ngan-sach-types'
 
 export interface DongTienKHRow {
   id:  string
@@ -57,7 +57,39 @@ function chuanHoaNoiDung(ct: string, thu: boolean): string {
   return boKy.replace(/\s+-\s+[A-Za-z0-9]{2,12}$/, '').trim()
 }
 
-export function khoanToRow(k: KhoanDongTien): DongTienKHRow {
+
+// ── ĐỒNG NHẤT NHÓM ────────────────────────────────────────────
+// Trước đây `nh` lấy từ bản sao chuỗi `nhomBaoCao` lưu trong từng khoản → đổi tên/số thứ tự nhóm
+// ở bảng ngân sách là các khoản cũ vẫn giữ tên cũ → báo cáo tách thành nhiều nhóm giống nhau.
+// Giờ: tên nhóm luôn lấy từ bảng ngân sách HIỆN TẠI (nguồn duy nhất), tra theo mã KMCP của nhóm
+// (hoặc theo tên nếu khoản cũ không có mã). Không tra được mới dùng chuỗi lưu sẵn.
+export type NhomResolver = (k: KhoanDongTien) => string | undefined
+
+const norm    = (v?: string) => (v ?? '').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase()
+const tenBang = (v?: string) => (v ?? '').replace(/^\s*\d+\s*[.)]\s*/, '')   // bỏ "1. " đầu tên
+
+export function buildNhomResolver(items: NganSachItem[]): NhomResolver {
+  const byMa  = new Map<string, string>()
+  const byTen = new Map<string, string>()
+  for (const g of items) {
+    if (!g.is_group || (g.nhom !== 'B' && g.nhom !== 'C')) continue
+    const ten = (g.dien_giai ?? '').normalize('NFC').trim().replace(/\s+/g, ' ')
+    if (!ten) continue
+    const stt  = String(g.stt ?? '').trim()
+    const full = stt ? `${stt}. ${ten}` : ten
+    const ma   = (g.kmcp ?? '').trim() || '@' + ten
+    byMa.set(`${g.nhom}|${norm(ma)}`, full)
+    byTen.set(`${g.nhom}|${norm(ten)}`, full)
+  }
+  return k => {
+    const sec = k.loai === 'thu' ? 'B' : 'C'
+    return byMa.get(`${sec}|${norm(k.nhom as string)}`)
+        ?? byTen.get(`${sec}|${norm(tenBang(k.nhomBaoCao))}`)
+        ?? byTen.get(`${sec}|${norm(tenBang(k.nhomChaLabel))}`)
+  }
+}
+
+export function khoanToRow(k: KhoanDongTien, resolveNhom?: NhomResolver): DongTienKHRow {
   const thu   = k.loai === 'thu'
   const label = KMCP_LABEL[k.nhom as string] ?? k.nhomChaLabel ?? String(k.nhom)
   return {
@@ -69,12 +101,12 @@ export function khoanToRow(k: KhoanDongTien): DongTienKHRow {
     pt:  k.doiTac ?? '',
     ct:  chuanHoaNoiDung(k.moTa, thu),
     a:   thu ? k.soTien : -k.soTien,
-    nh:  k.nhomBaoCao ?? `${k.nhom} — ${label}`,
+    nh:  resolveNhom?.(k) ?? k.nhomBaoCao ?? `${k.nhom} — ${label}`,
   }
 }
 
-export function khoanListToRows(list: KhoanDongTien[]): DongTienKHRow[] {
+export function khoanListToRows(list: KhoanDongTien[], resolveNhom?: NhomResolver): DongTienKHRow[] {
   return list
     .filter(k => (k.loaiKhoan ?? 'thuc-hien') === 'ke-hoach' && k.soTien > 0 && !!k.ngayDuKien)
-    .map(khoanToRow)
+    .map(k => khoanToRow(k, resolveNhom))
 }
