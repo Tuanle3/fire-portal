@@ -212,3 +212,12 @@ display:flex;flex-direction:column;gap:12px}
 .khdt .srch input{flex:1;min-width:0;width:100%;border:0;outline:0;background:transparent;font-size:12px;font-weight:500}
 .khdt .srch input::-webkit-search-cancel-button{cursor:pointer}
 @media(max-width:899px){.khdt .srch{width:100%;order:3}}
+
+/* ── Ghim các dòng tổng (Tổng thu / Chi / Pending / Cân đối…) dưới dòng tiêu đề khi cuộn dọc ── */
+.khdt table.mx{--hh:40px;--rh:38px}
+.khdt .mx tbody tr.pin>td,.khdt .mx tbody tr.pin>th{position:sticky;top:calc(var(--hh) + var(--pi,0) * var(--rh));height:var(--rh);z-index:3}
+.khdt .mx tbody tr.pin>th.f{z-index:4}
+/* Dòng ghim cuối: viền + bóng nhẹ để tách khỏi phần cuộn bên dưới */
+.khdt .mx tbody tr.pinlast>td,.khdt .mx tbody tr.pinlast>th{border-bottom:2px solid var(--line);box-shadow:0 6px 8px -6px rgba(15,26,46,.35)}
+/* Màn hình thấp: bảng quá ít chỗ thì chỉ ghim tiêu đề (người dùng vẫn bật lại được trong "Hiển thị") */
+@media(max-height:600px){.khdt .mx tbody tr.pin>td,.khdt .mx tbody tr.pin>th{position:static}.khdt .mx tbody tr.pin>th.f{position:sticky}}

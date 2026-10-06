@@ -33,9 +33,9 @@ const DIMS: Record<Dim, [string, string, (r: Row) => string]> = {
   pt:  ['Đối tác', 'đối tác / NCC / KH', r => r.pt || '(Chưa có đối tác)'],
   nh:  ['Nhóm', 'nhóm', r => r.nh || '(Chưa phân nhóm)'],
 }
-const VL: [string, string][] = [['tt', 'Tổng thu'], ['ct', 'Chi thanh toán'], ['pd', 'Pending / trả sau'], ['cb', 'Cân đối trong tháng'], ['tm', 'Số tiền thiếu trong tháng'], ['lk', 'Cân đối lũy kế'], ['tl', 'Số tiền thiếu lũy kế'], ['tot', 'Cột “Tổng kỳ”'], ['h0', 'Ẩn nhóm có cân đối = 0'], ['tier', 'Gộp theo loại nguồn (khi xem theo Nguồn)']]
+const VL: [string, string][] = [['tt', 'Tổng thu'], ['ct', 'Chi thanh toán'], ['pd', 'Pending / trả sau'], ['cb', 'Cân đối trong tháng'], ['tm', 'Số tiền thiếu trong tháng'], ['lk', 'Cân đối lũy kế'], ['tl', 'Số tiền thiếu lũy kế'], ['tot', 'Cột “Tổng kỳ”'], ['h0', 'Ẩn nhóm có cân đối = 0'], ['tier', 'Gộp theo loại nguồn (khi xem theo Nguồn)'], ['pin', 'Ghim các dòng tổng khi cuộn bảng']]
 const DL: [string, string][] = [['c_d', 'Ngày'], ['c_n', 'Nội dung giao dịch'], ['c_pt', 'Đối tác / NCC / KH'], ['c_src', 'Nguồn thanh toán'], ['c_co', 'Công ty']]
-const DEF: Record<string, number> = { tt: 1, ct: 1, pd: 1, cb: 1, tm: 0, lk: 0, tl: 0, tot: 1, h0: 0, tier: 1, c_d: 1, c_n: 1, c_pt: 1, c_src: 1, c_co: 1 }
+const DEF: Record<string, number> = { tt: 1, ct: 1, pd: 1, cb: 1, tm: 0, lk: 0, tl: 0, tot: 1, h0: 0, tier: 1, pin: 1, c_d: 1, c_n: 1, c_pt: 1, c_src: 1, c_co: 1 }
 
 const LS_PEND = 'khdt_pend', LS_V = 'khdt_v', LS_TIER = 'khdt_tier'
 const lsGet = (k: string) => { try { return localStorage.getItem(k) } catch { return null } }
@@ -201,13 +201,21 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
     const c = zero ? 'z' : k === 't' ? 'pos' : k === 'c' ? 'neg' : k === 'p' ? 'wr' : v < 0 ? 'neg' : 'pos'
     return <td className={`n ${c}${k === 'x' && v < 0 ? ' lack' : ''}${e ? ' ' + e : ''}`}>{k === 'x' ? (v < 0 ? nf(-v) : '–') : nf(v)}</td>
   }
-  const sumRow = (lab: string, vals: number[], k: string, tv: number | null, cls: string) => (
-    <tr className={`sm ${cls}`}>
-      <th className="f"><span className="lb">{lab}</span></th>
-      {vals.map((v, i) => <Fragment key={i}>{cell(v, k)}</Fragment>)}
-      {V.tot ? (tv == null ? <td className="tt" /> : cell(tv, k, 'tt')) : null}
-    </tr>
-  )
+  // Các dòng tổng được GHIM dưới dòng tiêu đề tháng: cuộn xuống vẫn thấy số tổng.
+  // Mỗi dòng nhận chỉ số --pi (0,1,2…) theo thứ tự đang hiển thị → CSS tự tính vị trí top.
+  const nPin = V.pin ? ['tt', 'ct', 'pd', 'cb', 'tm', 'lk', 'tl'].filter(x => V[x]).length : 0
+  let pinIdx = 0
+  const sumRow = (lab: string, vals: number[], k: string, tv: number | null, cls: string) => {
+    const pi = V.pin ? pinIdx++ : -1
+    return (
+      <tr className={`sm ${cls}${pi >= 0 ? ' pin' : ''}${pi >= 0 && pi === nPin - 1 ? ' pinlast' : ''}`}
+        style={pi >= 0 ? { ['--pi' as string]: pi } : undefined}>
+        <th className="f"><span className="lb">{lab}</span></th>
+        {vals.map((v, i) => <Fragment key={i}>{cell(v, k)}</Fragment>)}
+        {V.tot ? (tv == null ? <td className="tt" /> : cell(tv, k, 'tt')) : null}
+      </tr>
+    )
+  }
 
   const groupRows = (k: string, ind = false) => {
     const o = open.has('g:' + k), n = M[k].length
