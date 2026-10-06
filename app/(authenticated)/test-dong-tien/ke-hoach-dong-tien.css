@@ -188,19 +188,37 @@ display:flex;flex-direction:column;gap:12px}
 .khdt .flt{padding:8px 12px}
 
 /* ── Nhóm cha "loại nguồn" (Hạn mức công ty / Quỹ & nguồn khác / Vay cá nhân) ── */
+/* Mỗi loại nguồn 1 tông màu: --tc đậm (dòng cha), --ts nhạt (nhóm con), --ts2 nhạt hơn khi rê chuột, --tl viền */
+.khdt .mx tbody tr.t-hm{--tc:#2F49D1;--ts:#E9EDFD;--ts2:#DCE3FB;--tl:#B9C4F4}
+.khdt .mx tbody tr.t-quy{--tc:#087F57;--ts:#E3F5EC;--ts2:#D0EDE0;--tl:#A5D9C2}
+.khdt .mx tbody tr.t-vay{--tc:#5B3FA8;--ts:#EEEAF9;--ts2:#E2DCF4;--tl:#C7BCE8}
+.khdt .mx tbody tr.t-cn{--tc:#97590A;--ts:#FFF3DC;--ts2:#FCE8C0;--tl:#EBCB8E}
+
+/* Dòng cha: dải màu đậm, chữ trắng */
 .khdt .mx tbody tr.tg{cursor:pointer}
-.khdt .mx tbody tr.tg>th,.khdt .mx tbody tr.tg>td{height:44px;background:var(--band);font-size:13.5px;font-weight:700;border-top:2px solid var(--line);border-bottom:1px solid var(--line)}
-.khdt .mx tbody tr.tg>th.f{box-shadow:inset 5px 0 0 var(--c,var(--navy))}
-.khdt .mx tbody tr.tg:hover>th,.khdt .mx tbody tr.tg:hover>td{background:var(--brand-soft)}
-.khdt .mx tbody tr.tg:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
-.khdt .mx tbody tr.t-hm{--c:var(--brand)}
-.khdt .mx tbody tr.t-quy{--c:var(--pos)}
-.khdt .mx tbody tr.t-vay{--c:var(--navy)}
-.khdt .mx tbody tr.t-cn{--c:var(--warn)}
-.khdt .tg .chev{border-color:var(--line);background:var(--surface)}
-.khdt .tg .ar{border-color:var(--ink-2)}
-.khdt .tg.open .chev{background:var(--navy);border-color:var(--navy)}
-.khdt .tg .cnt{color:var(--ink-2);border-color:var(--line)}
+.khdt .mx tbody tr.tg>th,.khdt .mx tbody tr.tg>td{height:44px;background:var(--tc);color:#fff;font-size:14px;font-weight:700;border-top:0;border-bottom:1px solid rgba(255,255,255,.28)}
+.khdt .mx tbody tr.tg>td.n,.khdt .mx tbody tr.tg>td.n.pos,.khdt .mx tbody tr.tg>td.n.neg{color:#fff}
+.khdt .mx tbody tr.tg>td.n.z{color:rgba(255,255,255,.6)}
+.khdt .mx tbody tr.tg:hover>th,.khdt .mx tbody tr.tg:hover>td{background:color-mix(in srgb,var(--tc) 86%,#000)}
+.khdt .mx tbody tr.tg:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
+.khdt .tg .chev{background:#fff;border-color:#fff}
+.khdt .tg .ar{border-color:var(--tc)}
+.khdt .tg.open .chev{background:#fff;border-color:#fff}
+.khdt .tg.open .ar.o{border-color:var(--tc)}
+.khdt .tg .cnt{color:#fff;background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.5)}
+
+/* Nhóm con nằm dưới dòng cha: cùng tông nhạt + thanh màu bên trái */
+.khdt .mx tbody tr.gr.in>th,.khdt .mx tbody tr.gr.in>td{background:var(--ts);border-bottom-color:var(--tl)}
+.khdt .mx tbody tr.gr.in>th.f{box-shadow:inset 6px 0 0 var(--tc)}
+.khdt .mx tbody tr.gr.in:hover>th,.khdt .mx tbody tr.gr.in:hover>td,.khdt .mx tbody tr.gr.in.open>th,.khdt .mx tbody tr.gr.in.open>td{background:var(--ts2)}
+.khdt .gr.in .chev{border-color:var(--tl)}
+.khdt .gr.in .ar{border-color:var(--tc)}
+.khdt .gr.in.open .chev{background:var(--tc);border-color:var(--tc)}
+.khdt .gr.in .ar.o{border-color:#fff}
+.khdt .gr.in .cnt{color:var(--tc);border-color:var(--tl)}
+/* Chi tiết: đường nối + chip ngày theo tông của loại nguồn (dòng Pending vẫn giữ màu vàng) */
+.khdt .mx tbody tr.dt.in>th.f::before,.khdt .mx tbody tr.dt.in>th.f::after{background:var(--tl)}
+.khdt .mx tbody tr.dt.in:not(.pd) .dd{color:var(--tc);background:var(--ts)}
 /* Nhóm / chi tiết nằm dưới nhóm cha: thụt vào một bậc */
 .khdt .mx tbody tr.gr.in>th.f{padding-left:30px}
 .khdt .mx tbody tr.dt.in>th.f{padding-left:58px}

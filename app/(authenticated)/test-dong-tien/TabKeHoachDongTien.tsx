@@ -219,10 +219,11 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
     )
   }
 
-  const groupRows = (k: string, ind = false) => {
+  const groupRows = (k: string, tid?: TierId) => {
+    const tc = tid ? ` in t-${tid}` : ''   // lớp tông màu theo loại nguồn của dòng cha
     const o = open.has('g:' + k), n = M[k].length
     const head = (
-      <tr key={'g' + k} className={`gr${o ? ' open' : ''}${ind ? ' in' : ''}`} tabIndex={0} aria-expanded={o}
+      <tr key={'g' + k} className={`gr${o ? ' open' : ''}${tc}`} tabIndex={0} aria-expanded={o}
         onClick={() => tog(k)}
         onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); tog(k) } }}>
         <th className="f"><span className="gn"><span className="chev"><i className={`ar${o ? ' o' : ''}`} /></span>
@@ -250,7 +251,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           const cT = sumAll === 0 ? 'z' : allP ? 'wr' : sumAll > 0 ? 'pos' : 'neg'
           const ttl = V.c_d ? `${r.d.slice(8)}/${r.d.slice(5, 7)} · ${r.ct}` : r.ct
           return (
-            <tr key={k + gi} className={`dt${allP ? ' pd' : ''}${ind ? ' in' : ''}`}>
+            <tr key={k + gi} className={`dt${allP ? ' pd' : ''}${tc}`}>
               <th className="f"><div className="di" title={ttl}>
                 {V.c_d ? <span className="dd">{r.d.slice(8)}/{r.d.slice(5, 7)}</span> : null}
                 <div className="db">{V.c_n ? <div className="dn">{r.ct}</div> : null}{sub(r) ? <div className="ds">{sub(r)}</div> : null}</div>
@@ -301,7 +302,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           {ms.map(m => <Fragment key={m}>{cell(st(mo(all, m)).b, 'b')}</Fragment>)}
           {V.tot ? cell(st(all).b, 'b', 'tt') : null}
         </tr>
-        {o ? t.keys.map(k => groupRows(k, true)) : null}
+        {o ? t.keys.map(k => groupRows(k, t.id)) : null}
       </Fragment>
     )
   }
