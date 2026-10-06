@@ -91,6 +91,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const [rootH, setRootH] = useState<number | null>(null)   // chiều cao khung chính = vừa khít phần màn hình còn lại
   const [edit, setEdit]     = useState<KhoanDongTien | null>(null)   // khoản đang sửa trực tiếp từ bảng
   const [adding, setAdding] = useState(false)                      // đang mở form THÊM khoản mới
+  const [pick, setPick]     = useState<{ title: string; list: KhoanDongTien[] } | null>(null)   // ô tháng có nhiều khoản → chọn khoản cần sửa
 
   useEffect(() => subscribeDongTien(setRaw), [])
   useEffect(() => {
@@ -197,6 +198,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   let cu = 0; const L = Z.map(z => cu += z.b)
 
   // Ghi chú của khoản (nhập ở form Thêm/Sửa khoản) — lấy từ bản gốc theo mã, không cần đổi adapter
+  const dmy = (d?: string) => (d ? d.split('-').reverse().join('/') : '')
   const gc = (r: Row) => (rawById.get(r.id)?.ghiChu ?? '').trim()
   const sub = (r: Row) => (['pt', 'src', 'co'] as const).filter(f => f !== S.dim && V['c_' + f]).map(f => r[f]).filter(Boolean).join(' · ')
 
@@ -270,16 +272,25 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
                 const ng = cx.filter(x => x.a < 0).map(x => x.id)
                 const pc = ng.filter(id => pend.has(id)).length, ap = ng.length > 0 && pc === ng.length
                 const cc = sum === 0 ? 'z' : ap ? 'wr' : sum > 0 ? 'pos' : 'neg'
+                // Khoản sửa tay được trong ô này (bỏ khoản tự động từ List ngân hàng). Bấm vào SỐ → sửa thẳng khoản của tháng đó.
+                const eds = cx.map(x => rawById.get(x.id)).filter((k): k is KhoanDongTien => !!k && !k.nguonTuDong)
+                const num = eds.length ? (
+                  <button type="button" className="nv"
+                    title={eds.length === 1 ? `Bấm để sửa khoản ngày ${dmy(eds[0].ngayDuKien)}` : `Tháng này có ${eds.length} khoản — bấm để chọn khoản cần sửa`}
+                    onClick={e => { e.stopPropagation(); if (eds.length === 1) setEdit(eds[0]); else setPick({ title: r.ct, list: eds }) }}>{nf(sum)}</button>
+                ) : <span title="Khoản tự động từ List ngân hàng — không sửa tay">{nf(sum)}</span>
                 return (
                   <td key={m} className={`n ${cc}${ap ? ' pdc' : ''}`}>
                     {ng.length ? (
-                      <label className="pc" title={ng.length > 1 ? `Tích để chuyển ${ng.length} khoản sang Pending / trả sau` : 'Tích để chuyển sang Pending / trả sau'}>
-                        <input type="checkbox" className="pk" checked={ap} aria-label="Pending / trả sau"
-                          ref={el => { if (el) el.indeterminate = pc > 0 && !ap }}
-                          onChange={e => togglePend(ng, e.target.checked)} />
-                        <span>{nf(sum)}</span>
-                      </label>
-                    ) : nf(sum)}
+                      <div className="pc">
+                        <label className="pkb" title={ng.length > 1 ? `Tích để chuyển ${ng.length} khoản sang Pending / trả sau` : 'Tích để chuyển sang Pending / trả sau'}>
+                          <input type="checkbox" className="pk" checked={ap} aria-label="Pending / trả sau"
+                            ref={el => { if (el) el.indeterminate = pc > 0 && !ap }}
+                            onChange={e => togglePend(ng, e.target.checked)} />
+                        </label>
+                        {num}
+                      </div>
+                    ) : num}
                   </td>
                 )
               })}
@@ -424,6 +435,24 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
             <button type="button" onClick={() => { const n = { ...V }; DL.forEach(([k]) => n[k] = k === 'c_n' ? 1 : 0); resetV(n) }}>Chỉ nội dung</button>
           </div>
           <button className="btn" type="button" onClick={() => resetV({ ...DEF })}>Mặc định</button>
+        </div>
+      )}
+      {/* ── Ô tháng có nhiều khoản: chọn đúng khoản cần sửa ── */}
+      {pick && (
+        <div className="pkov" onClick={() => setPick(null)}>
+          <div className="pkc" role="dialog" aria-label="Chọn khoản cần sửa" onClick={e => e.stopPropagation()}>
+            <div className="pkh"><b>Chọn khoản cần sửa</b><span title={pick.title}>{pick.title}</span></div>
+            <div className="pkl">
+              {pick.list.slice().sort((a, b) => (a.ngayDuKien ?? '').localeCompare(b.ngayDuKien ?? '')).map(k => (
+                <button key={k.id} type="button" onClick={() => { setPick(null); setEdit(k) }}>
+                  <span className="dd">{dmy(k.ngayDuKien)}</span>
+                  <span className="pm">{k.moTa}{k.ghiChu ? <em> · {k.ghiChu}</em> : null}</span>
+                  <span className={`pv ${k.loai === 'thu' ? 'pos' : 'neg'}`}>{k.loai === 'thu' ? '' : '-'}{Math.round(k.soTien).toLocaleString('vi-VN')}</span>
+                </button>
+              ))}
+            </div>
+            <div className="pkf"><button className="btn" type="button" onClick={() => setPick(null)}>Đóng</button></div>
+          </div>
         </div>
       )}
       {/* ── Thêm mới (edit = null) hoặc sửa 1 khoản (edit = khoản đó) — lưu xong bảng tự cập nhật ── */}

@@ -248,3 +248,25 @@ display:flex;flex-direction:column;gap:12px}
 /* Ghi chú ở dòng chi tiết */
 .khdt .ds.gc{font-style:italic;color:var(--ink)}
 .khdt .ds.gc .gl{font-style:normal;font-weight:600;color:var(--ink-3)}
+
+/* Bấm vào SỐ để sửa khoản; ô vuông bên cạnh chỉ để tick Pending */
+.khdt .pc{cursor:default}
+.khdt .pkb{display:flex;align-items:center;padding:6px;margin:-6px;cursor:pointer}
+.khdt .nv{border:0;background:none;padding:2px 6px;margin:-2px -6px -2px 0;border-radius:6px;font:inherit;color:inherit;font-variant-numeric:tabular-nums;cursor:pointer;text-decoration:underline dotted transparent;text-underline-offset:3px;transition:background .15s,text-decoration-color .15s}
+.khdt .nv:hover{background:rgba(47,73,209,.10);text-decoration-color:currentColor}
+.khdt .nv:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.khdt .mx td.n>span[title]{cursor:help}
+/* Hộp chọn khoản khi 1 ô tháng có nhiều khoản */
+.khdt .pkov{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:90px 16px;overflow:auto;background:rgba(0,0,0,.35)}
+.khdt .pkc{width:100%;max-width:480px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 40px -12px rgba(8,14,27,.45);overflow:hidden}
+.khdt .pkh{display:flex;flex-direction:column;gap:2px;padding:12px 16px;border-bottom:1px solid var(--line-2);background:var(--surface-2)}
+.khdt .pkh b{font-size:13.5px}
+.khdt .pkh span{font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.khdt .pkl{max-height:min(55vh,420px);overflow:auto;padding:6px}
+.khdt .pkl button{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:0;border-radius:8px;background:none;text-align:left;font-size:13px}
+.khdt .pkl button:hover{background:var(--brand-soft)}
+.khdt .pkl .dd{flex:none;margin:0}
+.khdt .pkl .pm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.khdt .pkl .pm em{font-style:italic;color:var(--ink-2)}
+.khdt .pkl .pv{flex:none;font:600 13px var(--num);font-variant-numeric:tabular-nums}
+.khdt .pkf{display:flex;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--line-2)}
