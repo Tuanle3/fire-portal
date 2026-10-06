@@ -244,3 +244,7 @@ display:flex;flex-direction:column;gap:12px}
 .khdt .btn.pri{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
 .khdt .btn.pri svg{color:inherit}
 .khdt .btn.pri:hover{background:#2540BC;border-color:#2540BC}
+
+/* Ghi chú ở dòng chi tiết */
+.khdt .ds.gc{font-style:italic;color:var(--ink)}
+.khdt .ds.gc .gl{font-style:normal;font-weight:600;color:var(--ink-3)}

@@ -35,8 +35,8 @@ const DIMS: Record<Dim, [string, string, (r: Row) => string]> = {
   nh:  ['Nhóm', 'nhóm', r => r.nh || '(Chưa phân nhóm)'],
 }
 const VL: [string, string][] = [['tt', 'Tổng thu'], ['ct', 'Chi thanh toán'], ['pd', 'Pending / trả sau'], ['cb', 'Cân đối trong tháng'], ['tm', 'Số tiền thiếu trong tháng'], ['lk', 'Cân đối lũy kế'], ['tl', 'Số tiền thiếu lũy kế'], ['tot', 'Cột “Tổng kỳ”'], ['h0', 'Ẩn nhóm có cân đối = 0'], ['tier', 'Gộp theo loại nguồn (khi xem theo Nguồn)'], ['pin', 'Ghim các dòng tổng khi cuộn bảng']]
-const DL: [string, string][] = [['c_d', 'Ngày'], ['c_n', 'Nội dung giao dịch'], ['c_pt', 'Đối tác / NCC / KH'], ['c_src', 'Nguồn thanh toán'], ['c_co', 'Công ty']]
-const DEF: Record<string, number> = { tt: 1, ct: 1, pd: 1, cb: 1, tm: 0, lk: 0, tl: 0, tot: 1, h0: 0, tier: 1, pin: 1, c_d: 1, c_n: 1, c_pt: 1, c_src: 1, c_co: 1 }
+const DL: [string, string][] = [['c_d', 'Ngày'], ['c_n', 'Nội dung giao dịch'], ['c_pt', 'Đối tác / NCC / KH'], ['c_src', 'Nguồn thanh toán'], ['c_co', 'Công ty'], ['c_gc', 'Ghi chú']]
+const DEF: Record<string, number> = { tt: 1, ct: 1, pd: 1, cb: 1, tm: 0, lk: 0, tl: 0, tot: 1, h0: 0, tier: 1, pin: 1, c_d: 1, c_n: 1, c_pt: 1, c_src: 1, c_co: 1, c_gc: 1 }
 
 const LS_PEND = 'khdt_pend', LS_V = 'khdt_v', LS_TIER = 'khdt_tier'
 const lsGet = (k: string) => { try { return localStorage.getItem(k) } catch { return null } }
@@ -196,6 +196,8 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const Z = ms.map(m => st(mo(rs, m)))
   let cu = 0; const L = Z.map(z => cu += z.b)
 
+  // Ghi chú của khoản (nhập ở form Thêm/Sửa khoản) — lấy từ bản gốc theo mã, không cần đổi adapter
+  const gc = (r: Row) => (rawById.get(r.id)?.ghiChu ?? '').trim()
   const sub = (r: Row) => (['pt', 'src', 'co'] as const).filter(f => f !== S.dim && V['c_' + f]).map(f => r[f]).filter(Boolean).join(' · ')
 
   const cell = (v: number, k: string, e?: string) => {
@@ -238,7 +240,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
     if (V.c_d) grps = items.map(r => [r])
     else {
       const mp = new Map<string, Row[]>()
-      items.forEach(r => { const kk = (r.a > 0 ? 'T' : 'C') + '|' + (V.c_n ? r.ct : '') + '|' + sub(r); if (!mp.has(kk)) mp.set(kk, []); mp.get(kk)!.push(r) })
+      items.forEach(r => { const kk = (r.a > 0 ? 'T' : 'C') + '|' + (V.c_n ? r.ct : '') + '|' + sub(r) + '|' + (V.c_gc ? gc(r) : ''); if (!mp.has(kk)) mp.set(kk, []); mp.get(kk)!.push(r) })
       grps = [...mp.values()]
     }
     return (
@@ -254,7 +256,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
             <tr key={k + gi} className={`dt${allP ? ' pd' : ''}${tc}`}>
               <th className="f"><div className="di" title={ttl}>
                 {V.c_d ? <span className="dd">{r.d.slice(8)}/{r.d.slice(5, 7)}</span> : null}
-                <div className="db">{V.c_n ? <div className="dn">{r.ct}</div> : null}{sub(r) ? <div className="ds">{sub(r)}</div> : null}</div>
+                <div className="db">{V.c_n ? <div className="dn">{r.ct}</div> : null}{sub(r) ? <div className="ds">{sub(r)}</div> : null}{V.c_gc && gc(r) ? <div className="ds gc" title={gc(r)}><span className="gl">Ghi chú:</span> {gc(r)}</div> : null}</div>
                 {g.length === 1 && rawById.get(r.id) ? (
                   rawById.get(r.id)!.nguonTuDong
                     ? <span className="ed lk" title="Khoản tự động từ List ngân hàng — không sửa tay">🔒</span>
@@ -410,7 +412,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           <b>Hiển thị dòng / cột</b>
           {VL.map(([k, l]) => <label key={k}><input type="checkbox" checked={dlOn(k)} onChange={e => setVk(k, e.target.checked ? 1 : 0)} /> {l}</label>)}
           <b className="b2">Thông tin ở dòng chi tiết</b>
-          <small className="ph">Ẩn “Ngày” để gộp các khoản giống nhau thành 1 dòng.</small>
+          <small className="ph">Ẩn “Ngày” để gộp các khoản giống nhau thành 1 dòng (bật “Ghi chú” thì chỉ gộp khoản cùng ghi chú).</small>
           {DL.map(([k, l]) => (
             <label key={k}><input type="checkbox" checked={dlOn(k)} onChange={e => {
               if (!e.target.checked && !DL.some(([x]) => x !== k && V[x])) return   // luôn giữ ≥1 thông tin chi tiết
