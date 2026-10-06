@@ -16,6 +16,7 @@ import type { KhoanDongTien } from '@/lib/dong-tien-types'
 import { khoanListToRows, buildNhomResolver, gopTenNhom, DongTienKHRow as Row } from './keHoachDongTienAdapter'
 import type { NganSachItem } from '@/lib/ngan-sach-types'
 import DongTienForm, { type NhomBang } from './DongTienForm'
+import { phanLoaiNguon, TIERS, TIER_DEFAULT_OPEN, type TierId } from './nguonPhanLoai'
 import './ke-hoach-dong-tien.css'
 
 type Dim = 'src' | 'co' | 'typ' | 'pt' | 'nh'
@@ -32,11 +33,11 @@ const DIMS: Record<Dim, [string, string, (r: Row) => string]> = {
   pt:  ['Đối tác', 'đối tác / NCC / KH', r => r.pt || '(Chưa có đối tác)'],
   nh:  ['Nhóm', 'nhóm', r => r.nh || '(Chưa phân nhóm)'],
 }
-const VL: [string, string][] = [['tt', 'Tổng thu'], ['ct', 'Chi thanh toán'], ['pd', 'Pending / trả sau'], ['cb', 'Cân đối trong tháng'], ['tm', 'Số tiền thiếu trong tháng'], ['lk', 'Cân đối lũy kế'], ['tl', 'Số tiền thiếu lũy kế'], ['tot', 'Cột “Tổng kỳ”'], ['h0', 'Ẩn nhóm có cân đối = 0']]
+const VL: [string, string][] = [['tt', 'Tổng thu'], ['ct', 'Chi thanh toán'], ['pd', 'Pending / trả sau'], ['cb', 'Cân đối trong tháng'], ['tm', 'Số tiền thiếu trong tháng'], ['lk', 'Cân đối lũy kế'], ['tl', 'Số tiền thiếu lũy kế'], ['tot', 'Cột “Tổng kỳ”'], ['h0', 'Ẩn nhóm có cân đối = 0'], ['tier', 'Gộp theo loại nguồn (khi xem theo Nguồn)']]
 const DL: [string, string][] = [['c_d', 'Ngày'], ['c_n', 'Nội dung giao dịch'], ['c_pt', 'Đối tác / NCC / KH'], ['c_src', 'Nguồn thanh toán'], ['c_co', 'Công ty']]
-const DEF: Record<string, number> = { tt: 1, ct: 1, pd: 1, cb: 1, tm: 0, lk: 0, tl: 0, tot: 1, h0: 0, c_d: 1, c_n: 1, c_pt: 1, c_src: 1, c_co: 1 }
+const DEF: Record<string, number> = { tt: 1, ct: 1, pd: 1, cb: 1, tm: 0, lk: 0, tl: 0, tot: 1, h0: 0, tier: 1, c_d: 1, c_n: 1, c_pt: 1, c_src: 1, c_co: 1 }
 
-const LS_PEND = 'khdt_pend', LS_V = 'khdt_v'
+const LS_PEND = 'khdt_pend', LS_V = 'khdt_v', LS_TIER = 'khdt_tier'
 const lsGet = (k: string) => { try { return localStorage.getItem(k) } catch { return null } }
 const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* bỏ qua */ } }
 
@@ -81,6 +82,8 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const [pend, setPend]   = useState<Set<string>>(new Set())
   const [open, setOpen]   = useState<Set<string>>(new Set())
   const [V, setV]         = useState<Record<string, number>>(DEF)
+  const [tierOpen, setTierOpen] = useState<Record<TierId, boolean>>(TIER_DEFAULT_OPEN)   // mở/thu gọn 3 nhóm cha
+  const [q, setQ]         = useState('')   // tìm nhanh theo tên nhóm/nguồn
   const [pop, setPop]     = useState<{ top: number; left: number; maxH: number } | null>(null)
   const mainRef           = useRef<HTMLDivElement>(null)
   const rootRef           = useRef<HTMLDivElement>(null)
@@ -91,6 +94,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   useEffect(() => {
     try { setPend(new Set(JSON.parse(lsGet(LS_PEND) || '[]'))) } catch { /* */ }
     try { setV({ ...DEF, ...JSON.parse(lsGet(LS_V) || '{}') }) } catch { /* */ }
+    try { setTierOpen({ ...TIER_DEFAULT_OPEN, ...JSON.parse(lsGet(LS_TIER) || '{}') }) } catch { /* */ }
   }, [])
   useEffect(() => {
     if (!pop) return
@@ -147,6 +151,8 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
     lsSet(LS_PEND, JSON.stringify([...n])); return n
   })
   const tog = (k: string) => setOpen(o => { const n = new Set(o); n.has('g:' + k) ? n.delete('g:' + k) : n.add('g:' + k); return n })
+  const saveTier = (n: Record<TierId, boolean>) => { lsSet(LS_TIER, JSON.stringify(n)); return n }
+  const togTier = (id: TierId) => setTierOpen(o => saveTier({ ...o, [id]: !o[id] }))
 
   // ── dữ liệu ma trận ─────────────────────────────────────────
   const ms = useMemo(() => [...new Set(rs.map(r => r.d.slice(0, 7)))].sort(), [rs])
@@ -162,9 +168,18 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
       : S.dim === 'nh' ? (a, b) => dr(a) - dr(b) || (parseFloat(a) || 1e9) - (parseFloat(b) || 1e9) || a.localeCompare(b, 'vi')
       : (a, b) => dr(a) - dr(b) || a.localeCompare(b, 'vi'))
     if (V.h0) keys = keys.filter(k => ms.some(m => Math.round(st(mo(M[k], m)).b) !== 0))
+    const kw = nz(q).trim()
+    if (kw) keys = keys.filter(k => nz(k).includes(kw))
     return keys
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [M, S.dim, V.h0, ms, pend])
+  }, [M, S.dim, V.h0, ms, pend, q])
+
+  // ── 3 nhóm cha (chỉ khi xem theo Nguồn) ──
+  const tierMode = S.dim === 'src' && !!V.tier
+  const tiers = useMemo(() => tierMode
+    ? TIERS.map(t => ({ ...t, keys: dk.filter(k => phanLoaiNguon(k) === t.id) })).filter(t => t.keys.length)
+    : [], [tierMode, dk])
+  const tierIsOpen = (id: TierId) => !!q.trim() || tierOpen[id]   // đang tìm → luôn mở để thấy kết quả
 
   // tự giảm cỡ chữ tên nhóm cho vừa khung
   useLayoutEffect(() => {
@@ -194,10 +209,10 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
     </tr>
   )
 
-  const groupRows = (k: string) => {
+  const groupRows = (k: string, ind = false) => {
     const o = open.has('g:' + k), n = M[k].length
     const head = (
-      <tr key={'g' + k} className={`gr${o ? ' open' : ''}`} tabIndex={0} aria-expanded={o}
+      <tr key={'g' + k} className={`gr${o ? ' open' : ''}${ind ? ' in' : ''}`} tabIndex={0} aria-expanded={o}
         onClick={() => tog(k)}
         onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); tog(k) } }}>
         <th className="f"><span className="gn"><span className="chev"><i className={`ar${o ? ' o' : ''}`} /></span>
@@ -225,7 +240,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           const cT = sumAll === 0 ? 'z' : allP ? 'wr' : sumAll > 0 ? 'pos' : 'neg'
           const ttl = V.c_d ? `${r.d.slice(8)}/${r.d.slice(5, 7)} · ${r.ct}` : r.ct
           return (
-            <tr key={k + gi} className={`dt${allP ? ' pd' : ''}`}>
+            <tr key={k + gi} className={`dt${allP ? ' pd' : ''}${ind ? ' in' : ''}`}>
               <th className="f"><div className="di" title={ttl}>
                 {V.c_d ? <span className="dd">{r.d.slice(8)}/{r.d.slice(5, 7)}</span> : null}
                 <div className="db">{V.c_n ? <div className="dn">{r.ct}</div> : null}{sub(r) ? <div className="ds">{sub(r)}</div> : null}</div>
@@ -263,8 +278,26 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
     )
   }
 
+  const tierRows = (t: (typeof tiers)[number]) => {
+    const o = tierIsOpen(t.id), all = t.keys.flatMap(k => M[k])
+    const n = t.keys.length
+    return (
+      <Fragment key={'t' + t.id}>
+        <tr className={`tg t-${t.id}${o ? ' open' : ''}`} tabIndex={0} aria-expanded={o} title={t.desc}
+          onClick={() => togTier(t.id)}
+          onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); togTier(t.id) } }}>
+          <th className="f"><span className="gn"><span className="chev"><i className={`ar${o ? ' o' : ''}`} /></span>
+            <span className="gt">{t.label}</span><span className="cnt" title={`${n} nguồn · ${all.length} khoản`}>{n} nguồn</span></span></th>
+          {ms.map(m => <Fragment key={m}>{cell(st(mo(all, m)).b, 'b')}</Fragment>)}
+          {V.tot ? cell(st(all).b, 'b', 'tt') : null}
+        </tr>
+        {o ? t.keys.map(k => groupRows(k, true)) : null}
+      </Fragment>
+    )
+  }
+
   const cols = ms.length + (V.tot ? 1 : 0)
-  const anyOpen = dk.some(k => open.has('g:' + k))
+  const anyOpen = dk.some(k => open.has('g:' + k)) || (tierMode && tiers.some(t => tierOpen[t.id]))
   const setF = (p: Partial<Filt>) => setS(o => ({ ...o, ...p }))
   const dlOn = (k: string) => !!V[k]
 
@@ -301,13 +334,18 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
               ))}
             </div>
           </div>
+          <label className="srch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={`Tìm ${DIMS[S.dim][0].toLowerCase()}…`} aria-label="Tìm nhanh" autoComplete="off" /></label>
           <div className="vwr">
             <div className="lgd">
               <span><i className="k-p" />Nhóm</span><span title="Khoản chi tiết trong nhóm"><i className="k-c" />Chi tiết</span>
               <span title="Tích ô vuông cạnh số tiền để chuyển khoản chi sang Pending / trả sau"><i className="k-w" />Pending</span>
             </div>
             <button className="btn" type="button"
-              onClick={() => setOpen(o => { const n = new Set(o); dk.forEach(k => anyOpen ? n.delete('g:' + k) : n.add('g:' + k)); return n })}>
+              onClick={() => {
+                setOpen(o => { const n = new Set(o); dk.forEach(k => anyOpen ? n.delete('g:' + k) : n.add('g:' + k)); return n })
+                if (tierMode) setTierOpen(saveTier(Object.fromEntries(TIERS.map(t => [t.id, !anyOpen])) as Record<TierId, boolean>))
+              }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" /></svg>
               <span>{anyOpen ? 'Thu gọn' : 'Mở tất cả'}</span></button>
             <button className="btn" type="button" onClick={e => {
@@ -342,8 +380,9 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
                   {V.tl ? sumRow('Số tiền thiếu lũy kế', L, 'x', null, 'sub s-x') : null}
                   <tr className="divr"><th className="f" colSpan={cols + 1}><span className="stk">
                     <b>Cân đối theo {DIMS[S.dim][1]}</b>
-                    <em>{dk.length} nhóm · bấm vào nhóm để xem từng khoản, tick “Pending / trả sau” để hoãn chi</em></span></th></tr>
-                  {dk.map(groupRows)}
+                    <em>{dk.length} {tierMode ? 'nguồn' : 'nhóm'} · bấm vào nhóm để xem từng khoản, tick “Pending / trả sau” để hoãn chi</em></span></th></tr>
+                  {tierMode ? tiers.map(tierRows) : dk.map(k => groupRows(k))}
+                  {!dk.length ? <tr><th className="f" colSpan={cols + 1} style={{ position: 'static', fontWeight: 400, color: 'var(--ink-2)' }}>Không có kết quả khớp “{q}”</th></tr> : null}
                 </tbody>
               </table>
             </div>
