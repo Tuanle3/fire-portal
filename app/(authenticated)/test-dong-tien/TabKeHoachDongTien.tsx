@@ -3,8 +3,9 @@
 // dashboard_dong_tien.html (bộ lọc, KPI, ma trận theo tháng,
 // 5 cách xem, tick Pending, bật/tắt dòng-cột).
 //
-// Dữ liệu: lấy từ Tab Nhập Data (dongTienItems loaiKhoan='ke-hoach')
-// qua keHoachDongTienAdapter — không nhập tay ở tab này.
+// Dữ liệu: lấy từ dongTienItems loaiKhoan='ke-hoach' qua keHoachDongTienAdapter.
+// Thêm khoản mới ngay tại tab này (nút "Thêm khoản") bằng cùng DongTienForm với Tab
+// Nhập Data; sửa từng khoản bằng nút ✎ ở dòng chi tiết. Lưu xong bảng tự cập nhật.
 // CSS template đã scope trong .khdt (ke-hoach-dong-tien.css).
 // Chưa có: xuất Excel / Word (template dùng exceljs + docx).
 // ============================================================
@@ -89,6 +90,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const rootRef           = useRef<HTMLDivElement>(null)
   const [rootH, setRootH] = useState<number | null>(null)   // chiều cao khung chính = vừa khít phần màn hình còn lại
   const [edit, setEdit]     = useState<KhoanDongTien | null>(null)   // khoản đang sửa trực tiếp từ bảng
+  const [adding, setAdding] = useState(false)                      // đang mở form THÊM khoản mới
 
   useEffect(() => subscribeDongTien(setRaw), [])
   useEffect(() => {
@@ -364,6 +366,9 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
             }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>
               Hiển thị <span className="bdg">{VL.concat(DL).filter(l => V[l[0]]).length}</span></button>
+            <button className="btn pri" type="button" title="Thêm khoản thu / chi kế hoạch mới — không cần quay lại Tab Nhập Data" onClick={() => setAdding(true)}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              Thêm khoản</button>
           </div>
         </div>
 
@@ -418,16 +423,16 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           <button className="btn" type="button" onClick={() => resetV({ ...DEF })}>Mặc định</button>
         </div>
       )}
-      {/* ── Sửa trực tiếp 1 khoản từ bảng (đổi nhóm, số tiền, ngày…) — lưu xong bảng tự cập nhật ── */}
-      {edit && (
+      {/* ── Thêm mới (edit = null) hoặc sửa 1 khoản (edit = khoản đó) — lưu xong bảng tự cập nhật ── */}
+      {(edit || adding) && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
           <div style={{ width: '100%', maxWidth: 560 }}>
             <DongTienForm
               editing={edit}
               bangNhom={bangNhom}
               loaiKhoanMacDinh="ke-hoach"
-              onSaved={() => setEdit(null)}
-              onCancel={() => setEdit(null)}
+              onSaved={() => { setEdit(null); setAdding(false) }}
+              onCancel={() => { setEdit(null); setAdding(false) }}
             />
           </div>
         </div>
