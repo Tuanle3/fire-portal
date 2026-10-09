@@ -1128,6 +1128,7 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
   const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [timBo, setTimBo] = useState('')
   const [thuKy, setThuKy]                 = useState<KyThuNH | null>(null)
   const [selKy, setSelKy]                 = useState<Set<string>>(new Set())
   const [ngayThuChung, setNgayThuChung]   = useState(todayStr())
@@ -1200,9 +1201,15 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
     const gocDaTra = tinhGocDaTraBoHoSo(bo.id, kyList, tgList)
     return { bo, gocDaTra, duNo: Math.max(0, bo.soTienGiaiNgan - gocDaTra), kyQuaHan: kyList.filter(k => k.trangThai === 'qua-han').length }
   }), [boList, kyThuMap, traGocList])
-  const tongGN   = boRows.reduce((s, r) => s + r.bo.soTienGiaiNgan, 0)
-  const tongGoc  = boRows.reduce((s, r) => s + r.gocDaTra, 0)
-  const tongDuNo = boRows.reduce((s, r) => s + r.duNo, 0)
+  // Tìm nhanh: gõ đủ số bộ hồ sơ hoặc vài số đuôi (khớp ở bất kỳ vị trí, không phân biệt hoa/thường)
+  const boRowsLoc = useMemo(() => {
+    const q = timBo.trim().toLowerCase().replace(/\s+/g, '')
+    if (!q) return boRows
+    return boRows.filter(r => (r.bo.soBoHoSo ?? '').toLowerCase().replace(/\s+/g, '').includes(q))
+  }, [boRows, timBo])
+  const tongGN   = boRowsLoc.reduce((s, r) => s + r.bo.soTienGiaiNgan, 0)
+  const tongGoc  = boRowsLoc.reduce((s, r) => s + r.gocDaTra, 0)
+  const tongDuNo = boRowsLoc.reduce((s, r) => s + r.duNo, 0)
   const tongConPhaiThu = kyChuaThu.reduce((s, k) => s + k.tongThu, 0)
   const tongDaThu      = kyThang.filter(k => k.trangThai === 'da-thu').reduce((s, k) => s + (k.tongThucThu ?? k.tongThu), 0)
 
@@ -1280,6 +1287,22 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
             <Calendar size={13} />Lịch thu tổng hợp
           </button>
 
+          {view === 'list' && (
+            <div style={{ marginLeft: 'auto', position: 'relative', padding: '5px 0' }}>
+              <input
+                value={timBo} onChange={e => setTimBo(e.target.value)}
+                placeholder="🔍 Tìm số bộ hồ sơ (gõ đủ hoặc 4 số đuôi)"
+                style={{ ...inputBaseCls, width: 290, paddingRight: timBo ? 26 : undefined }}
+              />
+              {timBo && (
+                <button onClick={() => setTimBo('')} title="Xoá bộ lọc"
+                  style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex' }}>
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          )}
+
           {view === 'calendar' && (
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', flexWrap: 'wrap' }}>
               <button className="btn-ghost" onClick={prevMonth} style={{ padding: '3px 9px' }}>‹</button>
@@ -1329,7 +1352,7 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
                 </tr>
               </thead>
               <tbody>
-                {boRows.map(({ bo, gocDaTra, duNo, kyQuaHan }) => (
+                {boRowsLoc.map(({ bo, gocDaTra, duNo, kyQuaHan }) => (
                   <tr key={bo.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedBo(bo)}>
                     <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>
                       {bo.soBoHoSo}
@@ -1372,7 +1395,7 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
               {boList.length > 0 && (
                 <tfoot>
                   <tr style={{ fontWeight: 700 }}>
-                    <td colSpan={3} style={{ ...stickyTf, textAlign: 'right', color: 'var(--nh-muted)', paddingRight: 12 }}>Tổng cộng ({boList.length} bộ):</td>
+                    <td colSpan={3} style={{ ...stickyTf, textAlign: 'right', color: 'var(--nh-muted)', paddingRight: 12 }}>Tổng cộng ({timBo.trim() ? `${boRowsLoc.length}/${boList.length}` : boList.length} bộ):</td>
                     <td className="r" style={stickyTf}>{fmtTien(tongGN)}</td>
                     <td className="r" style={{ ...stickyTf, color: '#15803d' }}>{fmtTien(tongGoc)}</td>
                     <td className="r" style={{ ...stickyTf, color: '#b91c1c' }}>{fmtTien(tongDuNo)}</td>
