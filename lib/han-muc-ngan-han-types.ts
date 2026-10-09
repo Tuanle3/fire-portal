@@ -125,6 +125,9 @@ export interface KyThuNH {
   // Chỉ có khi gốc & lãi thu KHÁC ngày trong cùng kỳ (ngược lại dùng chung ngayThucThu)
   ngayThucThuGoc?: string
   ngayThucThuLai?: string
+  // Danh sách các lần thu gốc sớm trong kỳ (nhiều lần/kỳ). gocThucThu = tổng,
+  // ngayThucThuGoc = ngày muộn nhất của danh sách (để code cũ vẫn chạy).
+  gocSomList?: { ngay: string; soTien: number }[]
 }
 
 // ─────────────────────────────────────────────────────────

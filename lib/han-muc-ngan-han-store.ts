@@ -572,6 +572,54 @@ export async function markKyThuGocSom(
 }
 
 /**
+ * Lưu NHIỀU lần thu gốc sớm trong 1 kỳ lãi (ví dụ tháng 9 trả 4 lần).
+ * — gocSomList: từng lần {ngay, soTien}
+ * — gocThucThu = tổng; ngayThucThuGoc = ngày muộn nhất
+ * — Kỳ đã 'da-thu' (lãi đã thu): giữ nguyên lãi, cập nhật tổng/tách ngày
+ * — Kỳ chưa thu lãi: KHÔNG đổi trangThai
+ */
+export async function saveGocSomList(
+  hanMucId: string,
+  boHoSoId: string,
+  kyId:     string,
+  list:     { ngay: string; soTien: number }[],
+): Promise<void> {
+  await ensureTasksAuth()
+  const ref = doc(kyThuCol(hanMucId, boHoSoId), kyId)
+  const cur = (await getDoc(ref)).data() as KyThuNH | undefined
+  if (!cur) return
+
+  const clean = list
+    .filter(x => x.ngay && x.soTien > 0)
+    .sort((a, b) => a.ngay.localeCompare(b.ngay))
+  const tong    = clean.reduce((s, x) => s + x.soTien, 0)
+  const ngayCuoi = clean.length ? clean[clean.length - 1].ngay : ''
+
+  const payload: Record<string, unknown> = {
+    gocSomList:     clean.length ? clean : deleteField(),
+    gocThucThu:     tong > 0 ? tong : deleteField(),
+    ngayThucThuGoc: ngayCuoi || deleteField(),
+    updatedAt:      Date.now(),
+  }
+  if (cur.trangThai === 'da-thu') {
+    const lai    = cur.laiThucThu ?? 0
+    const ngayLai = cur.ngayThucThuLai ?? cur.ngayThucThu ?? ngayCuoi
+    payload.tongThucThu = tong + lai
+    if (ngayCuoi && ngayCuoi !== ngayLai) {
+      payload.ngayThucThu     = ngayCuoi
+      payload.ngayThucThuGoc  = ngayCuoi
+      payload.ngayThucThuLai  = ngayLai
+    } else {
+      payload.ngayThucThu     = ngayLai
+      payload.ngayThucThuGoc  = deleteField()
+      payload.ngayThucThuLai  = deleteField()
+    }
+  }
+  await setDoc(ref, payload, { merge: true })
+  await _rebuildKyThuSauTraGoc(hanMucId, boHoSoId)
+}
+
+/**
  * Bỏ xác nhận "đã thu" của 1 kỳ (hoàn tác).
  * @param giuGocSom  true = chỉ bỏ phần LÃI, giữ lại gốc thu sớm (dùng cho kỳ loại "lai"
  *                   đã bấm "+ Gốc sớm"). false (mặc định) = xoá toàn bộ số thực thu của kỳ.
@@ -594,6 +642,7 @@ export async function unmarkKyThu(
     tongThucThu:    deleteField(),
     ngayThucThuGoc: deleteField(),
     ngayThucThuLai: deleteField(),
+    gocSomList:     deleteField(),
     updatedAt:      Date.now(),
   }
 
@@ -636,6 +685,7 @@ export async function unmarkGocSom(
   const payload: Record<string, unknown> = {
     gocThucThu:     deleteField(),
     ngayThucThuGoc: deleteField(),
+    gocSomList:     deleteField(),
     updatedAt:      Date.now(),
   }
   if (cur.trangThai === 'da-thu') {
