@@ -329,11 +329,24 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
       const dm = (d: string) => d.split('-').reverse().join('/')
       const loc = [`Kỳ: ${dm(from)} – ${dm(to)}`, `Nguồn: ${S.src || 'Tất cả'}`, `Công ty: ${S.co || 'Tất cả'}`, `Chiều tiền: ${S.dir || 'Thu + Chi'}`]
       if (S.typ.trim()) loc.push(`Loại giao dịch: “${S.typ.trim()}”`)
-      if (q.trim())     loc.push(`Tìm ${DIMS[S.dim][0].toLowerCase()}: “${q.trim()}”`)
-      await xuatExcelKeHoach({
-        dim: S.dim, dimLabel: DIMS[S.dim][0], from, to, ms, rs, keys: dk, M, pend, V, gc, locText: loc,
-        tiers: tierMode ? tiers.map(t => ({ id: t.id, label: t.label, keys: t.keys })) : undefined,
-      })
+      // Mỗi cách xem = 1 sheet; cách xem đang chọn đứng đầu. Ô tìm nhanh chỉ để lọc trên màn hình, không áp dụng khi xuất.
+      const layDim = (d: Dim) => {
+        const df = DIMS[d][2], Md: Record<string, Row[]> = {}
+        rs.forEach(r => (Md[df(r)] = Md[df(r)] || []).push(r))
+        const dr = (k: string) => { const h = Md[k].some(r => r.a > 0), c = Md[k].some(r => r.a < 0); return h && !c ? 0 : h && c ? 1 : 2 }
+        let ks = Object.keys(Md).sort(
+          d === 'src' ? (a, b) => rk(a) - rk(b) || a.localeCompare(b, 'vi')
+          : d === 'nh' ? (a, b) => dr(a) - dr(b) || (parseFloat(a) || 1e9) - (parseFloat(b) || 1e9) || a.localeCompare(b, 'vi')
+          : (a, b) => dr(a) - dr(b) || a.localeCompare(b, 'vi'))
+        if (V.h0) ks = ks.filter(k => ms.some(m => Math.round(st(mo(Md[k], m)).b) !== 0))
+        const tm = d === 'src' && !!V.tier
+        return {
+          dim: d, dimLabel: DIMS[d][0], keys: ks, M: Md,
+          tiers: tm ? TIERS.map(t => ({ id: t.id, label: t.label, keys: ks.filter(k => phanLoaiNguon(k) === t.id) })).filter(t => t.keys.length) : undefined,
+        }
+      }
+      const order = [S.dim, ...(Object.keys(DIMS) as Dim[]).filter(d => d !== S.dim)]
+      await xuatExcelKeHoach({ from, to, ms, rs, views: order.map(layDim), pend, V, gc, locText: loc })
     } catch (e) { alert('Xuất Excel lỗi: ' + (e instanceof Error ? e.message : String(e))) }
     finally { setXuat(false) }
   }

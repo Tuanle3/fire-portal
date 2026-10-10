@@ -1,9 +1,9 @@
 // ============================================================
 // XUẤT EXCEL — Tab Kế hoạch dòng tiền
 //
-// Xuất ĐÚNG những gì đang hiển thị trên bảng: bộ lọc (ngày/nguồn/công ty/chiều tiền/loại GD/tìm nhanh),
-// cách xem (Nguồn/Công ty/Phân loại/Đối tác/Nhóm), các dòng–cột bật ở nút "Hiển thị", tick Pending.
-// 1 sheet, có GROUP đóng/mở (nút +/− bên trái và nút 1·2·3 góc trên trái):
+// Xuất ĐỦ 5 SHEET — mỗi cách xem (Nguồn / Công ty / Phân loại / Đối tác / Nhóm) một sheet, cùng bộ lọc
+// (ngày/nguồn/công ty/chiều tiền/loại GD), cùng các dòng–cột bật ở nút "Hiển thị" và tick Pending.
+// Mỗi sheet có GROUP đóng/mở (nút +/− bên trái và nút 1·2·3 góc trên trái):
 //   • Xem theo Nguồn + bật "Gộp theo loại nguồn":  Loại nguồn (cấp 1) → Nguồn (cấp 2) → Khoản (cấp 3)
 //   • Các cách xem còn lại:                         Nhóm/Công ty/… (cấp 1) → Khoản (cấp 2)
 // Mặc định mở file ở trạng thái THU GỌN (chỉ thấy dòng nhóm).
@@ -15,16 +15,20 @@ import type { DongTienKHRow as Row } from './keHoachDongTienAdapter'
 
 export type Dim = 'src' | 'co' | 'typ' | 'pt' | 'nh'
 
-export interface XuatExcelInput {
+export interface ViewInput {
   dim:      Dim
   dimLabel: string                       // "Nhóm", "Nguồn"…
+  keys:     string[]                     // các dòng nhóm theo đúng thứ tự trên màn hình
+  M:        Record<string, Row[]>        // khoản theo từng dòng nhóm
+  tiers?:   { id: string; label: string; keys: string[] }[]   // có → xem theo Nguồn + gộp loại nguồn
+}
+
+export interface XuatExcelInput {
   from:     string                       // yyyy-mm-dd
   to:       string
   ms:       string[]                     // các tháng (yyyy-mm) đang hiển thị
   rs:       Row[]                        // toàn bộ khoản sau khi lọc
-  keys:     string[]                     // các dòng nhóm theo đúng thứ tự trên màn hình (đã lọc/tìm)
-  M:        Record<string, Row[]>        // khoản theo từng dòng nhóm
-  tiers?:   { id: string; label: string; keys: string[] }[]   // có → đang xem theo Nguồn + gộp loại nguồn
+  views:    ViewInput[]                  // mỗi cách xem = 1 sheet (đặt cách xem đang chọn lên đầu)
   pend:     Set<string>                  // id khoản chi đã tick Pending
   V:        Record<string, number>       // cờ bật/tắt ở nút "Hiển thị"
   gc:       (r: Row) => string           // lấy ghi chú của khoản
@@ -48,22 +52,18 @@ const INFO_HEAD = { pt: 'Đối tác / NCC / KH', src: 'Nguồn thanh toán', co
 const INFO_W    = { pt: 26, src: 30, co: 28, gc: 36 }
 
 const dmy = (d: string) => d.split('-').reverse().join('/')
-const ascii = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^A-Za-z0-9]+/g, '')
 const mo = (a: Row[], m: string) => a.filter(r => r.d.slice(0, 7) === m)
 const solid = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } })
 
 type Kind = 't' | 'c' | 'p' | 'b' | 'x'
 
-export async function taoWorkbook(inp: XuatExcelInput): Promise<Workbook> {
-  const { dim, ms, keys, M, tiers, pend, V, gc, rs } = inp
+function buildSheet(wb: Workbook, inp: XuatExcelInput, v: ViewInput): void {
+  const { ms, pend, V, gc, rs } = inp
+  const { dim, keys, M, tiers } = v
   const thuGon = inp.thuGon !== false
   const tierMode = !!tiers?.length
 
-  const mod: any = await import('exceljs')
-  const ExcelJS = mod.default ?? mod
-  const wb: Workbook = new ExcelJS.Workbook()
-  wb.creator = 'Sơn An Group'; wb.created = new Date()
-  const ws = wb.addWorksheet('Kế hoạch dòng tiền', {
+  const ws = wb.addWorksheet(`Theo ${v.dimLabel}`, {
     properties: { tabColor: { argb: C.navy }, defaultRowHeight: 20, outlineProperties: { summaryBelow: false, summaryRight: false } },
     views: [{ showGridLines: false }],
   })
@@ -130,7 +130,7 @@ export async function taoWorkbook(inp: XuatExcelInput): Promise<Workbook> {
   // ── 1) Tiêu đề ────────────────────────────────────────────
   ws.addRow([]); ws.mergeCells(1, 1, 1, nCols)
   paint(ws.getRow(1), { fill: C.navy, color: 'FFFFFFFF', bold: true, size: 17, h: 34, border: false })
-  setLabel(ws.getCell(1, 1), `KẾ HOẠCH DÒNG TIỀN — THEO ${inp.dimLabel.toUpperCase()}`, 1, true, 'FFFFFFFF')
+  setLabel(ws.getCell(1, 1), `KẾ HOẠCH DÒNG TIỀN — THEO ${v.dimLabel.toUpperCase()}`, 1, true, 'FFFFFFFF')
   ws.getCell(1, 1).font = { name: FONT, size: 17, bold: true, color: { argb: 'FFFFFFFF' } }
 
   ws.addRow([]); ws.mergeCells(2, 1, 2, nCols)
@@ -174,7 +174,7 @@ export async function taoWorkbook(inp: XuatExcelInput): Promise<Workbook> {
   const nGroupLabel = tierMode ? `${keys.length} nguồn` : `${keys.length} nhóm`
   const dv = mk(); ws.mergeCells(dv.number, 1, dv.number, nCols)
   paint(dv, { fill: C.bgDiv, color: C.navy, bold: true, h: 24 })
-  setLabel(dv.getCell(1), `Cân đối theo ${inp.dimLabel.toLowerCase()}  ·  ${nGroupLabel}  ·  bấm +/− bên trái (hoặc nút 1·2·3 góc trên trái) để xem từng khoản`, 1, true, C.navy)
+  setLabel(dv.getCell(1), `Cân đối theo ${v.dimLabel.toLowerCase()}  ·  ${nGroupLabel}  ·  bấm +/− bên trái (hoặc nút 1·2·3 góc trên trái) để xem từng khoản`, 1, true, C.navy)
 
   // ── 4) Dòng nhóm + khoản chi tiết ─────────────────────────
   const sub = (r: Row) => subF.map(f => r[f]).filter(Boolean).join(' · ')
@@ -256,6 +256,14 @@ export async function taoWorkbook(inp: XuatExcelInput): Promise<Workbook> {
     printTitlesRow: `${HR}:${HR}`,
   } as any
   ws.headerFooter.oddFooter = '&L&8Sơn An Group — Kế hoạch dòng tiền&C&8Trang &P / &N&R&8&D'
+}
+
+export async function taoWorkbook(inp: XuatExcelInput): Promise<Workbook> {
+  const mod: any = await import('exceljs')
+  const ExcelJS = mod.default ?? mod
+  const wb: Workbook = new ExcelJS.Workbook()
+  wb.creator = 'Sơn An Group'; wb.created = new Date()
+  inp.views.forEach(v => buildSheet(wb, inp, v))
   return wb
 }
 
@@ -266,7 +274,7 @@ export async function xuatExcelKeHoach(inp: XuatExcelInput): Promise<void> {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `KeHoach_DongTien_${ascii(inp.dimLabel)}_${inp.from.replace(/-/g, '')}_${inp.to.replace(/-/g, '')}.xlsx`
+  a.download = `KeHoach_DongTien_${inp.from.replace(/-/g, '')}_${inp.to.replace(/-/g, '')}.xlsx`
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 4000)
 }
