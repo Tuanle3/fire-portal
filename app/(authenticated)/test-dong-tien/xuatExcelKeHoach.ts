@@ -251,7 +251,7 @@ export async function taoWorkbook(inp: XuatExcelInput): Promise<Workbook> {
   ws.properties.outlineLevelRow = keys.length ? maxLevel : 0
   ws.views = [{ state: 'frozen', xSplit: 1, ySplit: V.pin ? lastSum : HR, showGridLines: false, zoomScale: 100 }]
   ws.pageSetup = {
-    orientation: 'landscape', paperSize: 8 /* A3 */, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+    orientation: 'landscape', paperSize: 8 /* A3 */, scale: 60,   // KHÔNG dùng fitToPage: exceljs ghi sai thứ tự thẻ sheetPr khi đi kèm nhóm dòng → Excel báo lỗi & xoá sheet
     margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.6, header: 0.2, footer: 0.3 },
     printTitlesRow: `${HR}:${HR}`,
   } as any
