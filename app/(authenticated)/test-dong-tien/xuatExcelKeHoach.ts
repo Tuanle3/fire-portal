@@ -272,8 +272,8 @@ function buildDoiSheet(wb: Workbook, inp: XuatExcelInput): void {
   const ws = wb.addWorksheet('Dời ngày - Pending', {
     properties: { tabColor: { argb: C.gold }, defaultRowHeight: 20 }, views: [{ showGridLines: false }],
   })
-  const heads = ['Loại', 'Ngày gốc', 'Ngày hiện tại', 'Số ngày', 'Số tiền (+ thu / − chi)', 'Nội dung', 'Nguồn thanh toán', 'Công ty', 'Đối tác', 'Số lần dời', 'Lý do gần nhất']
-  const widths = [18, 12, 13, 10, 20, 46, 30, 28, 26, 11, 44]
+  const heads = ['Loại', 'Ngày gốc', 'Ngày hiện tại', 'Số ngày', 'Số tiền (+ thu / − chi)', 'Nội dung', 'Nguồn thanh toán', 'Công ty', 'Đối tác', 'Số lần dời', 'Lý do gần nhất', 'Các lần dời (gốc → … → hiện tại)']
+  const widths = [18, 12, 13, 10, 20, 46, 30, 28, 26, 11, 44, 52]
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
   const n = heads.length
   const band = (rowNo: number, fill: string, h: number, text: string, size: number, bold: boolean, color: string) => {
@@ -324,7 +324,8 @@ function buildDoiSheet(wb: Workbook, inp: XuatExcelInput): void {
     const loai = [l > 0 ? 'Gia hạn' : l < 0 ? 'Trả trước' : '', p ? 'Pending' : ''].filter(Boolean).join(' + ')
     const lyDo = (r.ls && r.ls.length ? r.ls[r.ls.length - 1].lyDo : '') || r.pl || ''
     const fill = p ? C.bgAmber : l > 0 ? C.bgAmber : C.bgGreen
-    const vals: (string | number)[] = [loai, r.og ? dmy(r.og) : '', dmy(r.d), l, Math.round(r.a), r.ct, r.src, r.co, r.pt, r.ls?.length ?? 0, lyDo]
+    const vals: (string | number)[] = [loai, r.og ? dmy(r.og) : '', dmy(r.d), l, Math.round(r.a), r.ct, r.src, r.co, r.pt, r.ls?.length ?? 0, lyDo,
+      r.og && r.ls?.length ? [r.og, ...r.ls.map(x => x.den)].map(dmy).join(' → ') : '']
     const row = ws.addRow(vals)
     row.height = 19
     vals.forEach((_, i) => {

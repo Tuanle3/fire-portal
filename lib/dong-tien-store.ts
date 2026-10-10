@@ -159,6 +159,35 @@ export async function doiNgayKhoan(id: string, ngayMoi: string, lyDo?: string): 
   }, { merge: true })
 }
 
+/**
+ * Ghi lại TOÀN BỘ lịch sử dời ngày (dùng khi SỬA / XOÁ một lần dời cho nhầm).
+ * Chuỗi được tính lại từ ngày gốc: tu/soNgay từng lần suy ra từ các `den`; ngày hiện tại = `den` của lần cuối.
+ * Mảng rỗng → khoản về đúng ngày gốc và xoá hẳn dấu vết dời ngày.
+ */
+export async function ghiLaiLichSuDoiNgay(
+  id: string,
+  lan: { den: string; lyDo?: string; luc: number }[],
+): Promise<void> {
+  await ensureTasksAuth()
+  const ref = doc(ktCol(), id)
+  const s = await getDoc(ref)
+  if (!s.exists()) throw new Error('Không tìm thấy khoản')
+  const k = s.data() as KhoanDongTien
+  const goc = k.ngayGoc ?? k.ngayDuKien
+  if (!lan.length) {
+    await setDoc(ref, { ngayDuKien: goc, ngayGoc: deleteField(), lichSuDoiNgay: deleteField(), updatedAt: Date.now() }, { merge: true })
+    return
+  }
+  let tu = goc
+  const ls: DoiNgay[] = lan.map(l => {
+    const o: DoiNgay = { tu, den: l.den, soNgay: soNgayGiua(tu, l.den), luc: l.luc }
+    if (l.lyDo && l.lyDo.trim()) o.lyDo = l.lyDo.trim()
+    tu = l.den
+    return o
+  })
+  await setDoc(ref, { ngayDuKien: tu, ngayGoc: goc, lichSuDoiNgay: ls, updatedAt: Date.now() }, { merge: true })
+}
+
 // ── Chuyển Pending / trả sau (lưu Firestore — mọi máy cùng thấy) ──
 export async function datPending(ids: string[], on: boolean, lyDo?: string): Promise<void> {
   await ensureTasksAuth()

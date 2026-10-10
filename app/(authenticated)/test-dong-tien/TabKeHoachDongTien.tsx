@@ -272,14 +272,15 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           const ttl = V.c_d ? `${r.d.slice(8)}/${r.d.slice(5, 7)} · ${r.ct}` : r.ct
           const k1 = g.length === 1 ? rawById.get(r.id) : undefined
           const lech = g.length === 1 ? soNgayLech(r.og, r.d) : 0
-          const lechTip = lech !== 0
+          const nLan = g.length === 1 ? (r.ls?.length ?? 0) : 0
+          const lechTip = (lech !== 0 || nLan > 0) && r.og
             ? `Ngày gốc ${dmy(r.og!)} → hiện ${dmy(r.d)}` + (r.ls ?? []).map(l => `\n${dmy(l.tu)} → ${dmy(l.den)} (${l.soNgay > 0 ? '+' : ''}${l.soNgay} ngày)${l.lyDo ? ' · ' + l.lyDo : ''}`).join('')
             : ''
           return (
             <tr key={k + gi} className={`dt${allP ? ' pd' : ''}${tc}`}>
               <th className="f"><div className="di" title={ttl}>
                 {V.c_d ? <span className="dd">{r.d.slice(8)}/{r.d.slice(5, 7)}</span> : null}
-                <div className="db">{V.c_n ? <div className="dn">{r.ct}</div> : null}{sub(r) ? <div className="ds">{sub(r)}</div> : null}{lech !== 0 ? <div className={`ds dv ${lech > 0 ? 'gh' : 'tt'}`} title={lechTip}>{lech > 0 ? `⏩ Gia hạn +${lech} ngày` : `⏪ Trả trước ${-lech} ngày`} <span className="dg">(gốc {dmy(r.og!)})</span></div> : null}{g.length === 1 && allP ? <div className="ds dv pdg" title={r.pl || 'Đã chuyển Pending / trả sau'}>⏸ Pending{k1?.ngayPending ? ` từ ${new Date(k1.ngayPending).toLocaleDateString('vi-VN')}` : ''}{r.pl ? ` · ${r.pl}` : ''}</div> : null}{V.c_gc && gc(r) ? <div className="ds gc" title={gc(r)}><span className="gl">Ghi chú:</span> {gc(r)}</div> : null}</div>
+                <div className="db">{V.c_n ? <div className="dn">{r.ct}</div> : null}{sub(r) ? <div className="ds">{sub(r)}</div> : null}{lech !== 0 || nLan > 0 ? <div className={`ds dv ${lech > 0 ? 'gh' : lech < 0 ? 'tt' : ''}`} title={lechTip}>{lech > 0 ? `⏩ Gia hạn +${lech} ngày` : lech < 0 ? `⏪ Trả trước ${-lech} ngày` : '↺ Đã về đúng ngày gốc'} <span className="dg">(gốc {dmy(r.og!)}{nLan > 1 ? ` · dời ${nLan} lần` : ''})</span></div> : null}{nLan > 1 ? <div className="ds dg" title={lechTip}>{[r.og!, ...r.ls!.map(l => l.den)].map(x => dmy(x).slice(0, 5)).join(' → ')}</div> : null}{g.length === 1 && allP ? <div className="ds dv pdg" title={r.pl || 'Đã chuyển Pending / trả sau'}>⏸ Pending{k1?.ngayPending ? ` từ ${new Date(k1.ngayPending).toLocaleDateString('vi-VN')}` : ''}{r.pl ? ` · ${r.pl}` : ''}</div> : null}{V.c_gc && gc(r) ? <div className="ds gc" title={gc(r)}><span className="gl">Ghi chú:</span> {gc(r)}</div> : null}</div>
                 {k1 ? (<>
                   {k1.nguonTuDong
                     ? <span className="ed lk" title="Khoản tự động từ List ngân hàng — không sửa tay">🔒</span>
@@ -511,7 +512,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
         </div>
       )}
       {/* ── Thêm mới (edit = null) hoặc sửa 1 khoản (edit = khoản đó) — lưu xong bảng tự cập nhật ── */}
-      {doi && <DoiNgayDialog khoan={doi} onClose={() => setDoi(null)} />}
+      {doi && <DoiNgayDialog khoan={rawById.get(doi.id) ?? doi} onClose={() => setDoi(null)} />}
       {(edit || adding) && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
           <div style={{ width: '100%', maxWidth: 560 }}>
