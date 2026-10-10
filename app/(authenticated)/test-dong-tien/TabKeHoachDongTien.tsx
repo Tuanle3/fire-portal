@@ -30,6 +30,8 @@ const nf = (n: number) => n ? Math.round(n).toLocaleString('vi-VN') : '–'
 const nz = (s: string) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase()
 const rk = (s: string) => s.startsWith('[HM mới]') ? 0 : s.startsWith('[HM]') ? 1 : s.startsWith('Quỹ') ? 2 : s.startsWith('NOXH') ? 3 : 4
 
+/** Thứ tự hiển thị các cách xem: Nhóm, Công ty, Nguồn, Phân loại, Đối tác (rồi tới nút Dời ngày / Pending) */
+const DIM_ORDER: Dim[] = ['nh', 'co', 'src', 'typ', 'pt']
 const DIMS: Record<Dim, [string, string, (r: Row) => string]> = {
   src: ['Nguồn', 'nguồn thanh toán', r => r.src],
   co:  ['Công ty', 'công ty', r => r.co],
@@ -369,7 +371,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           tiers: tm ? TIERS.map(t => ({ id: t.id, label: t.label, keys: ks.filter(k => phanLoaiNguon(k) === t.id) })).filter(t => t.keys.length) : undefined,
         }
       }
-      const order = [S.dim, ...(Object.keys(DIMS) as Dim[]).filter(d => d !== S.dim)]
+      const order = [S.dim, ...DIM_ORDER.filter(d => d !== S.dim)]
       await xuatExcelKeHoach({ from, to, ms, rs, views: order.map(layDim), pend, V, gc, locText: loc })
     } catch (e) { alert('Xuất Excel lỗi: ' + (e instanceof Error ? e.message : String(e))) }
     finally { setXuat(false) }
@@ -407,7 +409,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           <div className="shl"><b>Dòng tiền theo tháng</b></div>
           <div className="vwl"><span className="vwt">Xem theo</span>
             <div className="seg" role="group" aria-label="Xem theo">
-              {(Object.keys(DIMS) as Dim[]).map(d => (
+              {DIM_ORDER.map(d => (
                 <button key={d} className={S.dim === d ? 'on' : ''} aria-pressed={S.dim === d}
                   onClick={() => { setOpen(new Set()); setF({ dim: d }) }}>{DIMS[d][0]}</button>
               ))}
