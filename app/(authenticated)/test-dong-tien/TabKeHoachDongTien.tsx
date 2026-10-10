@@ -12,9 +12,10 @@
 'use client'
 
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { subscribeDongTien } from '@/lib/dong-tien-store'
+import { subscribeDongTien, datPending } from '@/lib/dong-tien-store'
 import type { KhoanDongTien } from '@/lib/dong-tien-types'
-import { khoanListToRows, buildNhomResolver, gopTenNhom, DongTienKHRow as Row } from './keHoachDongTienAdapter'
+import { khoanListToRows, buildNhomResolver, gopTenNhom, soNgayLech, DongTienKHRow as Row } from './keHoachDongTienAdapter'
+import DoiNgayDialog from './DoiNgayDialog'
 import type { NganSachItem } from '@/lib/ngan-sach-types'
 import DongTienForm, { type NhomBang } from './DongTienForm'
 import { phanLoaiNguon, TIERS, TIER_DEFAULT_OPEN, type TierId } from './nguonPhanLoai'
@@ -81,7 +82,6 @@ function buildBangNhom(items: NganSachItem[]): NhomBang[] {
 export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSachItem[] }) {
   const [raw, setRaw]     = useState<KhoanDongTien[]>([])
   const [S, setS]         = useState<Filt>({ from: '', to: '', src: '', co: '', dir: '', typ: '', dim: 'src' })
-  const [pend, setPend]   = useState<Set<string>>(new Set())
   const [open, setOpen]   = useState<Set<string>>(new Set())
   const [V, setV]         = useState<Record<string, number>>(DEF)
   const [tierOpen, setTierOpen] = useState<Record<TierId, boolean>>(TIER_DEFAULT_OPEN)   // mở/thu gọn 3 nhóm cha
@@ -91,13 +91,28 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const rootRef           = useRef<HTMLDivElement>(null)
   const [rootH, setRootH] = useState<number | null>(null)   // chiều cao khung chính = vừa khít phần màn hình còn lại
   const [edit, setEdit]     = useState<KhoanDongTien | null>(null)   // khoản đang sửa trực tiếp từ bảng
+  const [doi, setDoi] = useState<KhoanDongTien | null>(null)    // khoản đang mở hộp thoại Dời ngày
   const [xuat, setXuat] = useState(false)                       // đang tạo file Excel
   const [adding, setAdding] = useState(false)                      // đang mở form THÊM khoản mới
   const [pick, setPick]     = useState<{ title: string; list: KhoanDongTien[] } | null>(null)   // ô tháng có nhiều khoản → chọn khoản cần sửa
 
   useEffect(() => subscribeDongTien(setRaw), [])
+  // Pending lưu trong Firestore (mọi máy cùng thấy) — suy ra từ dữ liệu khoản
+  const pend = useMemo(() => new Set(raw.filter(k => k.pending).map(k => k.id)), [raw])
+  // Chuyển 1 lần các ô tick Pending cũ (lưu trên trình duyệt) lên Firestore
+  const daChuyenPend = useRef(false)
   useEffect(() => {
-    try { setPend(new Set(JSON.parse(lsGet(LS_PEND) || '[]'))) } catch { /* */ }
+    if (daChuyenPend.current || !raw.length) return
+    daChuyenPend.current = true
+    try {
+      const cu: string[] = JSON.parse(lsGet(LS_PEND) || '[]')
+      const co = new Map(raw.map(k => [k.id, k]))
+      const ids = cu.filter(id => { const k = co.get(id); return !!k && !k.pending })
+      if (ids.length) datPending(ids, true, 'Chuyển từ bản lưu trên trình duyệt').then(() => lsSet(LS_PEND, '[]')).catch(() => { /* thử lại lần sau */ })
+      else if (cu.length) lsSet(LS_PEND, '[]')
+    } catch { /* */ }
+  }, [raw])
+  useEffect(() => {
     try { setV({ ...DEF, ...JSON.parse(lsGet(LS_V) || '{}') }) } catch { /* */ }
     try { setTierOpen({ ...TIER_DEFAULT_OPEN, ...JSON.parse(lsGet(LS_TIER) || '{}') }) } catch { /* */ }
   }, [])
@@ -151,10 +166,9 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
 
   const setVk = (k: string, v: number) => setV(o => { const n = { ...o, [k]: v }; lsSet(LS_V, JSON.stringify(n)); return n })
   const resetV = (n: Record<string, number>) => { setV(n); lsSet(LS_V, JSON.stringify(n)) }
-  const togglePend = (ids: string[], on: boolean) => setPend(o => {
-    const n = new Set(o); ids.forEach(id => on ? n.add(id) : n.delete(id))
-    lsSet(LS_PEND, JSON.stringify([...n])); return n
-  })
+  const togglePend = (ids: string[], on: boolean) => {
+    datPending(ids, on).catch(e => alert('Lưu Pending lỗi: ' + (e instanceof Error ? e.message : String(e))))
+  }
   const tog = (k: string) => setOpen(o => { const n = new Set(o); n.has('g:' + k) ? n.delete('g:' + k) : n.add('g:' + k); return n })
   const saveTier = (n: Record<TierId, boolean>) => { lsSet(LS_TIER, JSON.stringify(n)); return n }
   const togTier = (id: TierId) => setTierOpen(o => saveTier({ ...o, [id]: !o[id] }))
@@ -256,16 +270,22 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
           const sumAll = g.reduce((t, x) => t + x.a, 0)
           const cT = sumAll === 0 ? 'z' : allP ? 'wr' : sumAll > 0 ? 'pos' : 'neg'
           const ttl = V.c_d ? `${r.d.slice(8)}/${r.d.slice(5, 7)} · ${r.ct}` : r.ct
+          const k1 = g.length === 1 ? rawById.get(r.id) : undefined
+          const lech = g.length === 1 ? soNgayLech(r.og, r.d) : 0
+          const lechTip = lech !== 0
+            ? `Ngày gốc ${dmy(r.og!)} → hiện ${dmy(r.d)}` + (r.ls ?? []).map(l => `\n${dmy(l.tu)} → ${dmy(l.den)} (${l.soNgay > 0 ? '+' : ''}${l.soNgay} ngày)${l.lyDo ? ' · ' + l.lyDo : ''}`).join('')
+            : ''
           return (
             <tr key={k + gi} className={`dt${allP ? ' pd' : ''}${tc}`}>
               <th className="f"><div className="di" title={ttl}>
                 {V.c_d ? <span className="dd">{r.d.slice(8)}/{r.d.slice(5, 7)}</span> : null}
-                <div className="db">{V.c_n ? <div className="dn">{r.ct}</div> : null}{sub(r) ? <div className="ds">{sub(r)}</div> : null}{V.c_gc && gc(r) ? <div className="ds gc" title={gc(r)}><span className="gl">Ghi chú:</span> {gc(r)}</div> : null}</div>
-                {g.length === 1 && rawById.get(r.id) ? (
-                  rawById.get(r.id)!.nguonTuDong
+                <div className="db">{V.c_n ? <div className="dn">{r.ct}</div> : null}{sub(r) ? <div className="ds">{sub(r)}</div> : null}{lech !== 0 ? <div className={`ds dv ${lech > 0 ? 'gh' : 'tt'}`} title={lechTip}>{lech > 0 ? `⏩ Gia hạn +${lech} ngày` : `⏪ Trả trước ${-lech} ngày`} <span className="dg">(gốc {dmy(r.og!)})</span></div> : null}{g.length === 1 && allP ? <div className="ds dv pdg" title={r.pl || 'Đã chuyển Pending / trả sau'}>⏸ Pending{k1?.ngayPending ? ` từ ${new Date(k1.ngayPending).toLocaleDateString('vi-VN')}` : ''}{r.pl ? ` · ${r.pl}` : ''}</div> : null}{V.c_gc && gc(r) ? <div className="ds gc" title={gc(r)}><span className="gl">Ghi chú:</span> {gc(r)}</div> : null}</div>
+                {k1 ? (<>
+                  {k1.nguonTuDong
                     ? <span className="ed lk" title="Khoản tự động từ List ngân hàng — không sửa tay">🔒</span>
-                    : <button type="button" className="ed" title="Sửa khoản này (đổi nhóm, số tiền, ngày…)" onClick={e => { e.stopPropagation(); setEdit(rawById.get(r.id)!) }}>✎</button>
-                ) : null}
+                    : <button type="button" className="ed" title="Sửa khoản này (đổi nhóm, số tiền, ngày…)" onClick={e => { e.stopPropagation(); setEdit(k1) }}>✎</button>}
+                  <button type="button" className="ed" title="Dời ngày thanh toán (gia hạn / trả trước)" onClick={e => { e.stopPropagation(); setDoi(k1) }}>⇄</button>
+                </>) : null}
               </div></th>
               {ms.map(m => {
                 const cx = g.filter(x => x.d.slice(0, 7) === m)
@@ -491,6 +511,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
         </div>
       )}
       {/* ── Thêm mới (edit = null) hoặc sửa 1 khoản (edit = khoản đó) — lưu xong bảng tự cập nhật ── */}
+      {doi && <DoiNgayDialog khoan={doi} onClose={() => setDoi(null)} />}
       {(edit || adding) && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
           <div style={{ width: '100%', maxWidth: 560 }}>

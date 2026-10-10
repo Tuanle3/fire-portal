@@ -11,7 +11,7 @@ import {
   QuerySnapshot, QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore'
 import { tasksDb, ensureTasksAuth } from '@/lib/firebase-tasks'
-import { KhoanDongTien, ChuKyLap } from './dong-tien-types'
+import { KhoanDongTien, ChuKyLap, DoiNgay } from './dong-tien-types'
 
 const db = () => tasksDb
 
@@ -135,6 +135,42 @@ export async function saveKhoanDongTien(
     await batch.commit()
   }
   return ids
+}
+
+// ── Dời ngày thanh toán (gia hạn / trả trước) ────────────────
+// Ghi lịch sử từng lần; ngayGoc chỉ ghi ở lần đầu. Dùng được cả cho khoản tự động từ List ngân hàng
+// (capNhatKeHoachVay giữ lại phần dời ngày khi cập nhật).
+const soNgayGiua = (a: string, b: string) => Math.round((parseDate(b).getTime() - parseDate(a).getTime()) / 86400000)
+
+export async function doiNgayKhoan(id: string, ngayMoi: string, lyDo?: string): Promise<void> {
+  await ensureTasksAuth()
+  const ref = doc(ktCol(), id)
+  const s = await getDoc(ref)
+  if (!s.exists()) throw new Error('Không tìm thấy khoản')
+  const k = s.data() as KhoanDongTien
+  if (!ngayMoi || ngayMoi === k.ngayDuKien) return
+  const lan: DoiNgay = { tu: k.ngayDuKien, den: ngayMoi, soNgay: soNgayGiua(k.ngayDuKien, ngayMoi), luc: Date.now() }
+  if (lyDo && lyDo.trim()) lan.lyDo = lyDo.trim()
+  await setDoc(ref, {
+    ngayDuKien: ngayMoi,
+    ngayGoc: k.ngayGoc ?? k.ngayDuKien,
+    lichSuDoiNgay: [...(k.lichSuDoiNgay ?? []), lan],
+    updatedAt: Date.now(),
+  }, { merge: true })
+}
+
+// ── Chuyển Pending / trả sau (lưu Firestore — mọi máy cùng thấy) ──
+export async function datPending(ids: string[], on: boolean, lyDo?: string): Promise<void> {
+  await ensureTasksAuth()
+  const now = Date.now()
+  for (let i = 0; i < ids.length; i += 400) {
+    const batch = writeBatch(db())
+    ids.slice(i, i + 400).forEach(id => batch.set(doc(ktCol(), id), on
+      ? { pending: true, ngayPending: now, ...(lyDo ? { lyDoPending: lyDo } : {}), updatedAt: now }
+      : { pending: false, ngayPending: deleteField(), lyDoPending: deleteField(), updatedAt: now },
+    { merge: true }))
+    await batch.commit()
+  }
 }
 
 // ── Xoá 1 khoản ──────────────────────────────────────────────

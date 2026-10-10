@@ -95,6 +95,15 @@ export type ChuKyLap = 'mot-lan' | 'hang-thang' | 'hang-quy'
 //   nhomCha:      key nhóm cha — dùng để group trong báo cáo
 //   nhomChaLabel: label hiển thị của nhóm cha (lưu cùng để report không phụ thuộc code)
 // ─────────────────────────────────────────────────────────
+/** 1 lần dời ngày thanh toán (gia hạn = dời ra sau, trả trước = dời lên trước) */
+export interface DoiNgay {
+  tu:      string      // ngày trước khi dời (YYYY-MM-DD)
+  den:     string      // ngày sau khi dời
+  soNgay:  number      // den − tu: > 0 gia hạn, < 0 trả trước
+  lyDo?:   string
+  luc:     number      // timestamp lúc ghi
+}
+
 export interface KhoanDongTien {
   id:             string
   entity:         EntityType
@@ -117,6 +126,13 @@ export interface KhoanDongTien {
   nguonTuDong?:    'vay-hm'
   kmcpChiTiet?: string
   autoThang?:      string                // 'YYYY-MM' của lần cập nhật tự động
+
+  // ── MỚI — Quản trị dời ngày / Pending (optional, dữ liệu cũ không có vẫn chạy) ──
+  ngayGoc?:        string                // ngày kế hoạch ban đầu — ghi 1 lần ở lần dời đầu tiên, không đổi
+  lichSuDoiNgay?:  DoiNgay[]             // lịch sử các lần dời (cũ → mới)
+  pending?:        boolean               // chuyển Pending / trả sau (chưa có ngày mới)
+  ngayPending?:    number                // timestamp lúc chuyển Pending
+  lyDoPending?:    string
 
   doTinCay?:      DoTinCay
   moTa:           string

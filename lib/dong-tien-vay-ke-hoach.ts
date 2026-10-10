@@ -231,7 +231,17 @@ export async function capNhatKeHoachVay(thang: string, lines: KeHoachVayLine[]) 
   const daCo = new Map<string, KhoanDongTien>(cu.docs.map((d: any) => [d.id, d.data() as KhoanDongTien] as [string, KhoanDongTien]))
 
   const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = []
-  lines.forEach(l => ops.push(b => b.set(doc(col, l.id), { ...l, createdAt: daCo.get(l.id)?.createdAt ?? now, updatedAt: now })))
+  lines.forEach(l => {
+    // Giữ lại phần người dùng đã quản trị (dời ngày, pending) — set() ghi đè cả doc nên phải đưa lại
+    const e = daCo.get(l.id)
+    const giu: Record<string, unknown> = {}
+    if (e?.pending) { giu.pending = true; if (e.ngayPending) giu.ngayPending = e.ngayPending; if (e.lyDoPending) giu.lyDoPending = e.lyDoPending }
+    // Chỉ giữ ngày đã dời khi lịch trả nợ gốc KHÔNG đổi; lịch gốc đổi → bỏ dời, theo lịch mới
+    if (e?.lichSuDoiNgay?.length && e.ngayGoc === l.ngayDuKien) {
+      giu.ngayDuKien = e.ngayDuKien; giu.ngayGoc = e.ngayGoc; giu.lichSuDoiNgay = e.lichSuDoiNgay
+    }
+    ops.push(b => b.set(doc(col, l.id), { ...l, ...giu, createdAt: e?.createdAt ?? now, updatedAt: now }))
+  })
   xoa.forEach((d: any) => ops.push(b => b.delete(d.ref)))
   for (let i = 0; i < ops.length; i += 400) {
     const b = writeBatch(tasksDb)

@@ -52,6 +52,9 @@ const INFO_HEAD = { pt: 'Đối tác / NCC / KH', src: 'Nguồn thanh toán', co
 const INFO_W    = { pt: 26, src: 30, co: 28, gc: 36 }
 
 const dmy = (d: string) => d.split('-').reverse().join('/')
+const utc = (s: string) => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d) }
+/** > 0 gia hạn, < 0 trả trước, 0 không dời */
+const lech = (r: Row) => (!r.og || r.og === r.d) ? 0 : Math.round((utc(r.d) - utc(r.og)) / 86400000)
 const mo = (a: Row[], m: string) => a.filter(r => r.d.slice(0, 7) === m)
 const solid = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } })
 
@@ -203,7 +206,10 @@ function buildSheet(wb: Workbook, inp: XuatExcelInput, v: ViewInput): void {
       const r0 = g[0]
       const dr = mk(level + 1, hideDetail, false); paint(dr, { h: 19 })
       const text = [V.c_d ? `${r0.d.slice(8)}/${r0.d.slice(5, 7)}` : '', V.c_n ? r0.ct : ''].filter(Boolean).join(' · ') || sub(r0) || r0.ct
-      setLabel(dr.getCell(1), text, level + 3)
+      const lc = g.length === 1 ? lech(r0) : 0
+      const tag = (lc > 0 ? `  [Gia hạn +${lc} ngày]` : lc < 0 ? `  [Trả trước ${-lc} ngày]` : '')
+        + (g.length === 1 && pend.has(r0.id) ? '  [Pending]' : '')
+      setLabel(dr.getCell(1), text + tag, level + 3)
       ms.forEach((m, i) => {
         const cx = g.filter(x => x.d.slice(0, 7) === m)
         if (!cx.length) return
@@ -258,12 +264,94 @@ function buildSheet(wb: Workbook, inp: XuatExcelInput, v: ViewInput): void {
   ws.headerFooter.oddFooter = '&L&8Sơn An Group — Kế hoạch dòng tiền&C&8Trang &P / &N&R&8&D'
 }
 
+// ── Sheet "Dời ngày - Pending": mọi khoản đã gia hạn / trả trước / chuyển Pending trong kỳ lọc ──
+function buildDoiSheet(wb: Workbook, inp: XuatExcelInput): void {
+  const { rs, pend } = inp
+  const ds = rs.filter(r => lech(r) !== 0 || pend.has(r.id))
+    .sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : a.id.localeCompare(b.id)))
+  const ws = wb.addWorksheet('Dời ngày - Pending', {
+    properties: { tabColor: { argb: C.gold }, defaultRowHeight: 20 }, views: [{ showGridLines: false }],
+  })
+  const heads = ['Loại', 'Ngày gốc', 'Ngày hiện tại', 'Số ngày', 'Số tiền (+ thu / − chi)', 'Nội dung', 'Nguồn thanh toán', 'Công ty', 'Đối tác', 'Số lần dời', 'Lý do gần nhất']
+  const widths = [18, 12, 13, 10, 20, 46, 30, 28, 26, 11, 44]
+  widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
+  const n = heads.length
+  const band = (rowNo: number, fill: string, h: number, text: string, size: number, bold: boolean, color: string) => {
+    const r = ws.getRow(rowNo); ws.mergeCells(rowNo, 1, rowNo, n); r.height = h
+    for (let i = 1; i <= n; i++) ws.getCell(rowNo, i).fill = solid(fill)
+    const c = ws.getCell(rowNo, 1); c.value = text
+    c.font = { name: FONT, size, bold, color: { argb: color } }
+    c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: true }
+  }
+  band(1, C.navy, 34, 'DỜI NGÀY THANH TOÁN & PENDING', 17, true, 'FFFFFFFF')
+  band(2, C.navy2, 34, `${inp.locText.join('  ·  ')}\nĐơn vị: VNĐ  ·  Xuất lúc ${new Date().toLocaleString('vi-VN')}`, 10, false, 'FFFFFFFF')
+  ws.getRow(3).height = 4; for (let i = 1; i <= n; i++) ws.getCell(3, i).fill = solid(C.gold)
+
+  // tổng hợp theo loại
+  const sum = { gh: [0, 0], tt: [0, 0], pd: [0, 0] }
+  ds.forEach(r => {
+    const l = lech(r), v = Math.abs(r.a)
+    if (pend.has(r.id)) { sum.pd[0]++; sum.pd[1] += v }
+    else if (l > 0) { sum.gh[0]++; sum.gh[1] += v }
+    else if (l < 0) { sum.tt[0]++; sum.tt[1] += v }
+  })
+  const line = (no: number, fill: string, lab: string, v: number[]) => {
+    const r = ws.getRow(no); r.height = 21
+    for (let i = 1; i <= 5; i++) { const c = ws.getCell(no, i); c.fill = solid(fill); c.border = BORDER; c.font = { name: FONT, size: 10.5, bold: true, color: { argb: C.ink } }; c.alignment = { vertical: 'middle' } }
+    ws.mergeCells(no, 1, no, 3); ws.getCell(no, 1).value = lab; ws.getCell(no, 1).alignment = { vertical: 'middle', indent: 1 }
+    ws.getCell(no, 4).value = v[0]; ws.getCell(no, 4).alignment = { horizontal: 'right', vertical: 'middle' }
+    ws.getCell(no, 5).value = Math.round(v[1]); ws.getCell(no, 5).numFmt = NUM; ws.getCell(no, 5).alignment = { horizontal: 'right', vertical: 'middle' }
+  }
+  const h4 = ws.getRow(4); h4.height = 22
+  ;['Tổng hợp', '', '', 'Số khoản', 'Tổng số tiền (giá trị tuyệt đối)'].forEach((t, i) => {
+    const c = ws.getCell(4, i + 1); c.value = t; c.fill = solid(C.navy); c.font = { name: FONT, size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } }
+    c.alignment = { horizontal: i >= 3 ? 'right' : 'left', vertical: 'middle', indent: i === 0 ? 1 : 0 }
+  })
+  line(5, C.bgAmber, 'Gia hạn (dời ra sau)', sum.gh)
+  line(6, C.bgGreen, 'Trả trước (dời lên trước)', sum.tt)
+  line(7, C.bgSum,   'Pending / trả sau (chưa có ngày mới)', sum.pd)
+
+  const HR = 9
+  const hr = ws.getRow(HR); hr.height = 26
+  heads.forEach((t, i) => {
+    const c = ws.getCell(HR, i + 1); c.value = t; c.fill = solid(C.navy); c.border = BORDER
+    c.font = { name: FONT, size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } }
+    c.alignment = { horizontal: [3, 4].includes(i) ? 'right' : 'left', vertical: 'middle', indent: i === 0 ? 1 : 0, wrapText: true }
+  })
+
+  ds.forEach(r => {
+    const l = lech(r), p = pend.has(r.id)
+    const loai = [l > 0 ? 'Gia hạn' : l < 0 ? 'Trả trước' : '', p ? 'Pending' : ''].filter(Boolean).join(' + ')
+    const lyDo = (r.ls && r.ls.length ? r.ls[r.ls.length - 1].lyDo : '') || r.pl || ''
+    const fill = p ? C.bgAmber : l > 0 ? C.bgAmber : C.bgGreen
+    const vals: (string | number)[] = [loai, r.og ? dmy(r.og) : '', dmy(r.d), l, Math.round(r.a), r.ct, r.src, r.co, r.pt, r.ls?.length ?? 0, lyDo]
+    const row = ws.addRow(vals)
+    row.height = 19
+    vals.forEach((_, i) => {
+      const c = row.getCell(i + 1)
+      c.border = BORDER
+      c.font = { name: FONT, size: 10.5, bold: i === 0, color: { argb: i === 3 ? (l > 0 ? C.amber : C.green) : i === 4 ? (r.a < 0 ? C.red : C.green) : C.ink } }
+      c.alignment = { vertical: 'middle', horizontal: [3, 4, 9].includes(i) ? 'right' : 'left', indent: i === 0 ? 1 : 0 }
+      if (i === 0) c.fill = solid(fill)
+    })
+    row.getCell(4).numFmt = '+0;-0;0'
+    row.getCell(5).numFmt = NUM
+  })
+  if (!ds.length) {
+    ws.addRow([]); band(ws.rowCount + 0, C.bgDiv, 24, 'Chưa có khoản nào gia hạn, trả trước hoặc Pending trong phạm vi đang lọc.', 10.5, true, C.navy)
+  }
+  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: HR, showGridLines: false }]
+  ws.autoFilter = { from: { row: HR, column: 1 }, to: { row: HR, column: n } }
+  ws.pageSetup = { orientation: 'landscape', paperSize: 8, scale: 70 } as any
+}
+
 export async function taoWorkbook(inp: XuatExcelInput): Promise<Workbook> {
   const mod: any = await import('exceljs')
   const ExcelJS = mod.default ?? mod
   const wb: Workbook = new ExcelJS.Workbook()
   wb.creator = 'Sơn An Group'; wb.created = new Date()
   inp.views.forEach(v => buildSheet(wb, inp, v))
+  buildDoiSheet(wb, inp)
   return wb
 }
 

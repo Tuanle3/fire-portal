@@ -270,3 +270,11 @@ display:flex;flex-direction:column;gap:12px}
 .khdt .pkl .pm em{font-style:italic;color:var(--ink-2)}
 .khdt .pkl .pv{flex:none;font:600 13px var(--num);font-variant-numeric:tabular-nums}
 .khdt .pkf{display:flex;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--line-2)}
+
+/* ── Dời ngày / Pending ───────────────────────────────────── */
+.khdt .ed + .ed{margin-left:4px}
+.khdt .ds.dv{font-weight:600;white-space:normal}
+.khdt .ds.dv.gh{color:#B45309}
+.khdt .ds.dv.tt{color:#166534}
+.khdt .ds.dv.pdg{color:var(--warn)}
+.khdt .ds.dv .dg{font-weight:400;color:var(--ink-3)}

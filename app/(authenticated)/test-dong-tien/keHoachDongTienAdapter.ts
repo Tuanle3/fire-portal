@@ -7,7 +7,7 @@
 // 4 trường nguonThanhToan / doiTac / loaiGiaoDich / nhomBaoCao nhập ở
 // DongTienForm (chế độ Kế hoạch). Để trống thì tự suy ra từ pháp nhân + nhóm.
 // ============================================================
-import type { KhoanDongTien } from '@/lib/dong-tien-types'
+import type { KhoanDongTien, DoiNgay } from '@/lib/dong-tien-types'
 import { DEFAULT_ITEMS, type NganSachItem } from '@/lib/ngan-sach-types'
 
 export interface DongTienKHRow {
@@ -20,6 +20,16 @@ export interface DongTienKHRow {
   ct:  string   // nội dung giao dịch
   a:   number   // + thu, − chi
   nh:  string   // nhóm
+  og?: string        // ngày kế hoạch gốc (chỉ có khi đã dời ngày)
+  ls?: DoiNgay[]     // lịch sử dời ngày
+  pl?: string        // lý do Pending (nếu có)
+}
+
+/** Số ngày lệch so với ngày gốc: > 0 gia hạn, < 0 trả trước, 0 = không dời */
+export function soNgayLech(og: string | undefined, d: string): number {
+  if (!og || og === d) return 0
+  const t = (s: string) => { const [y, m, dd] = s.split('-').map(Number); return Date.UTC(y, m - 1, dd) }
+  return Math.round((t(d) - t(og)) / 86400000)
 }
 
 const CO_LABEL: Record<string, string> = {
@@ -162,6 +172,9 @@ export function khoanToRow(k: KhoanDongTien, resolveNhom?: NhomResolver): DongTi
     ct:  chuanHoaNoiDung(k.moTa, thu),
     a:   thu ? k.soTien : -k.soTien,
     nh:  resolveNhom?.(k) ?? k.nhomBaoCao ?? `${k.nhom} — ${label}`,
+    og:  k.ngayGoc,
+    ls:  k.lichSuDoiNgay,
+    pl:  k.lyDoPending,
   }
 }
 
