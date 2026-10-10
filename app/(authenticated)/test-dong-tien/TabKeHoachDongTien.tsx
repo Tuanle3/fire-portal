@@ -16,6 +16,7 @@ import { subscribeDongTien, datPending } from '@/lib/dong-tien-store'
 import type { KhoanDongTien } from '@/lib/dong-tien-types'
 import { khoanListToRows, buildNhomResolver, gopTenNhom, soNgayLech, DongTienKHRow as Row } from './keHoachDongTienAdapter'
 import DoiNgayDialog from './DoiNgayDialog'
+import BangDoiNgay from './BangDoiNgay'
 import type { NganSachItem } from '@/lib/ngan-sach-types'
 import DongTienForm, { type NhomBang } from './DongTienForm'
 import { phanLoaiNguon, TIERS, TIER_DEFAULT_OPEN, type TierId } from './nguonPhanLoai'
@@ -91,6 +92,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const rootRef           = useRef<HTMLDivElement>(null)
   const [rootH, setRootH] = useState<number | null>(null)   // chiều cao khung chính = vừa khít phần màn hình còn lại
   const [edit, setEdit]     = useState<KhoanDongTien | null>(null)   // khoản đang sửa trực tiếp từ bảng
+  const [showDoi, setShowDoi] = useState(false)                  // bảng Dời ngày / Pending
   const [doi, setDoi] = useState<KhoanDongTien | null>(null)    // khoản đang mở hộp thoại Dời ngày
   const [xuat, setXuat] = useState(false)                       // đang tạo file Excel
   const [adding, setAdding] = useState(false)                      // đang mở form THÊM khoản mới
@@ -164,6 +166,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
     return () => { clearTimeout(t); window.removeEventListener('resize', fit) }
   }, [])
 
+  const soDoi = useMemo(() => rs.filter(r => soNgayLech(r.og, r.d) !== 0 || (r.ls?.length ?? 0) > 0 || pend.has(r.id)).length, [rs, pend])
   const setVk = (k: string, v: number) => setV(o => { const n = { ...o, [k]: v }; lsSet(LS_V, JSON.stringify(n)); return n })
   const resetV = (n: Record<string, number>) => { setV(n); lsSet(LS_V, JSON.stringify(n)) }
   const togglePend = (ids: string[], on: boolean) => {
@@ -432,6 +435,9 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
             }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>
               Hiển thị <span className="bdg">{VL.concat(DL).filter(l => V[l[0]]).length}</span></button>
+            <button className="btn" type="button" onClick={() => setShowDoi(true)}
+              title="Xem các khoản đã gia hạn / trả trước / Pending, gom theo khách hàng, kèm lịch sử">
+              ⇄ Dời ngày / Pending{soDoi ? ` (${soDoi})` : ''}</button>
             <button className="btn" type="button" disabled={!ms.length || xuat} onClick={xuatExcel}
               title="Xuất Excel đúng theo bộ lọc & cách xem đang chọn — có group đóng/mở">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
@@ -512,6 +518,10 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
         </div>
       )}
       {/* ── Thêm mới (edit = null) hoặc sửa 1 khoản (edit = khoản đó) — lưu xong bảng tự cập nhật ── */}
+      {showDoi && (
+        <BangDoiNgay rows={rs} pend={pend} rawById={rawById}
+          onMoDoi={k => setDoi(k)} onBoPending={id => togglePend([id], false)} onClose={() => setShowDoi(false)} />
+      )}
       {doi && <DoiNgayDialog khoan={rawById.get(doi.id) ?? doi} onClose={() => setDoi(null)} />}
       {(edit || adding) && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}>
