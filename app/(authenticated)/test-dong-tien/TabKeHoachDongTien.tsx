@@ -412,6 +412,9 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
                   onClick={() => { setOpen(new Set()); setF({ dim: d }) }}>{DIMS[d][0]}</button>
               ))}
             </div>
+            <button className="btn" type="button" onClick={() => setShowDoi(true)}
+              title="Xem các khoản đã gia hạn / trả trước / Pending, gom theo khách hàng, kèm lịch sử">
+              ⇄ Dời ngày / Pending{soDoi ? ` (${soDoi})` : ''}</button>
           </div>
           <label className="srch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
             <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={`Tìm ${DIMS[S.dim][0].toLowerCase()}…`} aria-label="Tìm nhanh" autoComplete="off" /></label>
@@ -435,9 +438,6 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
             }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>
               Hiển thị <span className="bdg">{VL.concat(DL).filter(l => V[l[0]]).length}</span></button>
-            <button className="btn" type="button" onClick={() => setShowDoi(true)}
-              title="Xem các khoản đã gia hạn / trả trước / Pending, gom theo khách hàng, kèm lịch sử">
-              ⇄ Dời ngày / Pending{soDoi ? ` (${soDoi})` : ''}</button>
             <button className="btn" type="button" disabled={!ms.length || xuat} onClick={xuatExcel}
               title="Xuất Excel đúng theo bộ lọc & cách xem đang chọn — có group đóng/mở">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
