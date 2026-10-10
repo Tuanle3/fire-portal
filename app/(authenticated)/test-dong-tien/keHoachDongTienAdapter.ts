@@ -50,7 +50,7 @@ const CO_LABEL: Record<string, string> = {
 export const BEN_CHI_THAY: Record<string, string> = { 'Cá nhân': 'SAG' }
 // true  → cách xem "Công ty" gom các khoản đó vào bên chi tiền (Sơn An Group)
 // false → vẫn gom theo pháp nhân ghi sổ (Cá nhân), chỉ hiện thêm "Chi bởi …" và lọc được theo bên chi
-export const GOM_CONG_TY_THEO_BEN_CHI = false
+export const GOM_CONG_TY_THEO_BEN_CHI = true
 
 const KMCP_LABEL: Record<string, string> = Object.fromEntries(
   DEFAULT_ITEMS.filter(d => d.kmcp).map(d => [d.kmcp as string, d.dien_giai]),
