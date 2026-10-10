@@ -7,7 +7,7 @@
 // Thêm khoản mới ngay tại tab này (nút "Thêm khoản") bằng cùng DongTienForm với Tab
 // Nhập Data; sửa từng khoản bằng nút ✎ ở dòng chi tiết. Lưu xong bảng tự cập nhật.
 // CSS template đã scope trong .khdt (ke-hoach-dong-tien.css).
-// Chưa có: xuất Excel / Word (template dùng exceljs + docx).
+// Xuất Excel: nút "Xuất Excel" → xuatExcelKeHoach.ts (cần npm i exceljs). Chưa có: xuất Word.
 // ============================================================
 'use client'
 
@@ -18,6 +18,7 @@ import { khoanListToRows, buildNhomResolver, gopTenNhom, DongTienKHRow as Row } 
 import type { NganSachItem } from '@/lib/ngan-sach-types'
 import DongTienForm, { type NhomBang } from './DongTienForm'
 import { phanLoaiNguon, TIERS, TIER_DEFAULT_OPEN, type TierId } from './nguonPhanLoai'
+import { xuatExcelKeHoach } from './xuatExcelKeHoach'
 import './ke-hoach-dong-tien.css'
 
 type Dim = 'src' | 'co' | 'typ' | 'pt' | 'nh'
@@ -90,6 +91,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const rootRef           = useRef<HTMLDivElement>(null)
   const [rootH, setRootH] = useState<number | null>(null)   // chiều cao khung chính = vừa khít phần màn hình còn lại
   const [edit, setEdit]     = useState<KhoanDongTien | null>(null)   // khoản đang sửa trực tiếp từ bảng
+  const [xuat, setXuat] = useState(false)                       // đang tạo file Excel
   const [adding, setAdding] = useState(false)                      // đang mở form THÊM khoản mới
   const [pick, setPick]     = useState<{ title: string; list: KhoanDongTien[] } | null>(null)   // ô tháng có nhiều khoản → chọn khoản cần sửa
 
@@ -320,6 +322,22 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
     )
   }
 
+  const xuatExcel = async () => {
+    if (!ms.length || xuat) return
+    setXuat(true)
+    try {
+      const dm = (d: string) => d.split('-').reverse().join('/')
+      const loc = [`Kỳ: ${dm(from)} – ${dm(to)}`, `Nguồn: ${S.src || 'Tất cả'}`, `Công ty: ${S.co || 'Tất cả'}`, `Chiều tiền: ${S.dir || 'Thu + Chi'}`]
+      if (S.typ.trim()) loc.push(`Loại giao dịch: “${S.typ.trim()}”`)
+      if (q.trim())     loc.push(`Tìm ${DIMS[S.dim][0].toLowerCase()}: “${q.trim()}”`)
+      await xuatExcelKeHoach({
+        dim: S.dim, dimLabel: DIMS[S.dim][0], from, to, ms, rs, keys: dk, M, pend, V, gc, locText: loc,
+        tiers: tierMode ? tiers.map(t => ({ id: t.id, label: t.label, keys: t.keys })) : undefined,
+      })
+    } catch (e) { alert('Xuất Excel lỗi: ' + (e instanceof Error ? e.message : String(e))) }
+    finally { setXuat(false) }
+  }
+
   const cols = ms.length + (V.tot ? 1 : 0)
   const anyOpen = dk.some(k => open.has('g:' + k)) || (tierMode && tiers.some(t => tierOpen[t.id]))
   const setF = (p: Partial<Filt>) => setS(o => ({ ...o, ...p }))
@@ -380,6 +398,10 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
             }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>
               Hiển thị <span className="bdg">{VL.concat(DL).filter(l => V[l[0]]).length}</span></button>
+            <button className="btn" type="button" disabled={!ms.length || xuat} onClick={xuatExcel}
+              title="Xuất Excel đúng theo bộ lọc & cách xem đang chọn — có group đóng/mở">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
+              {xuat ? 'Đang xuất…' : 'Xuất Excel'}</button>
             <button className="btn pri" type="button" title="Thêm khoản thu / chi kế hoạch mới — không cần quay lại Tab Nhập Data" onClick={() => setAdding(true)}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
               Thêm khoản</button>
