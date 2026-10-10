@@ -140,7 +140,7 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   const uq = (f: (r: Row) => string) => [...new Set(R.map(f))].sort()
   const rs = useMemo(() => R.filter(r =>
     r.d >= from && r.d <= to &&
-    (!S.src || r.src === S.src) && (!S.co || r.co === S.co) &&
+    (!S.src || r.src === S.src) && (!S.co || r.co === S.co || r.bc === S.co) &&
     (!S.dir || (r.a > 0 ? 'Thu' : 'Chi') === S.dir) &&
     (!S.typ || r.typ === S.typ || nz(r.typ).includes(nz(S.typ).trim()) || nz(r.ct).includes(nz(S.typ).trim())),
   ), [R, S, from, to])
@@ -221,7 +221,8 @@ export default function TabKeHoachDongTien({ nhomItems }: { nhomItems?: NganSach
   // Ghi chú của khoản (nhập ở form Thêm/Sửa khoản) — lấy từ bản gốc theo mã, không cần đổi adapter
   const dmy = (d?: string) => (d ? d.split('-').reverse().join('/') : '')
   const gc = (r: Row) => (rawById.get(r.id)?.ghiChu ?? '').trim()
-  const sub = (r: Row) => (['pt', 'src', 'co'] as const).filter(f => f !== S.dim && V['c_' + f]).map(f => r[f]).filter(Boolean).join(' · ')
+  const sub = (r: Row) => (['pt', 'src', 'co'] as const).filter(f => f !== S.dim && V['c_' + f]).map(f => r[f]).filter(Boolean)
+    .concat(V.c_co && r.bc && r.bc !== r.co && S.dim !== 'co' ? [`Chi bởi ${r.bc}`] : []).join(' · ')
 
   const cell = (v: number, k: string, e?: string) => {
     const zero = !v || (k === 'x' && v >= 0)

@@ -48,8 +48,8 @@ const BORDER = { top: L, left: L, bottom: L, right: L }
 const NUM = '#,##0;-#,##0;"–"'
 const FONT = 'Calibri'
 
-const INFO_HEAD = { pt: 'Đối tác / NCC / KH', src: 'Nguồn thanh toán', co: 'Công ty', gc: 'Ghi chú' }
-const INFO_W    = { pt: 26, src: 30, co: 28, gc: 36 }
+const INFO_HEAD = { pt: 'Đối tác / NCC / KH', src: 'Nguồn thanh toán', co: 'Công ty', bc: 'Chi bởi', gc: 'Ghi chú' }
+const INFO_W    = { pt: 26, src: 30, co: 28, bc: 22, gc: 36 }
 
 const dmy = (d: string) => d.split('-').reverse().join('/')
 const utc = (s: string) => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d) }
@@ -73,8 +73,10 @@ function buildSheet(wb: Workbook, inp: XuatExcelInput, v: ViewInput): void {
 
   // ── cột ───────────────────────────────────────────────────
   const subF = (['pt', 'src', 'co'] as const).filter(f => f !== dim && V['c_' + f])
-  const info: { key: 'pt' | 'src' | 'co' | 'gc'; head: string; w: number }[] = [
+  const coBc = !!V.c_co && dim !== 'co' && rs.some(r => r.bc && r.bc !== r.co)
+  const info: { key: 'pt' | 'src' | 'co' | 'bc' | 'gc'; head: string; w: number }[] = [
     ...subF.map(f => ({ key: f, head: INFO_HEAD[f], w: INFO_W[f] })),
+    ...(coBc ? [{ key: 'bc' as const, head: INFO_HEAD.bc, w: INFO_W.bc }] : []),
     ...(V.c_gc ? [{ key: 'gc' as const, head: INFO_HEAD.gc, w: INFO_W.gc }] : []),
   ]
   const cInfo0 = 2 + ms.length + (V.tot ? 1 : 0)
@@ -195,7 +197,7 @@ function buildSheet(wb: Workbook, inp: XuatExcelInput, v: ViewInput): void {
     else {
       const mp = new Map<string, Row[]>()
       items.forEach(r => {
-        const kk = (r.a > 0 ? 'T' : 'C') + '|' + (V.c_n ? r.ct : '') + '|' + sub(r) + '|' + (V.c_gc ? gc(r) : '')
+        const kk = (r.a > 0 ? 'T' : 'C') + '|' + (V.c_n ? r.ct : '') + '|' + sub(r) + '|' + (V.c_gc ? gc(r) : '') + '|' + (r.bc ?? '')
         if (!mp.has(kk)) mp.set(kk, [])
         mp.get(kk)!.push(r)
       })
@@ -222,7 +224,7 @@ function buildSheet(wb: Workbook, inp: XuatExcelInput, v: ViewInput): void {
       }
       info.forEach((x, i) => {
         const c = dr.getCell(cInfo0 + i)
-        c.value = x.key === 'gc' ? gc(r0) : r0[x.key]
+        c.value = x.key === 'gc' ? gc(r0) : x.key === 'bc' ? (r0.bc && r0.bc !== r0.co ? r0.bc : '') : r0[x.key]
         c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }
         c.font = { name: FONT, size: 10, color: { argb: 'FF4B5563' } }
       })

@@ -23,6 +23,7 @@ export interface DongTienKHRow {
   og?: string        // ngày kế hoạch gốc (chỉ có khi đã dời ngày)
   ls?: DoiNgay[]     // lịch sử dời ngày
   pl?: string        // lý do Pending (nếu có)
+  bc?: string        // "Bên chi tiền" — chỉ có khi khác công ty ghi sổ (VD vay cá nhân do Sơn An Group trả)
 }
 
 /** Số ngày lệch so với ngày gốc: > 0 gia hạn, < 0 trả trước, 0 = không dời */
@@ -38,8 +39,18 @@ const CO_LABEL: Record<string, string> = {
   'ĐTSA':     'Công ty CP ĐTPT Đô Thị Sơn An',
   'YANA':     'Yana Dragon Holdings',
   'Sao Việt': 'Sao Việt',
+  'SAG':      'Sơn An Group',          // chỉ đổi tên HIỂN THỊ — dữ liệu gốc (entity = 'SAG') giữ nguyên nên không mất liên kết
   'Cá nhân':  'Cá nhân',
 }
+
+// ── BÊN CHI TIỀN ──────────────────────────────────────────────
+// Khoản CHI ghi ở pháp nhân (khoá bên trái) nhưng tiền do pháp nhân khác (bên phải) trả.
+// VD: trả gốc/lãi vay Cá nhân do SAG (Sơn An Group) trả → { 'Cá nhân': 'SAG' }.
+// Thêm/sửa 1 dòng ở đây là toàn bộ báo cáo tự theo, không phải sửa từng khoản.
+export const BEN_CHI_THAY: Record<string, string> = { 'Cá nhân': 'SAG' }
+// true  → cách xem "Công ty" gom các khoản đó vào bên chi tiền (Sơn An Group)
+// false → vẫn gom theo pháp nhân ghi sổ (Cá nhân), chỉ hiện thêm "Chi bởi …" và lọc được theo bên chi
+export const GOM_CONG_TY_THEO_BEN_CHI = false
 
 const KMCP_LABEL: Record<string, string> = Object.fromEntries(
   DEFAULT_ITEMS.filter(d => d.kmcp).map(d => [d.kmcp as string, d.dien_giai]),
@@ -162,11 +173,13 @@ export function gopTenNhom(rows: DongTienKHRow[], canon: { sec: 'B' | 'C'; label
 export function khoanToRow(k: KhoanDongTien, resolveNhom?: NhomResolver): DongTienKHRow {
   const thu   = k.loai === 'thu'
   const label = KMCP_LABEL[k.nhom as string] ?? k.nhomChaLabel ?? String(k.nhom)
+  const bcKey = !thu ? BEN_CHI_THAY[k.entity] : undefined
+  const bc    = bcKey ? (CO_LABEL[bcKey] ?? bcKey) : undefined
   return {
     id:  k.id,
     d:   k.ngayDuKien,
     src: k.nguonThanhToan ?? `Quỹ - ${k.entity}`,
-    co:  CO_LABEL[k.entity] ?? k.entity,
+    co:  (GOM_CONG_TY_THEO_BEN_CHI && bc) ? bc : (CO_LABEL[k.entity] ?? k.entity),
     typ: k.loaiGiaoDich   ?? `${thu ? 'Thu' : 'Chi'} - ${k.entity} - ${label}`,
     pt:  k.doiTac ?? '',
     ct:  chuanHoaNoiDung(k.moTa, thu),
@@ -175,6 +188,7 @@ export function khoanToRow(k: KhoanDongTien, resolveNhom?: NhomResolver): DongTi
     og:  k.ngayGoc,
     ls:  k.lichSuDoiNgay,
     pl:  k.lyDoPending,
+    bc:  GOM_CONG_TY_THEO_BEN_CHI ? undefined : bc,
   }
 }
 
