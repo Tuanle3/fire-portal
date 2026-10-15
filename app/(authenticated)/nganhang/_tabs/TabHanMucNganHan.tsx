@@ -19,6 +19,9 @@ import type { BankName, EntityType } from '@/lib/han-muc-types'
 import {
   exportBoHoSoNganHanExcel, exportKhungNganHanExcel, exportDanhSachKhungNganHanExcel,
 } from '@/lib/han-muc-excel-export'
+import { exportLichThuThangExcel } from '@/lib/han-muc-lich-thu-excel'
+import BangGocLaiTheoThang from '@/components/han-muc/BangGocLaiTheoThang'
+import type { GocLaiRow } from '@/lib/goc-lai-theo-thang'
 import { useDonViTien } from '@/lib/don-vi-tien-context'
 import EntitySelect from '@/components/han-muc/EntitySelect'
 import { useFillHeight, stickyTh, stickyTf, fillCard, MiniStat } from '@/components/han-muc/FillLayout'
@@ -1128,6 +1131,7 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
   const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [calMode, setCalMode] = useState<'ky' | 'thang'>('ky')   // 'ky' = danh sách từng kỳ, 'thang' = bảng gốc/lãi theo tháng
   const [timBo, setTimBo] = useState('')
   const [thuKy, setThuKy]                 = useState<KyThuNH | null>(null)
   const [selKy, setSelKy]                 = useState<Set<string>>(new Set())
@@ -1201,6 +1205,12 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
     const gocDaTra = tinhGocDaTraBoHoSo(bo.id, kyList, tgList)
     return { bo, gocDaTra, duNo: Math.max(0, bo.soTienGiaiNgan - gocDaTra), kyQuaHan: kyList.filter(k => k.trangThai === 'qua-han').length }
   }), [boList, kyThuMap, traGocList])
+  // Chuẩn hoá kỳ thu → dòng cho bảng gốc/lãi theo tháng (mục = bộ hồ sơ)
+  const gocLaiRows = useMemo<GocLaiRow[]>(() => boList.flatMap(bo =>
+    (kyThuMap[bo.id] ?? []).map(k => ({
+      ngay: k.ngayThu, item: bo.soBoHoSo ?? bo.id, goc: k.gocThu, lai: k.laiThu, tong: k.tongThu,
+      daXong: k.trangThai === 'da-thu', daThu: k.trangThai === 'da-thu' ? (k.tongThucThu ?? k.tongThu) : undefined,
+    }))), [boList, kyThuMap])
   // Tìm nhanh: gõ đủ số bộ hồ sơ hoặc vài số đuôi (khớp ở bất kỳ vị trí, không phân biệt hoa/thường)
   const boRowsLoc = useMemo(() => {
     const q = timBo.trim().toLowerCase().replace(/\s+/g, '')
@@ -1309,6 +1319,17 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
               <input type="month" value={calMonth} onChange={e => e.target.value && setCalMonth(e.target.value)}
                 style={{ ...inputBaseCls, width: 140 }} />
               <button className="btn-ghost" onClick={nextMonth} style={{ padding: '3px 9px' }}>›</button>
+              <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
+                {([['ky', 'Theo kỳ'], ['thang', 'Gốc/lãi theo tháng']] as const).map(([k, lb]) => (
+                  <button key={k} onClick={() => setCalMode(k)}
+                    style={{ border: 'none', cursor: 'pointer', padding: '4px 10px', fontSize: 12, fontWeight: calMode === k ? 700 : 500,
+                      background: calMode === k ? '#1C3557' : '#fff', color: calMode === k ? '#fff' : '#475569' }}>{lb}</button>
+                ))}
+              </div>
+              <button className="btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} disabled={kyThang.length === 0}
+                onClick={() => exportLichThuThangExcel({ khung, boList, kyList: kyThang, month: calMonth })}>
+                <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Xuất Excel tháng {calMonth.slice(5)}/{calMonth.slice(0, 4)}
+              </button>
               <label style={{ fontSize: 12, color: 'var(--nh-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                 <input type="checkbox" checked={showQuaHanCu} onChange={e => setShowQuaHanCu(e.target.checked)} />
                 Kèm kỳ chưa thu tháng trước
@@ -1322,7 +1343,7 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
         </div>
 
         {/* Thanh thu hàng loạt (cố định, không cuộn) */}
-        {view === 'calendar' && kyChuaThu.length > 0 && (
+        {view === 'calendar' && calMode === 'ky' && kyChuaThu.length > 0 && (
           <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', background: kyDaChon.length ? '#eff6ff' : '#f8fafc', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', fontSize: 12.5 }}>
             <span>Đã chọn <b>{kyDaChon.length}</b>/{kyChuaThu.length} kỳ · <b>{fmt(tongDaChon)} đ</b></span>
             <span style={{ marginLeft: 'auto', color: 'var(--nh-muted)' }}>Ngày thu:</span>
@@ -1406,7 +1427,12 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
             </table>
           )}
 
-          {view === 'calendar' && (
+          {view === 'calendar' && calMode === 'thang' && (
+            <BangGocLaiTheoThang rows={gocLaiRows} calMonth={calMonth} onPickMonth={setCalMonth}
+              title={`Gốc/lãi theo tháng — ${khung.soHopDong}`} fileName={`GocLai_${khung.soHopDong.replace(/[\\/:*?"<>|\s]+/g, '_')}`} />
+          )}
+
+          {view === 'calendar' && calMode === 'ky' && (
             kyThang.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 32, color: 'var(--nh-muted2)', fontSize: 13 }}>
                 Không có kỳ thu nào trong tháng này

@@ -27,6 +27,8 @@ import { HopDongTinDung, KyTraNo } from '@/lib/han-muc-types'
 import { HanMucNganHan, BoHoSoGiaiNgan, KyThuNH } from '@/lib/han-muc-ngan-han-types'
 import { exportKeHoachDongTienExcel, DongTienRow } from '@/lib/ke-hoach-dong-tien-excel-export'
 import { useFillHeight } from '@/components/han-muc/FillLayout'
+import BangGocLaiTheoThang from '@/components/han-muc/BangGocLaiTheoThang'
+import type { GocLaiRow } from '@/lib/goc-lai-theo-thang'
 
 // ── Badge trạng thái — gộp theo NHÓM ý nghĩa (không phân biệt câu chữ thu/trả) ──
 type StatusCat = 'pending' | 'near' | 'overdue' | 'done' | 'restructured'
@@ -87,7 +89,7 @@ const ALL_COLS: ColDef[] = [
 ]
 
 // ── Chế độ xem ───────────────────────────────────────────────
-type ViewMode = 'chitiet' | 'tonghop-nganHang' | 'tonghop-phapNhan'
+type ViewMode = 'chitiet' | 'theo-thang' | 'tonghop-nganHang' | 'tonghop-phapNhan'
 
 // ── Dropdown ẩn/hiện cột ─────────────────────────────────────
 function ColToggleDropdown({ cols, visible, onChange }: {
@@ -439,6 +441,14 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
 
   const { ref: fillRef, h: fillH } = useFillHeight([])
 
+  // ── Dòng cho bảng "Gốc/lãi theo tháng": theo đúng bộ lọc đang chọn; "nhóm theo" = nhóm cấp trên ──
+  const gocLaiRows = useMemo<GocLaiRow[]>(() => sortedRows.map(r => ({
+    ngay: r.ngay,
+    item: r.soBoHoSo ? `${r.soHopDong} · ${r.soBoHoSo}` : r.soHopDong,
+    group: nhom === 'ngay' ? undefined : nhom === 'loai-vay' ? r.loaiVay : nhom === 'ngan-hang' ? r.nganHang : r.entity,
+    goc: r.goc, lai: r.lai, tong: r.tong, daXong: r.daXong,
+  })), [sortedRows, nhom])
+
   const handleExport = () => {
     const rows: DongTienRow[] = sortedRows.map(r => ({
       ngay: r.ngay, loaiVay: r.loaiVay, entity: r.entity, nganHang: r.nganHang, chiNhanh: r.chiNhanh,
@@ -531,6 +541,7 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
           <div style={{ display: 'inline-flex', border: '1px solid #dbe2ea', borderRadius: 8, overflow: 'hidden' }}>
             {([
               { key: 'chitiet',          label: 'Chi tiết',       icon: <LayoutList size={12} /> },
+              { key: 'theo-thang',       label: 'Gốc/lãi theo tháng', icon: <BarChart3 size={12} /> },
               { key: 'tonghop-nganHang', label: 'Theo NH',        icon: <BarChart3 size={12} /> },
               { key: 'tonghop-phapNhan', label: 'Theo pháp nhân', icon: <BarChart3 size={12} /> },
             ] as { key: ViewMode; label: string; icon: React.ReactNode }[]).map(v => (
@@ -551,7 +562,13 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
       </div>
 
       {/* ── Bảng tổng hợp ── */}
-      {viewMode !== 'chitiet' && (
+      {viewMode === 'theo-thang' && (
+        <div className="nhp-stick" style={{ flex: '1 1 0', minHeight: 0, overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+          <BangGocLaiTheoThang rows={gocLaiRows} title={`Gốc/lãi theo tháng ${tuThang} → ${denThang}`} fileName={`GocLai_${tuThang}_${denThang}`} />
+        </div>
+      )}
+
+      {(viewMode === 'tonghop-nganHang' || viewMode === 'tonghop-phapNhan') && (
         <BangTongHopView
           rows={sortedRows}
           groupBy={viewMode === 'tonghop-nganHang' ? 'nganHang' : 'phapNhan'}
