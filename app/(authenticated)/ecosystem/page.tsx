@@ -23,7 +23,7 @@ const DEFAULT_COMPANIES: OrgCompany[] = [
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type OrgDept    = { key: string; name: string; sub: string }
-type OrgCompany = { key: string; code: string; don_vi: string; name: string; sector: string; von: number }
+type OrgCompany = { key: string; code: string; don_vi: string; name: string; sector: string; von: number; order?: number }
 
 type CoDongRow  = {
   _key: string; Don_vi: string; Cong_ty: string; Loai: string
@@ -103,6 +103,10 @@ export default function EcosystemPage() {
   const [coSector,  setCoSector]  = useState('')
   const [coVon,     setCoVon]     = useState('')
   const [orgSaving, setOrgSaving] = useState(false)
+  const [dragIdx, setDragIdx] = useState<number|null>(null)
+  const [overIdx, setOverIdx] = useState<number|null>(null)
+  const [editDeptKey, setEditDeptKey] = useState<string|null>(null)
+  const [editCoKey,   setEditCoKey]   = useState<string|null>(null)
   const [orgMsg,    setOrgMsg]    = useState('')
 
   // Company detail modal
@@ -127,7 +131,9 @@ export default function EcosystemPage() {
       ])
       const rows    = snapCoDong.exists() ? toCoDong(snapCoDong.val())  : []
       const depts   = snapDepts.exists()  ? fbArr<OrgDept>(snapDepts.val()) : []
-      const coList  = snapCos.exists()    ? fbArr<OrgCompany>(snapCos.val()) : []
+      const coList  = snapCos.exists()
+        ? fbArr<OrgCompany>(snapCos.val()).map((c, i) => ({ c, i })).sort((a, b) => (a.c.order ?? a.i) - (b.c.order ?? b.i)).map(x => x.c)
+        : []
       setCoDongRows(rows)
       setOrgDepts(depts.length ? depts : DEFAULT_DEPTS.map((d,i) => ({ ...d, key: String(i) })))
       setOrgCos(coList.length ? coList : DEFAULT_COMPANIES)
@@ -167,6 +173,93 @@ export default function EcosystemPage() {
     loadAll()
   }
 
+  // ── Org chart: edit dept ─────────────────────────────────────────────────
+  function startEditDept(d: OrgDept) {
+    setEditDeptKey(d.key || d.name); setDeptName(d.name); setDeptSub(d.sub)
+    setEditCoKey(null); setOrgPanel('dept'); setOrgMsg('')
+  }
+  async function updateDept() {
+    if (!deptName || !editDeptKey) return
+    setOrgSaving(true)
+    const db = getDb()
+    let snap = await get(ref(db, 'Data_OrgDepts'))
+    if (!snap.exists()) {
+      for (const d of DEFAULT_DEPTS) await push(ref(db, 'Data_OrgDepts'), d)
+      snap = await get(ref(db, 'Data_OrgDepts'))
+    }
+    let key = editDeptKey
+    const val = snap.val() as Record<string, {name:string; sub:string}>
+    if (!val[key]) {
+      const found = Object.entries(val).find(([, v]) => v.name === editDeptKey)
+      if (found) key = found[0]
+    }
+    await set(ref(db, `Data_OrgDepts/${key}`), { name: deptName, sub: deptSub })
+    setEditDeptKey(null); setDeptName(''); setDeptSub(''); setOrgPanel('none')
+    setOrgMsg('✓ Đã cập nhật Ban'); setOrgSaving(false)
+    loadAll()
+  }
+
+  // ── Org chart: edit company ──────────────────────────────────────────────
+  function startEditCompany(c: OrgCompany) {
+    setEditCoKey(c.key || c.don_vi); setEditDeptKey(null)
+    setCoCode(c.code); setCoDonVi(c.don_vi); setCoName(c.name); setCoSector(c.sector || ''); setCoVon(String(c.von ?? ''))
+    setOrgPanel('company'); setOrgMsg('')
+  }
+  async function updateCompany() {
+    if (!coCode || !coDonVi || !coName || !editCoKey) return
+    setOrgSaving(true)
+    const db = getDb()
+    let snap = await get(ref(db, 'Data_CongTy'))
+    if (!snap.exists()) {
+      for (const c of DEFAULT_COMPANIES) {
+        if (c.don_vi) await push(ref(db, 'Data_CongTy'), { code:c.code, don_vi:c.don_vi, name:c.name, sector:c.sector, von:c.von })
+      }
+      snap = await get(ref(db, 'Data_CongTy'))
+    }
+    let key = editCoKey
+    const val = snap.val() as Record<string, {don_vi:string}>
+    if (!val[key]) {
+      const found = Object.entries(val).find(([, v]) => v.don_vi === editCoKey)
+      if (found) key = found[0]
+    }
+    const oldOrder = (snap.val() as Record<string, {order?: number}>)[key]?.order
+    await set(ref(db, `Data_CongTy/${key}`), { code: coCode.toUpperCase(), don_vi: coDonVi, name: coName, sector: coSector, von: parseFloat(coVon)||0, ...(oldOrder !== undefined ? { order: oldOrder } : {}) })
+    setEditCoKey(null); setCoCode(''); setCoDonVi(''); setCoName(''); setCoSector(''); setCoVon(''); setOrgPanel('none')
+    setOrgMsg('✓ Đã cập nhật Công ty'); setOrgSaving(false)
+    loadAll()
+  }
+  function cancelOrgPanel() {
+    setOrgPanel('none'); setEditDeptKey(null); setEditCoKey(null)
+    setDeptName(''); setDeptSub(''); setCoCode(''); setCoDonVi(''); setCoName(''); setCoSector(''); setCoVon('')
+  }
+
+  function displayCosRef(): OrgCompany[] { return orgCos.length ? orgCos : DEFAULT_COMPANIES }
+
+  // ── Org chart: drag & drop reorder companies ─────────────────────────────
+  async function reorderCompanies(from: number, to: number) {
+    if (from === to) return
+    const list = [...displayCosRef()]
+    const [moved] = list.splice(from, 1)
+    list.splice(to, 0, moved)
+    setOrgCos(list.map((c, i) => ({ ...c, order: i })))   // cập nhật ngay trên màn hình
+    const db = getDb()
+    let snap = await get(ref(db, 'Data_CongTy'))
+    if (!snap.exists()) {
+      for (const c of DEFAULT_COMPANIES) {
+        if (c.don_vi) await push(ref(db, 'Data_CongTy'), { code:c.code, don_vi:c.don_vi, name:c.name, sector:c.sector, von:c.von })
+      }
+      snap = await get(ref(db, 'Data_CongTy'))
+    }
+    const val = snap.val() as Record<string, { don_vi: string }>
+    const byDonVi: Record<string, string> = {}
+    Object.entries(val).forEach(([k, v]) => { byDonVi[v.don_vi] = k })
+    await Promise.all(list.map((c, i) => {
+      const k = (c.key && val[c.key]) ? c.key : byDonVi[c.don_vi]
+      return k ? set(ref(db, `Data_CongTy/${k}/order`), i) : Promise.resolve()
+    }))
+    loadAll()
+  }
+
   // ── Org chart: add company ───────────────────────────────────────────────
   async function addCompany() {
     if (!coCode || !coDonVi || !coName) return
@@ -178,7 +271,8 @@ export default function EcosystemPage() {
         if (c.don_vi) await push(ref(db, 'Data_CongTy'), { code:c.code, don_vi:c.don_vi, name:c.name, sector:c.sector, von:c.von })
       }
     }
-    await push(ref(db, 'Data_CongTy'), { code: coCode.toUpperCase(), don_vi: coDonVi, name: coName, sector: coSector, von: parseFloat(coVon)||0 })
+    const nextOrder = Math.max(-1, ...displayCosRef().map((c, i) => c.order ?? i)) + 1
+    await push(ref(db, 'Data_CongTy'), { code: coCode.toUpperCase(), don_vi: coDonVi, name: coName, sector: coSector, von: parseFloat(coVon)||0, order: nextOrder })
     setCoCode(''); setCoDonVi(''); setCoName(''); setCoSector(''); setCoVon('')
     setOrgMsg('✓ Đã thêm Công ty'); setOrgSaving(false)
     loadAll()
@@ -298,6 +392,12 @@ export default function EcosystemPage() {
         .org-del-btn  { position:absolute; top:-7px; right:-7px; width:18px; height:18px;
           border-radius:50%; background:#DC2626; color:#fff; border:none; cursor:pointer;
           font-size:10px; display:flex; align-items:center; justify-content:center; line-height:1; }
+        .org-edit-btn { position:absolute; top:-7px; right:15px; width:18px; height:18px;
+          border-radius:50%; background:#1C3557; color:#fff; border:none; cursor:pointer;
+          font-size:10px; display:flex; align-items:center; justify-content:center; line-height:1; }
+        .org-co-col[draggable="true"] { cursor:grab; }
+        .org-co-col.dragging { opacity:.4; }
+        .org-co-col.drag-over .org-co-node { outline:2px dashed #1C3557; outline-offset:3px; background:#E8F0FA; }
         .org-add-row { display:flex; justify-content:center; gap:10px; margin-top:20px; padding-top:16px; border-top:1px dashed #D0DCE8; }
         .org-add-btn { padding:7px 16px; border:1.5px dashed #1C3557; background:transparent;
           color:#1C3557; border-radius:8px; font-size:11.5px; font-weight:600; cursor:pointer;
@@ -450,6 +550,7 @@ export default function EcosystemPage() {
                   <div key={d.key} className="org-dept-col">
                     <div className="org-dept-line" />
                     <div className="org-dept-node">
+                      {canEdit && <button className="org-edit-btn" onClick={() => startEditDept(d)} title="Sửa">✎</button>}
                       {canEdit && <button className="org-del-btn" onClick={() => deleteDept(d.key)} title="Xóa">✕</button>}
                       {d.name}
                       <div className="org-dept-sub">{d.sub}</div>
@@ -461,10 +562,18 @@ export default function EcosystemPage() {
 
               {/* Companies */}
               <div className="org-co-row">
-                {displayCos.map(c => (
-                  <div key={c.key || c.don_vi} className="org-co-col">
+                {displayCos.map((c, idx) => (
+                  <div key={c.key || c.don_vi}
+                    className={`org-co-col${dragIdx===idx?' dragging':''}${overIdx===idx&&dragIdx!==null&&dragIdx!==idx?' drag-over':''}`}
+                    draggable={canEdit}
+                    title={canEdit ? 'Kéo để đổi vị trí' : undefined}
+                    onDragStart={() => setDragIdx(idx)}
+                    onDragOver={e => { if (dragIdx===null) return; e.preventDefault(); if (overIdx!==idx) setOverIdx(idx) }}
+                    onDrop={e => { e.preventDefault(); if (dragIdx!==null) reorderCompanies(dragIdx, idx); setDragIdx(null); setOverIdx(null) }}
+                    onDragEnd={() => { setDragIdx(null); setOverIdx(null) }}>
                     <div className="org-co-line" />
                     <div className="org-co-node">
+                      {canEdit && <button className="org-edit-btn" onClick={() => startEditCompany(c)} title="Sửa">✎</button>}
                       {canEdit && c.key && <button className="org-del-btn" onClick={() => deleteCompany(c.key)} title="Xóa">✕</button>}
                       {c.name}
                       <div className="org-co-label">{c.sector || 'Công ty TV'}</div>
@@ -477,10 +586,10 @@ export default function EcosystemPage() {
             {/* Add buttons */}
             {canEdit && (
               <div className="org-add-row">
-                <button className="org-add-btn" onClick={() => { setOrgPanel(orgPanel==='dept'?'none':'dept'); setOrgMsg('') }}>
+                <button className="org-add-btn" onClick={() => { cancelOrgPanel(); setOrgPanel(orgPanel==='dept'&&!editDeptKey?'none':'dept'); setOrgMsg('') }}>
                   ➕ Thêm Ban
                 </button>
-                <button className="org-add-btn" onClick={() => { setOrgPanel(orgPanel==='company'?'none':'company'); setOrgMsg('') }}>
+                <button className="org-add-btn" onClick={() => { cancelOrgPanel(); setOrgPanel(orgPanel==='company'&&!editCoKey?'none':'company'); setOrgMsg('') }}>
                   🏢 Thêm Công ty
                 </button>
                 {orgMsg && <span className="org-msg">{orgMsg}</span>}
@@ -490,7 +599,7 @@ export default function EcosystemPage() {
             {/* Add dept panel */}
             {canEdit && orgPanel === 'dept' && (
               <div className="org-panel">
-                <div className="org-panel-title">➕ Thêm Ban mới vào sơ đồ</div>
+                <div className="org-panel-title">{editDeptKey ? '✎ Sửa Ban' : '➕ Thêm Ban mới vào sơ đồ'}</div>
                 <div className="org-panel-row2">
                   <div className="eco-field">
                     <label className="eco-label">Tên Ban</label>
@@ -502,10 +611,10 @@ export default function EcosystemPage() {
                   </div>
                 </div>
                 <div className="org-panel-actions">
-                  <button className="eco-btn eco-btn-primary" onClick={addDept} disabled={orgSaving||!deptName}>
-                    {orgSaving?'Đang lưu...':'💾 Thêm Ban'}
+                  <button className="eco-btn eco-btn-primary" onClick={editDeptKey ? updateDept : addDept} disabled={orgSaving||!deptName}>
+                    {orgSaving?'Đang lưu...':(editDeptKey?'💾 Lưu thay đổi':'💾 Thêm Ban')}
                   </button>
-                  <button className="eco-btn eco-btn-danger" onClick={() => setOrgPanel('none')}>Hủy</button>
+                  <button className="eco-btn eco-btn-danger" onClick={cancelOrgPanel}>Hủy</button>
                 </div>
               </div>
             )}
@@ -513,7 +622,7 @@ export default function EcosystemPage() {
             {/* Add company panel */}
             {canEdit && orgPanel === 'company' && (
               <div className="org-panel">
-                <div className="org-panel-title">🏢 Thêm Công ty thành viên mới</div>
+                <div className="org-panel-title">{editCoKey ? '✎ Sửa Công ty thành viên' : '🏢 Thêm Công ty thành viên mới'}</div>
                 <div className="org-panel-row3">
                   <div className="eco-field">
                     <label className="eco-label">Mã viết tắt (Don_vi)</label>
@@ -537,10 +646,10 @@ export default function EcosystemPage() {
                   <input className="eco-input" value={coSector} onChange={e=>setCoSector(e.target.value)} placeholder="PHÁT TRIỂN BẤT ĐỘNG SẢN"/>
                 </div>
                 <div className="org-panel-actions">
-                  <button className="eco-btn eco-btn-primary" onClick={addCompany} disabled={orgSaving||!coCode||!coDonVi||!coName}>
-                    {orgSaving?'Đang lưu...':'💾 Thêm Công ty'}
+                  <button className="eco-btn eco-btn-primary" onClick={editCoKey ? updateCompany : addCompany} disabled={orgSaving||!coCode||!coDonVi||!coName}>
+                    {orgSaving?'Đang lưu...':(editCoKey?'💾 Lưu thay đổi':'💾 Thêm Công ty')}
                   </button>
-                  <button className="eco-btn eco-btn-danger" onClick={() => setOrgPanel('none')}>Hủy</button>
+                  <button className="eco-btn eco-btn-danger" onClick={cancelOrgPanel}>Hủy</button>
                 </div>
               </div>
             )}
