@@ -467,7 +467,7 @@ export default function EcosystemPage() {
                     <div className="org-co-node">
                       {canEdit && c.key && <button className="org-del-btn" onClick={() => deleteCompany(c.key)} title="Xóa">✕</button>}
                       {c.name}
-                      <div className="org-co-label">Công ty TV</div>
+                      <div className="org-co-label">{c.sector || 'Công ty TV'}</div>
                     </div>
                   </div>
                 ))}
