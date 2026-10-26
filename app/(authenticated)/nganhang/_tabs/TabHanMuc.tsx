@@ -12,6 +12,8 @@ import { useDonViTien } from '@/lib/don-vi-tien-context'
 import { Pencil, Check, X, Trash2, FileSpreadsheet, ChevronDown, ChevronRight } from 'lucide-react'
 import { useFillHeight, MiniStat, fillCard } from '@/components/han-muc/FillLayout'
 import { subscribeCustomEntities } from '@/lib/han-muc-entities-store'
+import SoTraNoTungLan from '@/components/han-muc/SoTraNoTungLan'
+import { subscribeAllTraTungLan, type TraTungLan } from '@/lib/han-muc-tra-tung-lan-store'
 
 // Pháp nhân mặc định. Pháp nhân tự thêm (VD: "Vay ngoài") lấy từ Firestore, tự hiện thêm sau "Cá nhân".
 const VAY_NGOAI = 'Vay ngoài'   // tab riêng, tách khỏi Tín dụng dài hạn
@@ -185,6 +187,26 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
     return ['all', ...ENTITY_MAC_DINH, ...them, ...dangChon]
   }, [customEntities, entityFilter])
 
+  // Vay ngoài: số liệu "đã trả" lấy từ sổ trả từng lần (không dùng lịch kỳ)
+  const [tungLanAll, setTungLanAll] = useState<TraTungLan[]>([])
+  useEffect(() => (vayNgoai ? subscribeAllTraTungLan(setTungLanAll) : undefined), [vayNgoai])
+  const tungLanMap = useMemo(() => {
+    const m: Record<string, { goc: number; lai: number; n: number; nGoc: number; nLai: number }> = {}
+    tungLanAll.forEach(r => {
+      const x = m[r.hopDongId] ?? (m[r.hopDongId] = { goc: 0, lai: 0, n: 0, nGoc: 0, nLai: 0 })
+      x.goc += r.goc; x.lai += r.lai; x.n++; if (r.goc > 0) x.nGoc++; if (r.lai > 0) x.nLai++
+    })
+    return m
+  }, [tungLanAll])
+  const psOf = (h: HopDongTinDung) => {
+    if (!vayNgoai) return getPayStats(kyMap[h.id], h)
+    const t = tungLanMap[h.id] ?? { goc: 0, lai: 0, n: 0, nGoc: 0, nLai: 0 }
+    return {
+      soKyGocDaTra: t.nGoc, soKyLaiDaTra: t.nLai, tongKyGoc: t.n, tongKyLai: t.n, tongKy: t.n,
+      goc: t.goc, lai: t.lai, conLai: Math.max(0, h.soTienGiaiNgan - t.goc),
+    }
+  }
+
   const handleDelete = async (h: HopDongTinDung) => {
     const label = h.soBoHoSo || h.soHopDong
     if (!confirm(`Xoá hợp đồng "${label}"? Toàn bộ lịch trả nợ liên quan sẽ bị xoá vĩnh viễn.`)) return
@@ -237,8 +259,8 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
   )
   const tongDuNo       = useMemo(() => nonKhungList.reduce((s, h) => s + h.soTienGiaiNgan, 0), [nonKhungList])
   const tongDuNoConLai = useMemo(
-    () => nonKhungList.reduce((s, h) => s + getPayStats(kyMap[h.id], h).conLai, 0),
-    [nonKhungList, kyMap],
+    () => nonKhungList.reduce((s, h) => s + psOf(h).conLai, 0),
+    [nonKhungList, kyMap, tungLanMap, vayNgoai], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const laiSuatBQ = useMemo(() => {
     if (!nonKhungList.length) return 0
@@ -276,12 +298,16 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
               {selected.nguoiVay ? ` · ${selected.nguoiVay}` : ''}
             </span>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <GocCungEditor hopDong={selected} onSaved={() => {/* Firestore listener tự refresh */}} />
+              {!vayNgoai && <GocCungEditor hopDong={selected} onSaved={() => {/* Firestore listener tự refresh */}} />}
               <button className="btn-ghost" style={{ padding: '4px 10px' }} onClick={() => { setEditing(selected); setFormOpen(true) }}>Sửa hợp đồng</button>
-              <button className="btn-ghost" style={{ padding: '4px 10px' }} onClick={() => exportHopDongDaiHanExcel(selected, kyList)}>
-                <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Xuất Excel
-              </button>
-              <button className="btn-primary" style={{ padding: '4px 12px' }} onClick={() => setCoCauOpen(true)}>↻ Cơ cấu nợ</button>
+              {!vayNgoai && (
+                <>
+                  <button className="btn-ghost" style={{ padding: '4px 10px' }} onClick={() => exportHopDongDaiHanExcel(selected, kyList)}>
+                    <FileSpreadsheet size={13} style={{ marginRight: 4, verticalAlign: -2 }} />Xuất Excel
+                  </button>
+                  <button className="btn-primary" style={{ padding: '4px 12px' }} onClick={() => setCoCauOpen(true)}>↻ Cơ cấu nợ</button>
+                </>
+              )}
               <button className="btn-danger" style={{ padding: '4px 10px' }} disabled={deletingId === selected.id}
                 onClick={() => handleDelete(selected)} title="Xoá hợp đồng">
                 <Trash2 size={13} style={{ marginRight: 4, verticalAlign: -2 }} />{deletingId === selected.id ? 'Đang xoá...' : 'Xoá'}
@@ -307,12 +333,12 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
             ) : (
               <MiniStat label="Lãi suất" value={`${selected.laiSuat}%/năm`} sub="cố định" />
             )}
-            <MiniStat label="Kỳ trả" value={selected.kyTra === 'monthly' ? 'Hàng tháng' : 'Hàng quý'} />
+            {!vayNgoai && <MiniStat label="Kỳ trả" value={selected.kyTra === 'monthly' ? 'Hàng tháng' : 'Hàng quý'} />}
             <MiniStat label="Đáo hạn" value={selected.ngayDaoHan} />
             {selected.gocTraCoDinh && <MiniStat label="Gốc cứng/kỳ (NH)" value={`${fmt(selected.gocTraCoDinh)} đ`} />}
           </div>
 
-          {kyList.length > 0 && (
+          {!vayNgoai && kyList.length > 0 && (
             <div style={{ ...strip, background: '#f8fafc' }}>
               <MiniStat label="Số kỳ đã trả" value={`Gốc ${soKyGocDaTra}/${detailTongKyGoc}`}
                 sub={`Lãi ${soKyLaiDaTra}/${detailTongKyLai}${kyConLai > 0 ? ` · còn ${kyConLai}` : ' · hết'}`} color="#1C3557" />
@@ -326,9 +352,15 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
 
         {/* ── Lịch trả nợ: chỉ vùng này cuộn ── */}
         <div className="nh-card" style={fillCard}>
-          <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
-            <LichTraNoTable hopDong={selected} rows={kyList} fill />
-          </div>
+          {vayNgoai ? (
+            <div style={{ flex: '1 1 0', minHeight: 0, overflow: 'auto' }}>
+              <SoTraNoTungLan hopDong={selected} />
+            </div>
+          ) : (
+            <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
+              <LichTraNoTable hopDong={selected} rows={kyList} fill />
+            </div>
+          )}
         </div>
 
         <HopDongForm
@@ -343,7 +375,7 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
 
   // Tổng cộng cho dòng cuối bảng (chỉ HĐ vay thật, không tính khung — khớp KPI)
   const tot = nonKhungList.reduce((a, h) => {
-    const ps = getPayStats(kyMap[h.id], h)
+    const ps = psOf(h)
     a.gn += h.soTienGiaiNgan; a.goc += ps.goc; a.lai += ps.lai; a.con += ps.conLai
     return a
   }, { gn: 0, goc: 0, lai: 0, con: 0 })
@@ -547,7 +579,7 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
             </thead>
             <tbody>
               {hopDongs.map(h => {
-                const ps = getPayStats(kyMap[h.id], h)
+                const ps = psOf(h)
                 return (
                   <tr key={h.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(h)}>
                     <td style={{ fontWeight: 700, color: 'var(--nh-navy)' }}>
@@ -571,7 +603,9 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
                       )}
                     </td>
                     <td className="r" style={{ whiteSpace: 'nowrap' }}>
-                      {ps.tongKy > 0 ? (
+                      {vayNgoai ? (
+                        ps.tongKy > 0 ? <div style={{ fontWeight: 700, color: '#1C3557', fontSize: 12 }}>{ps.tongKy} lần</div> : '—'
+                      ) : ps.tongKy > 0 ? (
                         <>
                           <div style={{ fontWeight: 700, color: '#1C3557', fontSize: 12 }}>
                             {ps.soKyGocDaTra} / {ps.tongKyGoc}
