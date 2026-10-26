@@ -14,6 +14,7 @@ import { useFillHeight, MiniStat, fillCard } from '@/components/han-muc/FillLayo
 import { subscribeCustomEntities } from '@/lib/han-muc-entities-store'
 
 // Pháp nhân mặc định. Pháp nhân tự thêm (VD: "Vay ngoài") lấy từ Firestore, tự hiện thêm sau "Cá nhân".
+const VAY_NGOAI = 'Vay ngoài'   // tab riêng, tách khỏi Tín dụng dài hạn
 const ENTITY_MAC_DINH: EntityType[] = ['SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 
 const HD_BADGE: Record<HopDongTinDung['trangThai'], string> = {
@@ -156,10 +157,16 @@ function GocCungEditor({ hopDong, onSaved }: { hopDong: HopDongTinDung; onSaved:
   )
 }
 
-export function TabHanMuc() {
+export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai' }) {
+  const vayNgoai = mode === 'vay-ngoai'
   const { fmtTien } = useDonViTien()
   const [entityFilter, setEntityFilter] = useState<'all' | EntityType>('all')
-  const [hopDongs, setHopDongs]         = useState<HopDongTinDung[]>([])
+  const [hopDongsAll, setHopDongs]      = useState<HopDongTinDung[]>([])
+  // Tín dụng dài hạn: bỏ "Vay ngoài" · Tab Vay ngoài: chỉ lấy "Vay ngoài"
+  const hopDongs = useMemo(
+    () => hopDongsAll.filter(h => (vayNgoai ? h.entity === VAY_NGOAI : h.entity !== VAY_NGOAI)),
+    [hopDongsAll, vayNgoai],
+  )
   const [selected, setSelected]         = useState<HopDongTinDung | null>(null)
   const [kyList, setKyList]             = useState<KyTraNo[]>([])
   const [formOpen, setFormOpen]         = useState(false)
@@ -173,7 +180,7 @@ export function TabHanMuc() {
   const [customEntities, setCustomEntities] = useState<string[]>([])
   useEffect(() => subscribeCustomEntities(rows => setCustomEntities(rows.map(r => r.ten))), [])
   const ENTITY_TABS = useMemo<('all' | EntityType)[]>(() => {
-    const them = customEntities.filter(c => !ENTITY_MAC_DINH.includes(c))
+    const them = customEntities.filter(c => !ENTITY_MAC_DINH.includes(c) && c !== VAY_NGOAI)
     const dangChon = entityFilter !== 'all' && !ENTITY_MAC_DINH.includes(entityFilter) && !them.includes(entityFilter) ? [entityFilter] : []
     return ['all', ...ENTITY_MAC_DINH, ...them, ...dangChon]
   }, [customEntities, entityFilter])
@@ -190,7 +197,7 @@ export function TabHanMuc() {
     }
   }
 
-  useEffect(() => subscribeHopDong(setHopDongs, entityFilter), [entityFilter])
+  useEffect(() => subscribeHopDong(setHopDongs, vayNgoai ? 'all' : entityFilter), [entityFilter, vayNgoai])
 
   useEffect(() => {
     const unsubs = hopDongs.map(h =>
@@ -327,7 +334,7 @@ export function TabHanMuc() {
         <HopDongForm
           key={editing?.id ?? 'new'} open={formOpen}
           onClose={() => { setFormOpen(false); setEditing(null); setPresetKhungId(undefined) }}
-          editing={editing} khungList={khungList} khaDungMap={khaDungMap} presetHanMucKhungId={presetKhungId}
+          editing={editing} khungList={khungList} khaDungMap={khaDungMap} presetHanMucKhungId={presetKhungId} defaultEntity={vayNgoai ? VAY_NGOAI : undefined}
         />
         <CoCauDialog open={coCauOpen} onClose={() => setCoCauOpen(false)} hopDong={selected} kyList={kyList} />
       </div>
@@ -490,8 +497,10 @@ export function TabHanMuc() {
       {view === 'ds' && (
       <div className="nh-card" style={fillCard}>
         <div className="nh-card-head" style={{ flex: '0 0 auto' }}>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {ENTITY_TABS.map(t => (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+            {vayNgoai ? (
+              <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--nh-navy)' }}>🤝 Các khoản Vay ngoài ({hopDongs.length})</span>
+            ) : ENTITY_TABS.map(t => (
               <button
                 key={t}
                 onClick={() => setEntityFilter(t)}
@@ -627,7 +636,7 @@ export function TabHanMuc() {
       <HopDongForm
         key={editing?.id ?? 'new'} open={formOpen}
         onClose={() => { setFormOpen(false); setEditing(null); setPresetKhungId(undefined) }}
-        editing={editing} khungList={khungList} khaDungMap={khaDungMap} presetHanMucKhungId={presetKhungId}
+        editing={editing} khungList={khungList} khaDungMap={khaDungMap} presetHanMucKhungId={presetKhungId} defaultEntity={vayNgoai ? VAY_NGOAI : undefined}
       />
     </div>
   )

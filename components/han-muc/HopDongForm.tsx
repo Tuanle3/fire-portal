@@ -34,6 +34,8 @@ interface Props {
   khaDungMap?: Record<string, { tongHanMuc: number; daSuDung: number; khaDung: number; soBoDangVay: number }>
   /** Nếu mở form từ nút "+ Giải ngân bộ hồ sơ mới" của 1 khung cụ thể → khoá sẵn khung này */
   presetHanMucKhungId?: string
+  /** Pháp nhân mặc định khi thêm mới (VD: mở từ tab "Vay ngoài" → 'Vay ngoài') */
+  defaultEntity?: string
 }
 
 const emptyForm = {
@@ -59,8 +61,8 @@ const emptyForm = {
 }
 
 /** Form khi thêm mới, có áp preset khung (nếu mở từ nút "+ Giải ngân bộ hồ sơ mới" của 1 khung) */
-function buildEmptyForm(presetHanMucKhungId?: string) {
-  return { ...emptyForm, hanMucKhungId: presetHanMucKhungId ?? '' }
+function buildEmptyForm(presetHanMucKhungId?: string, defaultEntity?: string) {
+  return { ...emptyForm, entity: (defaultEntity ?? emptyForm.entity) as EntityType, hanMucKhungId: presetHanMucKhungId ?? '' }
 }
 
 /** Form khi sửa 1 HĐ có sẵn */
@@ -89,10 +91,10 @@ function buildFormFromHopDong(editing: HopDongTinDung) {
 
 export default function HopDongForm({
   open, onClose, editing,
-  khungList = [], khaDungMap = {}, presetHanMucKhungId,
+  khungList = [], khaDungMap = {}, presetHanMucKhungId, defaultEntity,
 }: Props) {
   const [form, setForm] = useState(() =>
-    editing ? buildFormFromHopDong(editing) : buildEmptyForm(presetHanMucKhungId),
+    editing ? buildFormFromHopDong(editing) : buildEmptyForm(presetHanMucKhungId, defaultEntity),
   )
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
@@ -100,10 +102,10 @@ export default function HopDongForm({
 
   useEffect(() => {
     if (!open) return
-    setForm(editing ? buildFormFromHopDong(editing) : buildEmptyForm(presetHanMucKhungId))
+    setForm(editing ? buildFormFromHopDong(editing) : buildEmptyForm(presetHanMucKhungId, defaultEntity))
     setError('')
     setCanhBaoMa(undefined)
-  }, [open, editing, presetHanMucKhungId])
+  }, [open, editing, presetHanMucKhungId, defaultEntity])
 
   const fmtInput = (v: string) => {
     const num = v.replace(/\D/g, '')
