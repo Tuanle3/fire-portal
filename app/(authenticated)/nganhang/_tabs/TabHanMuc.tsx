@@ -11,8 +11,10 @@ import { exportHopDongDaiHanExcel, exportDanhSachHopDongDaiHanExcel } from '@/li
 import { useDonViTien } from '@/lib/don-vi-tien-context'
 import { Pencil, Check, X, Trash2, FileSpreadsheet, ChevronDown, ChevronRight } from 'lucide-react'
 import { useFillHeight, MiniStat, fillCard } from '@/components/han-muc/FillLayout'
+import { subscribeCustomEntities } from '@/lib/han-muc-entities-store'
 
-const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
+// Pháp nhân mặc định. Pháp nhân tự thêm (VD: "Vay ngoài") lấy từ Firestore, tự hiện thêm sau "Cá nhân".
+const ENTITY_MAC_DINH: EntityType[] = ['SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
 
 const HD_BADGE: Record<HopDongTinDung['trangThai'], string> = {
   'dang-vay': 'nh-b-blue', 'binh-thuong': 'nh-b-green', 'gan-dao-han': 'nh-b-amber',
@@ -168,6 +170,13 @@ export function TabHanMuc() {
   const [deletingId, setDeletingId]     = useState<string | null>(null)
   const [khungOpen, setKhungOpen]       = useState(false)
   const [view, setView]                 = useState<'ds' | 'tong-hop'>('ds')
+  const [customEntities, setCustomEntities] = useState<string[]>([])
+  useEffect(() => subscribeCustomEntities(rows => setCustomEntities(rows.map(r => r.ten))), [])
+  const ENTITY_TABS = useMemo<('all' | EntityType)[]>(() => {
+    const them = customEntities.filter(c => !ENTITY_MAC_DINH.includes(c))
+    const dangChon = entityFilter !== 'all' && !ENTITY_MAC_DINH.includes(entityFilter) && !them.includes(entityFilter) ? [entityFilter] : []
+    return ['all', ...ENTITY_MAC_DINH, ...them, ...dangChon]
+  }, [customEntities, entityFilter])
 
   const handleDelete = async (h: HopDongTinDung) => {
     const label = h.soBoHoSo || h.soHopDong
