@@ -27,7 +27,7 @@ import EntitySelect from '@/components/han-muc/EntitySelect'
 import { useFillHeight, stickyTh, stickyTf, fillCard, MiniStat } from '@/components/han-muc/FillLayout'
 import { Pencil, Trash2, Plus, ChevronLeft, X, Check, AlertCircle, Calendar, FileSpreadsheet, Upload } from 'lucide-react'
 import ImportBoHoSoExcel from '@/components/han-muc/ImportBoHoSoExcel'
-import { useIsAdmin } from '@/lib/use-role'
+import { useCanDelete } from '@/lib/use-can-delete'
 
 // ─── Constants ────────────────────────────────────────────────
 const ENTITY_TABS: ('all' | EntityType)[] = ['all', 'SAP', 'SAHS', 'ĐTSA', 'YANA', 'Sao Việt', 'Cá nhân']
@@ -822,6 +822,7 @@ interface ChiTietBoHoSoProps {
   onBack: () => void
 }
 function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
+  const canDelete = useCanDelete()   // chỉ tài khoản admin
   const { fmtTien } = useDonViTien()
   const [kyList, setKyList]         = useState<KyThuNH[]>([])
   const [traGocList, setTraGocList] = useState<TraGocGiuaKy[]>([])
@@ -896,6 +897,7 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
             {boTraGoc.map(t => (
               <span key={t.id} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 💳 {t.ngayTra} · <b style={{ color: '#15803d' }}>{fmtM(t.soTienGoc)} đ</b>{t.ghiChu && <span style={{ color: '#6b7280' }}>({t.ghiChu})</span>}
+                {canDelete && (
                 <button
                   onClick={async () => {
                     if (!confirm('Xoá khoản trả gốc này?')) return
@@ -903,6 +905,7 @@ function ChiTietBoHoSo({ bo, khung, onBack }: ChiTietBoHoSoProps) {
                   }}
                   style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', padding: 0 }}
                 ><X size={11} /></button>
+                )}
               </span>
             ))}
           </div>
@@ -1139,7 +1142,7 @@ function ChiTietKhung({ khung, onBack }: ChiTietKhungProps) {
   const [showQuaHanCu, setShowQuaHanCu]   = useState(true)
   const [bulkSaving, setBulkSaving]       = useState(false)
   const [importOpen, setImportOpen]       = useState(false)
-  const isAdmin = useIsAdmin()
+  const isAdmin = useCanDelete()
 
   useEffect(() => subscribeBoHoSo(khung.id, setBoList), [khung.id])
   useEffect(() => subscribeTraGocGiuaKy(khung.id, setTraGocList), [khung.id])
@@ -1564,7 +1567,7 @@ interface KhungRowProps {
 }
 function KhungRow({ khung, onSelect, onEdit, onDelete, onStats }: KhungRowProps) {
   const { fmtTien } = useDonViTien()
-  const isAdmin = useIsAdmin()
+  const isAdmin = useCanDelete()
   const [boList, setBoList]         = useState<BoHoSoGiaiNgan[]>([])
   const [kyThuMap, setKyThuMap]     = useState<Record<string, KyThuNH[]>>({})
   const [traGocList, setTraGocList] = useState<TraGocGiuaKy[]>([])

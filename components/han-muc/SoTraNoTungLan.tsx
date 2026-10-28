@@ -16,6 +16,7 @@ import {
   subscribeTraTungLan, addTraTungLan, updateTraTungLan, deleteTraTungLan,
   type TraTungLan,
 } from '@/lib/han-muc-tra-tung-lan-store'
+import { useCanDelete } from '@/lib/use-can-delete'
 
 const fmt = (n: number) => n.toLocaleString('vi-VN')
 const dmy = (d: string) => d.split('-').reverse().join('/')
@@ -26,6 +27,7 @@ const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing:
 
 export default function SoTraNoTungLan({ hopDong }: { hopDong: HopDongTinDung }) {
   const { fmtTien } = useDonViTien()
+  const canDelete = useCanDelete()   // chỉ tài khoản admin
   const [rows, setRows] = useState<TraTungLan[]>([])
   const [editId, setEditId] = useState<string | null>(null)
   const [moForm, setMoForm] = useState(false)
@@ -75,6 +77,7 @@ export default function SoTraNoTungLan({ hopDong }: { hopDong: HopDongTinDung })
   }
 
   const xoa = async (r: TraTungLan) => {
+    if (!canDelete) return
     if (!window.confirm(`Xoá lần trả ngày ${dmy(r.ngay)} (gốc ${fmt(r.goc)}, lãi ${fmt(r.lai)})?`)) return
     setBusy(true)
     try { await deleteTraTungLan(r.id); if (editId === r.id) reset() }
@@ -186,7 +189,7 @@ export default function SoTraNoTungLan({ hopDong }: { hopDong: HopDongTinDung })
                 <td style={{ color: '#374151' }}>{r.ghiChu || ''}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button type="button" className="btn-ghost" disabled={busy} title="Sửa" onClick={() => moSua(r)} style={{ padding: '2px 7px' }}><Pencil size={12} /></button>{' '}
-                  <button type="button" className="btn-danger" disabled={busy} title="Xoá" onClick={() => xoa(r)} style={{ padding: '2px 7px' }}><Trash2 size={12} /></button>
+                  {canDelete && <button type="button" className="btn-danger" disabled={busy} title="Xoá" onClick={() => xoa(r)} style={{ padding: '2px 7px' }}><Trash2 size={12} /></button>}
                 </td>
               </tr>
             ))}

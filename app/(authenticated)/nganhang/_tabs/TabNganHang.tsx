@@ -6,6 +6,7 @@ import {
   EMPTY_BANK, EMPTY_PROPOSAL, EMPTY_NOTE, minLaiSuat, mucTaiTroDisplay, isHoSoDangXuLy,
 } from '@/lib/bank-types'
 import { exportHoSoVayVonWord } from '@/lib/bank-baocao-word'
+import { useCanDelete } from '@/lib/use-can-delete'
 
 function fmtN(v: number): string { return v.toLocaleString('vi-VN') }
 function newId(prefix: string): string { return `${prefix}${Date.now()}` }
@@ -80,6 +81,7 @@ export function TabNganHang({
   relations, proposals, notes,
   onSaveRelation, onDeleteRelation, onSaveProposal, onDeleteProposal, onSaveNote, onDeleteNote,
 }: Props) {
+  const canDelete = useCanDelete()   // chỉ tài khoản admin
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingBank, setEditingBank] = useState<BankRelation | 'new' | null>(null)
   const [editingProposal, setEditingProposal] = useState<{ bankId: string; proposal: BankProposal | 'new' } | null>(null)
@@ -173,7 +175,7 @@ export function TabNganHang({
                     </div>
                     <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
                       <button className="btn-ghost" onClick={() => setEditingBank(r)}>Sửa</button>
-                      <button className="btn-danger" onClick={() => { if (confirm(`Xoá ngân hàng "${r.tenNganHang}"? (${rProposals.length} phương án liên quan sẽ không bị xoá tự động)`)) onDeleteRelation(r.id) }}>Xoá</button>
+                      {canDelete && <button className="btn-danger" onClick={() => { if (confirm(`Xoá ngân hàng "${r.tenNganHang}"? (${rProposals.length} phương án liên quan sẽ không bị xoá tự động)`)) onDeleteRelation(r.id) }}>Xoá</button>}
                     </div>
                   </div>
 
@@ -220,7 +222,7 @@ export function TabNganHang({
                                 <span className={`nh-badge ${p.loaiVay === 'ngan_han' ? 'nh-b-blue' : p.loaiVay === 'bao_lanh' ? 'nh-b-amber' : 'nh-b-purple'}`}>{LOAI_VAY_LABEL[p.loaiVay]}</span>
                                 <span style={{ flex: 1 }} />
                                 <button className="btn-ghost" onClick={() => setEditingProposal({ bankId: r.id, proposal: p })}>Sửa</button>
-                                <button className="btn-danger" onClick={() => { if (confirm(`Xoá phương án "${p.tenPhuongAn}"?`)) onDeleteProposal(p.id) }}>×</button>
+                                {canDelete && <button className="btn-danger" onClick={() => { if (confirm(`Xoá phương án "${p.tenPhuongAn}"?`)) onDeleteProposal(p.id) }}>×</button>}
                               </div>
                               <div className="nh-pc-meta">
                                 {minLaiSuat(p) ? `Lãi suất ưu đãi thấp nhất: ${minLaiSuat(p).toFixed(2)}%` : 'Chưa có lãi suất'} · Mức tài trợ: {mucTaiTroDisplay(p, fmtN)}
@@ -280,7 +282,7 @@ export function TabNganHang({
                               </div>
                               <div style={{ display: 'flex', gap: 6, alignSelf: 'flex-start' }}>
                                 <button className="btn-ghost" onClick={() => setEditingNote({ bankId: r.id, note: n })}>Sửa</button>
-                                <button className="btn-danger" onClick={() => { if (confirm('Xoá ghi chú này?')) onDeleteNote(n.id) }}>Xoá</button>
+                                {canDelete && <button className="btn-danger" onClick={() => { if (confirm('Xoá ghi chú này?')) onDeleteNote(n.id) }}>Xoá</button>}
                               </div>
                             </div>
                           ))}

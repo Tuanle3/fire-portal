@@ -13,6 +13,7 @@ import { Pencil, Check, X, Trash2, FileSpreadsheet, ChevronDown, ChevronRight } 
 import { useFillHeight, MiniStat, fillCard } from '@/components/han-muc/FillLayout'
 import { subscribeCustomEntities } from '@/lib/han-muc-entities-store'
 import SoTraNoTungLan from '@/components/han-muc/SoTraNoTungLan'
+import { useCanDelete } from '@/lib/use-can-delete'
 import { subscribeAllTraTungLan, type TraTungLan } from '@/lib/han-muc-tra-tung-lan-store'
 
 // Pháp nhân mặc định. Pháp nhân tự thêm (VD: "Vay ngoài") lấy từ Firestore, tự hiện thêm sau "Cá nhân".
@@ -161,6 +162,7 @@ function GocCungEditor({ hopDong, onSaved }: { hopDong: HopDongTinDung; onSaved:
 
 export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai' }) {
   const vayNgoai = mode === 'vay-ngoai'
+  const canDelete = useCanDelete()   // chỉ tài khoản admin
   const { fmtTien } = useDonViTien()
   const [entityFilter, setEntityFilter] = useState<'all' | EntityType>('all')
   const [hopDongsAll, setHopDongs]      = useState<HopDongTinDung[]>([])
@@ -208,6 +210,7 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
   }
 
   const handleDelete = async (h: HopDongTinDung) => {
+    if (!canDelete) return
     const label = h.soBoHoSo || h.soHopDong
     if (!confirm(`Xoá hợp đồng "${label}"? Toàn bộ lịch trả nợ liên quan sẽ bị xoá vĩnh viễn.`)) return
     setDeletingId(h.id)
@@ -308,10 +311,12 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
                   <button className="btn-primary" style={{ padding: '4px 12px' }} onClick={() => setCoCauOpen(true)}>↻ Cơ cấu nợ</button>
                 </>
               )}
+              {canDelete && (
               <button className="btn-danger" style={{ padding: '4px 10px' }} disabled={deletingId === selected.id}
                 onClick={() => handleDelete(selected)} title="Xoá hợp đồng">
                 <Trash2 size={13} style={{ marginRight: 4, verticalAlign: -2 }} />{deletingId === selected.id ? 'Đang xoá...' : 'Xoá'}
               </button>
+              )}
             </div>
           </div>
 
@@ -629,6 +634,7 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
                     <td>{h.ngayDaoHan}</td>
                     <td><span className={`nh-badge ${HD_BADGE[h.trangThai]}`}>{HD_LABEL[h.trangThai]}</span></td>
                     <td onClick={e => e.stopPropagation()}>
+                      {canDelete && (
                       <button
                         className="btn-danger"
                         disabled={deletingId === h.id}
@@ -638,6 +644,7 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
                       >
                         <Trash2 size={13} />
                       </button>
+                      )}
                     </td>
                   </tr>
                 )
