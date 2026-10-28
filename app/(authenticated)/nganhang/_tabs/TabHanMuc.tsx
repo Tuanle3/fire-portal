@@ -322,7 +322,8 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
             </div>
           )}
 
-          <div style={strip}>
+          {/* Vay ngoài: số vay / lãi suất / hạn trả hết đã hiện trong SoTraNoTungLan → không lặp ở đây */}
+          {!vayNgoai && (<div style={strip}>
             <MiniStat label="Hạn mức" value={fmtTien(selected.hanMuc)} />
             <MiniStat label="Giải ngân" value={fmtTien(selected.soTienGiaiNgan)} />
             {selected.laiSuatLoai === 'tha-noi' ? (
@@ -336,7 +337,7 @@ export function TabHanMuc({ mode = 'dai-han' }: { mode?: 'dai-han' | 'vay-ngoai'
             {!vayNgoai && <MiniStat label="Kỳ trả" value={selected.kyTra === 'monthly' ? 'Hàng tháng' : 'Hàng quý'} />}
             <MiniStat label="Đáo hạn" value={selected.ngayDaoHan} />
             {selected.gocTraCoDinh && <MiniStat label="Gốc cứng/kỳ (NH)" value={`${fmt(selected.gocTraCoDinh)} đ`} />}
-          </div>
+          </div>)}
 
           {!vayNgoai && kyList.length > 0 && (
             <div style={{ ...strip, background: '#f8fafc' }}>
