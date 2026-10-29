@@ -59,6 +59,7 @@ const MODULES: PermModule[] = [
   { id: 'm:test-dong-tien', label: 'Test Dòng tiền',       icon: '💵' },
   { id: 'm:ccn-pricing', label: 'Tính giá thuê CCN',      icon: '🏭' },
   { id: 'm:noxh',        label: 'NOXH Nguyễn Trãi',       icon: '🏘️' },
+  { id: 'm:sap-thi-cong', label: 'SAP - Thi công',        icon: '🚧' },
   { id: 'm:dien-nuoc',   label: 'Điện nước SA.ĐT',        icon: '⚡' },
   { id: 'm:users',       label: 'Quản lý User',            icon: '👥' },
 ]
