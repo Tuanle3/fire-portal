@@ -468,7 +468,10 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
   const todayD     = new Date()
   todayD.setHours(0, 0, 0, 0)
 
-  if (hd.phuongThuc === 'cuoi-ky') {
+  // Lãi trả hàng tháng, gốc trả 1 lần cuối kỳ → dùng lịch "lưu động" (có kỳ lãi hàng tháng)
+  const laiThangGocCuoi = hd.kyTra === 'monthly' && hd.kyTraGoc === 'cuoi-ky'
+
+  if (hd.phuongThuc === 'cuoi-ky' && !laiThangGocCuoi) {
     return _buildCuoiKy(hd, ngayKy, ngayDaoHan, todayD)
   }
 
@@ -491,7 +494,7 @@ export function buildSchedule(hd: HopDongTinDung): KyTraNo[] {
     }
   }
 
-  if (hd.kyTra === 'luu-dong') {
+  if (hd.kyTra === 'luu-dong' || laiThangGocCuoi) {
     return _buildLuuDong(hd, ngayKy, ngayDaoHan, ankerDate, coKyLeThuc, todayD)
   }
 
