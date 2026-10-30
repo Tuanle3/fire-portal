@@ -450,13 +450,26 @@ export default function LichDongTienTongHop({ fmtTien }: Props) {
   })), [sortedRows, nhom])
 
   const handleExport = () => {
-    const rows: DongTienRow[] = sortedRows.map(r => ({
+    const toRow = (r: UnifiedRow): DongTienRow => ({
       ngay: r.ngay, loaiVay: r.loaiVay, entity: r.entity, nganHang: r.nganHang, chiNhanh: r.chiNhanh,
       soHopDong: r.soHopDong,
       soBoHoSo: r.soBoHoSo,
       loaiKy: r.loaiKy, goc: r.goc, lai: r.lai, tong: r.tong, trangThai: r.trangThai,
-    }))
-    exportKeHoachDongTienExcel(rows, tuThang, denThang)
+    })
+    const nhomLabel: Record<NhomTheo, string> = { 'ngay': 'Ngày', 'loai-vay': 'Loại vay', 'ngan-hang': 'Ngân hàng', 'phap-nhan': 'Pháp nhân' }
+    const locText = [
+      `Từ ${tuThang} đến ${denThang}`,
+      kemQuaHan ? 'kèm kỳ quá hạn/chưa xong trước đó' : '',
+      `Loại vay: ${Array.from(loaiVaySet).join(' + ')}`,
+      `Pháp nhân: ${entityFilter === 'all' ? 'Tất cả' : entityFilter}`,
+      nhom !== 'ngay' ? `Nhóm theo: ${nhomLabel[nhom]}` : '',
+    ].filter(Boolean).join('  ·  ')
+    exportKeHoachDongTienExcel(sortedRows.map(toRow), tuThang, denThang, {
+      detailRows: displayRows.map(toRow),   // đúng bảng đang hiển thị (đã gộp theo cột đang hiện)
+      cols: visible,                        // đúng các cột đang bật ở "Cột hiển thị"
+      groupBy: nhom,
+      locText,
+    })
   }
 
   const renderRowVisible = (r: UnifiedRow, vis: Set<ColKey>, fmt: (n: number) => string) => (

@@ -68,29 +68,91 @@ function sheetFromAoa(aoa: (string | number | null | undefined)[][]): XLSX.WorkS
 
 const todayFile = () => new Date().toISOString().slice(0, 10)
 
+/** Cột có thể ẩn/hiện ở màn hình (khớp ColKey của LichDongTienTongHop) */
+export type ExportColKey = 'ngay' | 'loaiVay' | 'phapNhan' | 'nganHang' | 'soHopDong' | 'soBoHoSo' | 'loaiKy' | 'goc' | 'lai' | 'tong' | 'trangThai'
+
+export interface ExportOpts {
+  /** Dòng của sheet "Chi tiết" — đúng như bảng đang hiển thị (đã gộp theo cột đang hiện). Không có → dùng rows */
+  detailRows?: DongTienRow[]
+  /** Các cột đang bật ở nút "Cột hiển thị". Không có → xuất đủ cột */
+  cols?: Set<ExportColKey>
+  /** Nhóm theo (ô "Sắp xếp / nhóm theo"). 'ngay' hoặc không có → không nhóm */
+  groupBy?: 'ngay' | 'loai-vay' | 'ngan-hang' | 'phap-nhan'
+  /** Mô tả bộ lọc đang chọn, in ở dòng đầu sheet Chi tiết */
+  locText?: string
+}
+
 export function exportKeHoachDongTienExcel(
   rows: DongTienRow[],
   tuThang: string,
   denThang: string,
+  opts: ExportOpts = {},
 ) {
   const wb = XLSX.utils.book_new()
   const used = new Set<string>()
 
-  // ── Sheet 1: Chi tiết ──────────────────────────────────────
-  const header = [
-    'Ngày', 'Loại vay', 'Pháp nhân', 'Ngân hàng', 'Chi nhánh',
-    'Số hợp đồng', 'Số bộ hồ sơ', 'Loại kỳ', 'Gốc', 'Lãi', 'Tổng', 'Trạng thái',
+  // ── Sheet 1: Chi tiết — theo đúng cột / gộp dòng / nhóm đang chọn ──
+  const detail = opts.detailRows ?? rows
+  const has = (k: ExportColKey) => !opts.cols || opts.cols.has(k)
+  type ColX = { key: ExportColKey; head: string; get: (r: DongTienRow) => string | number }
+  const ALL: ColX[] = [
+    { key: 'ngay',      head: 'Ngày',         get: r => r.ngay },
+    { key: 'loaiVay',   head: 'Loại vay',     get: r => r.loaiVay },
+    { key: 'phapNhan',  head: 'Pháp nhân',    get: r => r.entity },
+    { key: 'nganHang',  head: 'Ngân hàng',    get: r => r.nganHang },
+    { key: 'soHopDong', head: 'Số hợp đồng',  get: r => r.soHopDong },
+    { key: 'soBoHoSo',  head: 'Số bộ hồ sơ',  get: r => r.soBoHoSo || '' },
+    { key: 'loaiKy',    head: 'Loại kỳ',      get: r => r.loaiKy },
+    { key: 'goc',       head: 'Gốc',          get: r => r.goc },
+    { key: 'lai',       head: 'Lãi',          get: r => r.lai },
+    { key: 'tong',      head: 'Tổng',         get: r => r.tong },
+    { key: 'trangThai', head: 'Trạng thái',   get: r => r.trangThai },
   ]
-  const sorted = [...rows].sort((a, b) => a.ngay.localeCompare(b.ngay))
-  const aoaRows: (string | number)[][] = sorted.map(r => [
-    r.ngay, r.loaiVay, r.entity, r.nganHang, r.chiNhanh || '',
-    r.soHopDong, r.soBoHoSo || '', r.loaiKy, r.goc, r.lai, r.tong, r.trangThai,
-  ])
-  const tongGoc  = rows.reduce((s, r) => s + r.goc, 0)
-  const tongLai  = rows.reduce((s, r) => s + r.lai, 0)
-  const tongCong = rows.reduce((s, r) => s + r.tong, 0)
-  aoaRows.push(['', '', '', '', '', '', '', 'TỔNG CỘNG', tongGoc, tongLai, tongCong, ''])
-  XLSX.utils.book_append_sheet(wb, sheetFromAoa([header, ...aoaRows]), safeSheetName('Chi tiết', used))
+  const cols = ALL.filter(c => has(c.key))
+  const idx  = (k: ExportColKey) => cols.findIndex(c => c.key === k)
+  const nC   = cols.length
+
+  const keyOf = (r: DongTienRow) =>
+    opts.groupBy === 'loai-vay' ? r.loaiVay
+    : opts.groupBy === 'ngan-hang' ? r.nganHang
+    : opts.groupBy === 'phap-nhan' ? r.entity : ''
+  const grouped = !!opts.groupBy && opts.groupBy !== 'ngay'
+
+  const sumLine = (label: string, list: DongTienRow[]) => {
+    const line: (string | number)[] = Array(nC).fill('')
+    line[0] = label
+    if (idx('goc')  >= 0) line[idx('goc')]  = list.reduce((t, r) => t + r.goc, 0)
+    if (idx('lai')  >= 0) line[idx('lai')]  = list.reduce((t, r) => t + r.lai, 0)
+    if (idx('tong') >= 0) line[idx('tong')] = list.reduce((t, r) => t + r.tong, 0)
+    return line
+  }
+
+  const sortedDetail = [...detail].sort((a, b) =>
+    (grouped ? keyOf(a).localeCompare(keyOf(b), 'vi') : 0) || a.ngay.localeCompare(b.ngay))
+
+  const body: (string | number)[][] = []
+  if (grouped) {
+    const order: string[] = []
+    const mp = new Map<string, DongTienRow[]>()
+    sortedDetail.forEach(r => {
+      const k = keyOf(r)
+      if (!mp.has(k)) { mp.set(k, []); order.push(k) }
+      mp.get(k)!.push(r)
+    })
+    order.forEach(k => {
+      const list = mp.get(k)!
+      body.push(sumLine(`▸ ${k} (${list.length})`, list))
+      list.forEach(r => body.push(cols.map(c => c.get(r))))
+    })
+  } else {
+    sortedDetail.forEach(r => body.push(cols.map(c => c.get(r))))
+  }
+  body.push(sumLine('TỔNG CỘNG', detail))
+
+  const top: (string | number)[][] = opts.locText ? [[opts.locText, ...Array(Math.max(nC - 1, 0)).fill('')], []] : []
+  const sheet1 = sheetFromAoa([...top, cols.map(c => c.head), ...body])
+  if (opts.locText && nC > 1) sheet1['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: nC - 1 } }]
+  XLSX.utils.book_append_sheet(wb, sheet1, safeSheetName('Chi tiết', used))
 
   // ── Sheet 2: Tổng hợp theo tháng ─────────────────────────────
   const byMonth: Record<string, { goc: number; lai: number; tong: number; soKy: number }> = {}
