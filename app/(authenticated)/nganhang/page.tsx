@@ -10,15 +10,17 @@ import { BankRelation, BankProposal, BankNote } from '@/lib/bank-types'
 import { TabNganHang } from './_tabs/TabNganHang'
 import { TabSoSanh } from './_tabs/TabSoSanh'
 import { TabHanMucWrapper } from './_tabs/TabHanMucWrapper'
+import TabNhuCauVLD from './_tabs/TabNhuCauVLD'
 import NhSharedStyles from '@/components/NhSharedStyles'
-import { Wallet, Landmark, Scale } from 'lucide-react'
+import { Wallet, Landmark, Scale, Calculator } from 'lucide-react'
 
-type TabId = 'ngan-hang' | 'so-sanh' | 'han-muc'
+type TabId = 'ngan-hang' | 'so-sanh' | 'han-muc' | 'nhu-cau-vld'
 
 const TABS: { id: TabId; label: string; icon: typeof Wallet }[] = [
   { id: 'han-muc',    label: 'Hạn mức tín dụng', icon: Wallet },
   { id: 'ngan-hang',  label: 'Ngân hàng',        icon: Landmark },
   { id: 'so-sanh',    label: 'So sánh',          icon: Scale },
+  { id: 'nhu-cau-vld', label: 'Nhu cầu vốn LĐ',  icon: Calculator },
 ]
 
 // Style riêng cho thanh tab + khung nội dung (tiền tố nhp- để không đụng NhSharedStyles)
@@ -124,6 +126,7 @@ export default function NganHangPage() {
             {activeTab === 'so-sanh' && (dataLoading ? loadingBox : (
               <TabSoSanh relations={relations} proposals={proposals} notes={notes} />
             ))}
+            {activeTab === 'nhu-cau-vld' && <TabNhuCauVLD />}
           </div>
         </div>
       </div>
